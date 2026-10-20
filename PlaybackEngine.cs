@@ -268,6 +268,7 @@ namespace IproNvrTool
                     string why = data.Length < 64
                         ? "Tidak ada rekaman pada waktu ini (respons NVR " + data.Length + " byte)"
                         : "Data playback tidak dikenali (" + data.Length + " byte, awal: " + Hex(data, 32) + ")";
+                    if (data.Length >= 64) why += DumpFailure(ch, data);
                     Status(why + " CAM " + ch);
                     ChStatus(ch, why);
                     Log.Write("Playback CAM " + ch + ": " + why);
@@ -290,6 +291,36 @@ namespace IproNvrTool
         readonly HashSet<int> decoding = new HashSet<int>();
 
         /// <summary>GOP H.264/H.265 -> JPEG lewat ffmpeg sekali pakai per GOP (semua gambar keluar), lalu ditampilkan berurutan.</summary>
+        DateTime lastDump = DateTime.MinValue;
+        /// <summary>Simpan respons NVR yang tidak bisa dibaca ke folder log (playback_gagal_camN.bin) agar susunannya bisa dianalisis.</summary>
+        string DumpFailure(int ch, byte[] data)
+        {
+            try
+            {
+                if ((DateTime.Now - lastDump).TotalSeconds < 30) return "";
+                lastDump = DateTime.Now;
+                string path = System.IO.Path.Combine(Log.Directory, "playback_gagal_cam" + ch + ".bin");
+                int n = Math.Min(data.Length, 600 * 1024);
+                var cut = new byte[n];
+                Buffer.BlockCopy(data, 0, cut, 0, n);
+                System.IO.File.WriteAllBytes(path, cut);
+                var sb = new System.Text.StringBuilder();
+                sb.Append("Playback CAM " + ch + " tidak dikenali, " + data.Length + " byte. Awal: " + Hex(data, 160));
+                var marks = new List<string>();
+                for (int i = 0; i + 3 < data.Length && marks.Count < 24; i++)
+                {
+                    if (data[i] == 0xFF && (data[i + 1] == 0x05 || data[i + 1] == 0x06 || data[i + 1] == 0x15 || data[i + 1] == 0x16 || data[i + 1] == 0xD8))
+                        marks.Add("FF" + data[i + 1].ToString("X2") + "@" + i);
+                    else if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 0 && data[i + 3] == 1) marks.Add("SC4@" + i);
+                    else if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1) marks.Add("SC3@" + i);
+                }
+                sb.Append(" | Penanda: " + string.Join(" ", marks.ToArray()));
+                Log.Write(sb.ToString());
+                return "  Data disimpan: " + path;
+            }
+            catch { return ""; }
+        }
+
         void Decode(int ch, ParsedFrame f)
         {
             string exe = FfmpegPipe.FindExe();

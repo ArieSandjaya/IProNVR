@@ -246,7 +246,47 @@ namespace IproNvrTool
                     f.Video.Add(Slice(d, js, d.Length, true));
                 }
             }
+            if (f.Video.Count == 0 && (f.Codec == "H264" || f.Codec == "H265")) GenericFallback(d, f);
             return f;
+        }
+
+        static bool ValidNal(byte[] d, int i, bool h265)
+        {
+            if (i >= d.Length) return false;
+            int b = d[i];
+            if ((b & 0x80) != 0) return false;
+            if (h265) { int t = (b >> 1) & 0x3F; return t <= 40; }
+            int t2 = b & 0x1F;
+            return t2 >= 1 && t2 <= 9 && (b & 0x60) != 0 || t2 == 6 || t2 == 9;
+        }
+
+        /// <summary>Cadangan terakhir bila susunan header tidak dikenal: cari paket "FF 05" dengan panjang yang masuk akal, atau start code Annex-B pertama.</summary>
+        static void GenericFallback(byte[] d, ParsedFrame f)
+        {
+            bool h265 = f.Codec == "H265";
+            int guard = 0;
+            for (int p = 0; p + 24 < d.Length && guard < 100000; p++)
+            {
+                if (d[p] != 0xFF || d[p + 1] != 0x05) continue;
+                long len = BE32(d, p + 4);
+                long end = (long)p + 8 + len;
+                if (len < 17 || end > d.Length) continue;
+                bool chain = end == d.Length || (end + 1 < d.Length && d[end] == 0xFF && d[end + 1] == 0x05) || (end + 1 < d.Length && d[end] == 0 );
+                if (!chain) continue;
+                byte[] v = Slice(d, p + 24, (int)end, false);
+                if (v.Length > 0) { f.Video.Add(v); guard++; }
+                p = (int)end - 1;
+            }
+            if (f.Video.Count > 0) return;
+            for (int i = 4; i + 4 < d.Length; i++)
+            {
+                if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1 && ValidNal(d, i + 3, h265))
+                {
+                    int st = (i > 0 && d[i - 1] == 0) ? i - 1 : i;
+                    f.Video.Add(Slice(d, st, d.Length, false));
+                    return;
+                }
+            }
         }
 
         /// <summary>Playback H.264/H.265 tanpa header "FF 06 00 44" (mis. awal data "FF 15 00 74 ..."): header 4 byte berisi panjang header, lalu info rekaman,
