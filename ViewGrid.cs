@@ -402,9 +402,9 @@ namespace IproNvrTool
             };
             if (ContextMenuStrip != null) Tile.SetMenu(ContextMenuStrip);
             Controls.Add(Tile);
-            Controls.SetChildIndex(Tile, Controls.Count - 1);
-            Tile.SendToBack();
-            lblName.BringToFront();
+            // urutan dock: judul (Top) dilayout lebih dulu, gambar (Fill) mengisi sisa -> judul tidak menutupi bagian atas gambar (tanggal/jam)
+            lblName.SendToBack();
+            Tile.BringToFront();
             SetName();
             Tile.Start(delayMs);
         }
@@ -455,8 +455,8 @@ namespace IproNvrTool
                 Pic.DoubleClick += delegate { if (CellDoubleClicked != null) CellDoubleClicked(this); };
                 if (ContextMenuStrip != null) Pic.ContextMenuStrip = ContextMenuStrip;
                 Controls.Add(Pic);
-                Pic.SendToBack();
-                lblName.BringToFront();
+                lblName.SendToBack();
+                Pic.BringToFront();
             }
             StatusText = "playback";
             SetName();
@@ -487,8 +487,8 @@ namespace IproNvrTool
             }
             lblMsg.Text = text;
             lblMsg.Visible = true;
+            lblName.SendToBack();
             lblMsg.BringToFront();
-            lblName.BringToFront();
         }
 
         public void ShowFrame(byte[] jpg)
