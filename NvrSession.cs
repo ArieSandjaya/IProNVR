@@ -81,9 +81,8 @@ namespace IproNvrTool
                 _uid = null; _ep = null; _liveReady = false;
                 if (_timer != null) { _timer.Dispose(); _timer = null; }
             }
+            // sengaja TIDAK logout UID lama: kamera lain yang memakai UID ini masih streaming; UID akan kedaluwarsa sendiri di NVR
             Log.Write("Sesi [" + _name + "] dibuang (UID=" + uid + "), login ulang pada perintah berikutnya.");
-            if (ep != null)
-                System.Threading.Tasks.Task.Run(delegate { try { DownloadText(ep, "/cgi-bin/logout.cgi?UID=" + uid, 5000); } catch { } });
         }
         public bool IsLoggedIn { get { return _uid != null; } }
 

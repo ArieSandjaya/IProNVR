@@ -526,8 +526,17 @@ namespace IproNvrTool
             right.Controls.Add(Lab("Kamera dalam folder:", DockStyle.Top));
             right.Controls.Add(txt);
             right.Controls.Add(Lab("Nama folder (tampil di pohon Device):", DockStyle.Top));
-            Dir.Changed += delegate { if (IsHandleCreated) BeginInvoke((Action)fillCams); };
+            dirHandler = delegate { try { if (IsHandleCreated && !IsDisposed) BeginInvoke((Action)fillCams); } catch { } };
+            Dir.Changed += dirHandler;
             return root;
+        }
+
+        Action dirHandler;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && dirHandler != null) { Dir.Changed -= dirHandler; dirHandler = null; }
+            base.Dispose(disposing);
         }
 
         static void MoveFolder(ListBox lb, List<FolderRec> list, int d, Action reload)

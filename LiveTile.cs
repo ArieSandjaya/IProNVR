@@ -99,6 +99,7 @@ namespace IproNvrTool
         int _lastTick = Environment.TickCount;
         System.Threading.Timer _watch;
         int _failStreak;
+        volatile bool _connFail;
         int _attemptGen;
         readonly Random _rnd = new Random();
 
@@ -249,9 +250,12 @@ namespace IproNvrTool
                 if (_stop) return;
                 if (good && sw.Elapsed.TotalSeconds > 30) backoff = 0;
                 backoff = backoff == 0 ? 4 : Math.Min(60, backoff * 2);
+                bool conn = _connFail; _connFail = false;
                 if (good) _failStreak = 0;
-                else
+                else if (conn)
                 {
+                    // hanya kegagalan koneksi/HTTP (NVR restart, UID kedaluwarsa) yang dianggap masalah sesi; kamera mati / stream kosong
+                    // TIDAK boleh membuang UID karena UID dipakai bersama sampai 16 kamera lain
                     _failStreak++;
                     // gagal berulang: UID mungkin kedaluwarsa / NVR restart -> login ulang
                     if (_failStreak >= 3 && _sess != null)
@@ -460,6 +464,7 @@ namespace IproNvrTool
             }
             catch (Exception ex)
             {
+                if (ex is WebException) _connFail = true;
                 if (!_stop)
                 {
                     Log.Write("CAM " + Cam + ": " + comp + " gagal: " + Describe(ex) + " (setelah " + (sw.ElapsedMilliseconds / 1000.0).ToString("0.0") + " dtk, " + parts + " bagian)");

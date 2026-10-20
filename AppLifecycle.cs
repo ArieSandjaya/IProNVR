@@ -26,6 +26,19 @@ namespace IproNvrTool
             bool created;
             try { _mutex = new Mutex(true, "IproNvrTool_SingleInstance_" + Environment.UserName, out created); }
             catch { return true; }
+            if (!created)
+            {
+                // dijalankan ulang oleh proses lama yang sedang keluar: tunggu mutex dilepas
+                bool restarted = false;
+                foreach (string a in Environment.GetCommandLineArgs())
+                    if (string.Equals(a, "--restarted", StringComparison.OrdinalIgnoreCase)) restarted = true;
+                if (restarted)
+                {
+                    try { created = _mutex.WaitOne(15000); }
+                    catch (AbandonedMutexException) { created = true; }
+                    catch { created = false; }
+                }
+            }
             return created;
         }
 
@@ -90,7 +103,8 @@ namespace IproNvrTool
                     // batas memori (3 kali berturut-turut agar lonjakan sesaat tidak memicu)
                     if (s.MemLimitMb > 0)
                     {
-                        long mb = Process.GetCurrentProcess().PrivateMemorySize64 / (1024 * 1024);
+                        long mb;
+                        using (Process me = Process.GetCurrentProcess()) mb = me.PrivateMemorySize64 / (1024 * 1024);
                         if (mb > s.MemLimitMb) memHigh++; else memHigh = 0;
                         if (memHigh >= 3)
                         {
@@ -121,7 +135,7 @@ namespace IproNvrTool
 
         static void Kill()
         {
-            try { Process.GetCurrentProcess().Kill(); } catch { Environment.Exit(9); }
+            try { using (Process me = Process.GetCurrentProcess()) me.Kill(); } catch { Environment.Exit(9); }
         }
 
         /// <summary>Restart aplikasi: logout sesi NVR, lalu keluar dengan kode 3 (supervisor menghidupkan lagi) atau jalankan proses baru.</summary>
@@ -132,8 +146,8 @@ namespace IproNvrTool
             if (IsChild) { Environment.Exit(ExitRestart); return; }
             try
             {
-                if (_mutex != null) { try { _mutex.ReleaseMutex(); } catch { } }
-                Process.Start(Application.ExecutablePath);
+                // mutex dimiliki thread UI sehingga tidak bisa dilepas dari sini; proses baru menunggu sampai proses ini keluar
+                Process.Start(Application.ExecutablePath, "--restarted");
             }
             catch { }
             Environment.Exit(0);
@@ -149,7 +163,7 @@ namespace IproNvrTool
                 int code;
                 try
                 {
-                    var psi = new ProcessStartInfo(Application.ExecutablePath, "--child " + string.Join(" ", args));
+                    var psi = new ProcessStartInfo(Application.ExecutablePath, "--child " + string.Join(" ", Array.ConvertAll(args, QuoteArg)));
                     psi.UseShellExecute = false;
                     using (Process p = Process.Start(psi))
                     {
@@ -170,6 +184,12 @@ namespace IproNvrTool
             }
         }
 
+        static string QuoteArg(string a)
+        {
+            if (a.Length > 0 && a.IndexOfAny(new char[] { ' ', '\t', '"' }) < 0) return a;
+            return "\"" + a.Replace("\"", "\\\"") + "\"";
+        }
+
         static DateTime _cpuAt = DateTime.MinValue;
         static TimeSpan _cpuPrev;
         static string _loadText = "";
@@ -182,8 +202,8 @@ namespace IproNvrTool
             try
             {
                 TimeSpan cpu = TimeSpan.Zero; long mem = 0;
-                Process me = Process.GetCurrentProcess();
-                cpu += me.TotalProcessorTime; mem += me.WorkingSet64;
+                using (Process me = Process.GetCurrentProcess())
+                { cpu += me.TotalProcessorTime; mem += me.WorkingSet64; }
                 foreach (Process f in Process.GetProcessesByName("ffmpeg"))
                 {
                     try { cpu += f.TotalProcessorTime; mem += f.WorkingSet64; } catch { }

@@ -104,24 +104,40 @@ namespace IproNvrTool
 
         static AppSettings Load()
         {
-            try
+            // berkas utama, lalu cadangan (.bak) bila berkas utama rusak (mis. listrik mati saat menyimpan)
+            foreach (string p in new string[] { FilePath, FilePath + ".bak" })
             {
-                if (File.Exists(FilePath))
+                try
                 {
-                    var ser = new XmlSerializer(typeof(AppSettings));
-                    using (var fs = File.OpenRead(FilePath))
-                        return (AppSettings)ser.Deserialize(fs);
+                    if (File.Exists(p))
+                    {
+                        var ser = new XmlSerializer(typeof(AppSettings));
+                        using (var fs = File.OpenRead(p))
+                            return (AppSettings)ser.Deserialize(fs);
+                    }
                 }
+                catch { }
             }
-            catch { }
             return new AppSettings();
         }
 
+        static readonly object SaveLock = new object();
+
         public void Save()
         {
-            var ser = new XmlSerializer(typeof(AppSettings));
-            using (var fs = File.Create(FilePath))
-                ser.Serialize(fs, this);
+            lock (SaveLock)
+            {
+                string path = FilePath;
+                string tmp = path + ".tmp";
+                var ser = new XmlSerializer(typeof(AppSettings));
+                using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    ser.Serialize(fs, this);
+                    fs.Flush(true);
+                }
+                if (File.Exists(path)) File.Replace(tmp, path, path + ".bak");
+                else File.Move(tmp, path);
+            }
         }
 
         public string ResolveRecordFolder()

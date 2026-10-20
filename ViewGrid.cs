@@ -266,7 +266,12 @@ namespace IproNvrTool
 
         void OnDragEnter(object s, DragEventArgs e)
         {
-            e.Effect = e.Data.GetDataPresent(DataFormats.StringFormat) ? DragDropEffects.Copy : DragDropEffects.None;
+            if (!e.Data.GetDataPresent(DataFormats.StringFormat)) { e.Effect = DragDropEffects.None; return; }
+            // drag antar-area dimulai dengan AllowedEffects=Move: efek Copy akan ditolak OLE (kursor "dilarang", drop tidak terjadi)
+            DragDropEffects eff = (e.AllowedEffect & DragDropEffects.Copy) != 0 ? DragDropEffects.Copy : (e.AllowedEffect & DragDropEffects.Move);
+            string t = e.Data.GetData(DataFormats.StringFormat) as string;
+            if (t != null && t.StartsWith("asmcell:", StringComparison.Ordinal) && (e.AllowedEffect & DragDropEffects.Move) != 0) eff = DragDropEffects.Move;
+            e.Effect = eff;
         }
 
         void OnDragDrop(object s, DragEventArgs e)
@@ -534,6 +539,7 @@ namespace IproNvrTool
             {
                 StopLive();
                 if (Pic != null && Pic.Image != null) { Image im = Pic.Image; Pic.Image = null; im.Dispose(); }
+                if (lblMsg != null && lblMsg.Font != null) { try { lblMsg.Font.Dispose(); } catch { } }
             }
             base.Dispose(disposing);
         }
@@ -857,7 +863,7 @@ namespace IproNvrTool
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) StopAll();
+            if (disposing) { StopAll(); menu.Opening -= OnMenuOpening; }
             base.Dispose(disposing);
         }
     }

@@ -131,7 +131,9 @@ namespace IproNvrTool
             double yr = (yawDeg + (mount == 1 ? 0 : rotDeg)) * Math.PI / 180.0;
             double pr = pitchDeg * Math.PI / 180.0;
             V3 g = Gravity(mount);
-            return Horiz(mount, yr) * Math.Cos(pr) + g * Math.Sin(pr);
+            // meja: gravitasi = -Z tetapi lensa menghadap atas; pitch positif = naik ke arah sumbu optik (+Z), kalau tidak semua piksel di luar lingkaran (hitam)
+            double sgn = mount == 2 ? -1.0 : 1.0;
+            return Horiz(mount, yr) * Math.Cos(pr) + g * (sgn * Math.Sin(pr));
         }
 
         [ThreadStatic] static double wallRot; // putaran gambar untuk pemasangan dinding (langit-langit/meja memakainya sebagai yaw)

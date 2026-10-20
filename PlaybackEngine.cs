@@ -330,7 +330,7 @@ namespace IproNvrTool
                 ChStatus(ch, "Butuh ffmpeg.exe untuk playback H.264/H.265");
                 return;
             }
-            lock (decoding) { if (decoding.Contains(ch)) return; decoding.Add(ch); }
+            lock (decoding) { if (decoding.Contains(ch)) return; }
             bool h265 = f.Codec == "H265";
             byte[] data;
             using (var ms = new MemoryStream())
@@ -338,6 +338,7 @@ namespace IproNvrTool
                 foreach (byte[] v in f.Video) ms.Write(v, 0, v.Length);
                 data = ms.ToArray();
             }
+            lock (decoding) { decoding.Add(ch); }
             int width = DecodeWidth;
             int gap = Mode == "PAUSE" ? 0 : 70;
             ThreadPool.QueueUserWorkItem(delegate
@@ -375,13 +376,13 @@ namespace IproNvrTool
             disposed = true;
             mode = "STOP";
             if (timer != null) { timer.Dispose(); timer = null; }
-            worker.Close();
-            string mk = maskApplied;
-            Task.Run(delegate
+            // logout dijalankan di thread pekerja setelah antrian habis: kalau di thread lain, perintah yang masih antre
+            // (Prepare -> EnsureLogin) bisa login ulang setelah logout dan sesi NVR bocor.
+            worker.Post(delegate
             {
                 try
                 {
-                    if (sess.IsLoggedIn && mk.Length > 0)
+                    if (sess.IsLoggedIn && maskApplied.Length > 0)
                     {
                         try { sess.Cmd("hdrctl.cgi", "PC=AS60&PLAYCMD=STOP&2ND=OFF&TIMEF=" + Timef.Format(DateTime.UtcNow)); } catch { }
                     }
@@ -389,6 +390,7 @@ namespace IproNvrTool
                 }
                 catch { }
             });
+            worker.Close();
         }
 
         // ---------- satu frame untuk thumbnail ----------

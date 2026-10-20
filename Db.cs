@@ -373,7 +373,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
 
         internal static SQLiteConnection Open()
         {
-            var c = new SQLiteConnection("Data Source=" + FilePath + ";Version=3;Foreign Keys=True;");
+            var c = new SQLiteConnection("Data Source=\"" + FilePath + "\";Version=3;Foreign Keys=True;Default Timeout=30;");
             c.Open();
             return c;
         }
@@ -385,6 +385,12 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
         {
             Action h = DataChanged;
             if (h != null) { try { h(); } catch { } }
+        }
+
+        /// <summary>Paksa Init() memeriksa skema lagi (dipakai setelah file database diganti oleh import).</summary>
+        internal static void ResetInit()
+        {
+            lock (InitLock) { _inited = false; }
         }
 
         public static void Init()

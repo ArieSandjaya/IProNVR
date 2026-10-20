@@ -89,7 +89,7 @@ namespace IproNvrTool
 
         static SQLiteConnection OpenFile(string path, bool readOnly)
         {
-            var c = new SQLiteConnection("Data Source=" + path + ";Version=3;" + (readOnly ? "Read Only=True;" : ""));
+            var c = new SQLiteConnection("Data Source=\"" + path + "\";Version=3;Default Timeout=30;" + (readOnly ? "Read Only=True;" : ""));
             c.Open();
             return c;
         }
@@ -221,7 +221,11 @@ namespace IproNvrTool
                 SQLiteConnection.ClearAllPools();
                 foreach (string ext in new string[] { "-wal", "-shm", "-journal" })
                     try { if (File.Exists(live + ext)) File.Delete(live + ext); } catch { }
-                File.Copy(tmp, live, true);
+                // ganti file database sekaligus (File.Replace); salinan setengah jadi tidak boleh menimpa database aktif
+                if (File.Exists(live)) File.Replace(tmp, live, null);
+                else File.Move(tmp, live);
+                Db.ResetInit();
+                Db.Init(); // migrasi skema bila berkas berasal dari versi lama
                 Log.Write("Import database dari " + src + (backup.Length > 0 ? " (cadangan: " + backup + ")" : ""));
                 return backup;
             }

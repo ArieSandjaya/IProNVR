@@ -88,7 +88,11 @@ namespace IproNvrTool
             uiTimer.Interval = 500;
             uiTimer.Tick += delegate { UpdateStatus(); };
             uiTimer.Start();
-            seqTimer.Tick += delegate { SeqNext(); };
+            seqTimer.Tick += delegate
+            {
+                try { SeqNext(); }
+                catch (Exception ex) { Log.Write("Sequence: " + ex.Message); }
+            };
             IproNvrTool.Events.Added += OnEventAdded;
 
             string id = AppSettings.Current.OpLayout;
@@ -276,7 +280,7 @@ namespace IproNvrTool
             m.Closed += delegate
             {
                 // bebaskan menu + bitmap pratinjau (dilepas setelah klik selesai diproses)
-                BeginInvoke((Action)delegate
+                Ui.Post(this, delegate
                 {
                     foreach (ToolStripItem ti in m.Items) { if (ti.Image != null) { Image im = ti.Image; ti.Image = null; im.Dispose(); } }
                     m.Dispose();

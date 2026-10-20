@@ -229,6 +229,8 @@ CREATE TABLE IF NOT EXISTS fisheye (
 
             public void Dispose()
             {
+                // transaksi yang belum di-commit dibatalkan (rollback) sebelum koneksi kembali ke pool
+                try { if (T != null) T.Dispose(); } catch { }
                 C.Dispose();
             }
         }

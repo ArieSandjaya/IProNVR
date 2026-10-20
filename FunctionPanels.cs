@@ -112,6 +112,8 @@ namespace IproNvrTool
             foreach (TreeNode n in tv.Nodes) if (n.IsExpanded) open.Add(n.Text);
             bool any = false;
             tv.BeginUpdate();
+            try
+            {
             tv.Nodes.Clear();
             List<FolderRec> folders;
             try { folders = AsmDb.ListFolders(); }
@@ -148,7 +150,8 @@ namespace IproNvrTool
             }
             if (filter.Length > 0) tv.ExpandAll();
             else foreach (TreeNode n in tv.Nodes) if (open.Count == 0 || open.Contains(n.Text)) n.Expand();
-            tv.EndUpdate();
+            }
+            finally { tv.EndUpdate(); }
             return any;
         }
     }

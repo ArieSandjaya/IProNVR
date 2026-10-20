@@ -225,7 +225,7 @@ namespace IproNvrTool
             pic.BackColor = Color.Black;
             if (jpg != null)
             {
-                try { using (var ms = new MemoryStream(jpg)) pic.Image = new Bitmap(ms); } catch { }
+                try { pic.Image = Ui.DecodeImage(jpg); } catch { }
             }
             var lbl = new Label();
             lbl.Dock = DockStyle.Bottom;
