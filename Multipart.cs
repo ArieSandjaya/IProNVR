@@ -232,6 +232,10 @@ namespace IproNvrTool
                 ReadRecInfo(d, s, f);
                 ReadPackets(d, s, f);
             }
+            else if (f.Codec == "H264" || f.Codec == "H265")
+            {
+                ParseWithoutStreamId(d, f);
+            }
             else
             {
                 int js = FindJpegStart(d);
@@ -243,6 +247,35 @@ namespace IproNvrTool
                 }
             }
             return f;
+        }
+
+        /// <summary>Playback H.264/H.265 tanpa header "FF 06 00 44" (mis. awal data "FF 15 00 74 ..."): header 4 byte berisi panjang header, lalu info rekaman,
+        /// lalu paket "FF 05" berisi Annex-B. Bila paket tak ditemukan, ambil mulai start code 00 00 00 01 pertama.</summary>
+        static void ParseWithoutStreamId(byte[] d, ParsedFrame f)
+        {
+            int hl = BE16(d, 2);
+            int bound = (hl >= 8 && hl <= d.Length) ? hl : Math.Min(d.Length, 256);
+            ReadRecInfo(d, bound, f);
+            int q = NextPacket(d, 0);
+            int guard = 0;
+            while (q >= 0 && q + 24 <= d.Length && guard++ < 100000)
+            {
+                uint length = BE32(d, q + 4);
+                long ve = (long)q + 8 + length;
+                if (ve > d.Length) ve = d.Length;
+                int vs = q + 24;
+                if (ve > vs)
+                {
+                    byte[] v = Slice(d, vs, (int)ve, false);
+                    if (v.Length > 0) f.Video.Add(v);
+                }
+                q = NextPacket(d, (int)ve);
+            }
+            if (f.Video.Count == 0)
+            {
+                int sc = IndexOf(d, new byte[] { 0, 0, 0, 1 }, 0);
+                if (sc >= 0) f.Video.Add(Slice(d, sc, d.Length, false));
+            }
         }
 
         static void ReadPackets(byte[] d, int s, ParsedFrame f)

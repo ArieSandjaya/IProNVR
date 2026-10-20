@@ -30,6 +30,7 @@ namespace IproNvrTool
         }
         bool disposed;
         int ffStep = 1;
+        DateTime? reqUtc;
 
         /// <summary>kanal, JPEG (dari thread latar).</summary>
         public event Action<int, byte[]> Frame;
@@ -133,6 +134,7 @@ namespace IproNvrTool
             mode = "PLAY";
             ffStep = 1;
             DateTime t = utc;
+            reqUtc = utc;
             lock (channels) foreach (int c0 in channels) ChStatus(c0, "Menunggu data playback " + Asm.FormatTime(t.ToLocalTime()) + "...");
             worker.Post(delegate
             {
@@ -255,11 +257,17 @@ namespace IproNvrTool
                 catch (Exception ex) { Log.Write("Playback CAM " + ch + " parse: " + ex.Message); ChStatus(ch, "Data playback tidak bisa dibaca: " + ex.Message); continue; }
                 if (f.UtcTime.HasValue) curUtc = f.UtcTime;
                 else if (f.GopStartUtc.HasValue) curUtc = f.GopStartUtc;
+                else
+                {
+                    // NVR tidak menyertakan waktu di data: pakai waktu yang diminta, maju sesuai interval saat PLAY
+                    DateTime? c1 = curUtc ?? reqUtc;
+                    if (c1.HasValue) curUtc = (mode == "PLAY" || mode == "FF") ? c1.Value.AddMilliseconds(IntervalMs) : c1.Value;
+                }
                 if (f.Video.Count == 0)
                 {
                     string why = data.Length < 64
                         ? "Tidak ada rekaman pada waktu ini (respons NVR " + data.Length + " byte)"
-                        : "Data playback tidak dikenali (" + data.Length + " byte, awal: " + Hex(data, 12) + ")";
+                        : "Data playback tidak dikenali (" + data.Length + " byte, awal: " + Hex(data, 32) + ")";
                     Status(why + " CAM " + ch);
                     ChStatus(ch, why);
                     Log.Write("Playback CAM " + ch + ": " + why);
