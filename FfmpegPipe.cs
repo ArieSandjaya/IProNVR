@@ -27,6 +27,19 @@ namespace IproNvrTool
             return i < 0 ? 0 : i;
         }
 
+        static long failedTick;   // saat terakhir GPU gagal (Environment.TickCount); 0 = belum pernah
+        public static void MarkFailed() { failedTick = Environment.TickCount | 1; }
+        /// <summary>GPU diprioritaskan; CPU hanya dipakai bila GPU dimatikan di pengaturan atau baru saja gagal (dicoba lagi tiap 10 menit).</summary>
+        public static bool Usable
+        {
+            get
+            {
+                if (AppSettings.Current.HwAccel == "none") return false;
+                long t = failedTick;
+                return t == 0 || unchecked(Environment.TickCount - (int)t) > 600000;
+            }
+        }
+
         /// <summary>Argumen ffmpeg sebelum -i. Kosong bila CPU saja. codecForQsv: "h264"/"hevc" bila diketahui (mode pipe).</summary>
         public static string Args(string mode, string codecForQsv)
         {
@@ -70,8 +83,13 @@ namespace IproNvrTool
         /// stdin ditutup setelah data ditulis sehingga semua gambar (termasuk yang terakhir) keluar. Blokir; panggil dari thread latar.</summary>
         public static List<byte[]> DecodeOnce(string exe, bool h265, int width, byte[] data, out string error, bool hw)
         {
+            hw = hw && HwAccels.Usable;
             List<byte[]> r = DecodeOnceCore(exe, h265, width, data, out error, hw);
-            if (r.Count == 0 && hw) r = DecodeOnceCore(exe, h265, width, data, out error, false); // GPU gagal -> CPU
+            if (r.Count == 0 && hw)
+            {
+                r = DecodeOnceCore(exe, h265, width, data, out error, false); // GPU gagal -> CPU
+                if (r.Count > 0) { HwAccels.MarkFailed(); Log.Write("Dekode GPU gagal, beralih ke CPU (dicoba GPU lagi dalam 10 menit)."); }
+            }
             return r;
         }
 

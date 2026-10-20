@@ -379,7 +379,7 @@ namespace IproNvrTool
                     got = true;
                     if (disposed) return;
                     string err;
-                    List<byte[]> jpgs = FfmpegPipe.DecodeOnce(exe, h265, width, data, out err, AppSettings.Current.HwAccel != "none");
+                    List<byte[]> jpgs = FfmpegPipe.DecodeOnce(exe, h265, width, data, out err, true);
                     if (jpgs.Count == 0)
                     {
                         Status("Decode CAM " + ch + " gagal: " + err);
@@ -503,7 +503,7 @@ namespace IproNvrTool
                 ff = new FfmpegPipe(exe, f.Codec == "H265", width, "thumb", delegate(byte[] jpg)
                 {
                     if (first == null) { first = jpg; got.Set(); }
-                }, false);
+                }, HwAccels.Usable);
                 foreach (byte[] v in f.Video) ff.Input.Write(v, 0, v.Length);
                 ff.Input.Flush();
                 got.WaitOne(8000);

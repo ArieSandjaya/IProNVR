@@ -329,6 +329,7 @@ namespace IproNvrTool
                     {
                         // akselerasi GPU bermasalah (driver/perangkat): ulangi sumber yang sama dengan dekode CPU
                         _forceSoftware = true;
+                        HwAccels.MarkFailed();
                         _hwError = false;
                         Log.Write("CAM " + Cam + ": akselerasi GPU gagal, mengulang dengan dekode CPU.");
                         if (!src.Rtsp)
@@ -382,7 +383,7 @@ namespace IproNvrTool
                 }
                 Log.Write("CAM " + Cam + ": membuka " + src.Label + " " + StreamSource.MaskUrl(src.Url));
                 SetTitle("CAM " + Cam + " - menghubungkan RTSP...");
-                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware);
+                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable);
                 _ff = ff;
                 while (!_stop && !ff.HasExited)
                 {
@@ -429,7 +430,7 @@ namespace IproNvrTool
                     SetTitle("CAM " + Cam + " - butuh ffmpeg.exe");
                     return;
                 }
-                ff = new FfmpegPipe(exe, comp == "H265", _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware);
+                ff = new FfmpegPipe(exe, comp == "H265", _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable);
                 _ff = ff;
                 var dep = new RtpDepacketizer(comp == "H265", ff.Input);
                 if (_stop) return;
