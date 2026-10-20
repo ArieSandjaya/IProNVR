@@ -359,6 +359,17 @@ namespace IproNvrTool
             }
         }
 
+        /// <summary>Tandai kamera di area ini tanpa memulai stream (di-pause).</summary>
+        public void MarkCamera(NvrRecord nvr, int channel)
+        {
+            StopLive();
+            Playback = false;
+            NvrId = nvr.Id;
+            Channel = channel;
+            lblEmpty.Visible = false;
+            SetName();
+        }
+
         /// <summary>Tampilkan kamera secara live. useSub: pakai substream bila ada (multi-area).</summary>
         public void ShowLive(NvrRecord nvr, int channel, bool useSub, int decodeWidth, int delayMs)
         {
@@ -556,6 +567,7 @@ namespace IproNvrTool
         readonly ContextMenuStrip menu;
 
         public event Action SelectionChanged;
+        public event Action MaximizedChanged;
         public event Action CamerasChanged;
         public event Action<CamRef> QuickDownloadRequested;
         public event Action<ViewCell, PointF> CellImageClicked;
@@ -664,14 +676,29 @@ namespace IproNvrTool
 
         void OnCellDouble(ViewCell c)
         {
-            if (maximized >= 0) { maximized = -1; }
+            bool restoring = maximized >= 0;
+            if (restoring) { maximized = -1; }
             else if (layout.Count > 1 && c.HasCamera) { maximized = c.Index; }
             else return;
             DoLayout();
             Select(c.Index);
-            // area yang diperbesar memakai stream utama, kembali ke substream saat dikecilkan
-            ViewCell cur = c;
-            if (!cur.Playback && cur.HasCamera) Assign(cur.Index, cur.NvrId, cur.Channel, false);
+            if (!playbackMode)
+            {
+                if (!restoring)
+                {
+                    // kamera lain di-pause (stream dihentikan) selama satu kamera dipilih
+                    for (int i = 0; i < cells.Count; i++)
+                        if (i != c.Index) cells[i].StopLive();
+                    if (c.HasCamera) Assign(c.Index, c.NvrId, c.Channel, false);   // stream utama
+                }
+                else
+                {
+                    // kembali ke multiview: semua kamera jalan lagi (substream)
+                    for (int i = 0; i < cells.Count; i++)
+                        if (cells[i].HasCamera) Assign(i, cells[i].NvrId, cells[i].Channel, false);
+                }
+            }
+            if (MaximizedChanged != null) MaximizedChanged();
         }
 
         void OnCellDropped(ViewCell src, ViewCell dst)
@@ -726,6 +753,10 @@ namespace IproNvrTool
             if (playbackMode)
             {
                 c.ShowPlaybackFor(nvrId, channel);
+            }
+            else if (maximized >= 0 && idx != maximized)
+            {
+                c.MarkCamera(nvr, channel);   // di-pause sampai kembali ke multiview
             }
             else
             {

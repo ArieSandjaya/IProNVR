@@ -681,6 +681,7 @@ namespace IproNvrTool
                 dlPanel.RefreshCamera();
             };
             Grid.CamerasChanged += delegate { qpPanel.RefreshCamera(); dlPanel.RefreshCamera(); UpdateOpPanelState(); };
+            Grid.MaximizedChanged += delegate { if (Grid.PlaybackMode) SyncEngines(true); };
             Grid.CellAssigned += delegate(int idx, long nid, int ch) { if (Grid.PlaybackMode) SyncEngines(true); };
             Grid.CellUnassigned += delegate(int idx) { if (Grid.PlaybackMode) SyncEngines(false); };
             Grid.QuickDownloadRequested += delegate(CamRef r) { QuickDownload(r); };
@@ -833,9 +834,11 @@ namespace IproNvrTool
         void SyncEngines(bool resume)
         {
             var byNvr = new Dictionary<long, List<int>>();
+            int mx = Grid.MaximizedIndex;
             foreach (ViewCell c in Grid.Cells)
             {
                 if (!c.HasCamera) continue;
+                if (mx >= 0 && c.Index != mx) { if (!byNvr.ContainsKey(c.NvrId)) byNvr[c.NvrId] = new List<int>(); continue; }   // di-pause
                 List<int> l;
                 if (!byNvr.TryGetValue(c.NvrId, out l)) { l = new List<int>(); byNvr[c.NvrId] = l; }
                 l.Add(c.Channel);
@@ -881,7 +884,7 @@ namespace IproNvrTool
                     isNew = true;
                 }
                 e.SetChannels(kv.Value);
-                if (resume && !isNew && AppSettings.Current.ResumePlayback && e.Active && e.CurUtc.HasValue) e.GotoUtc(e.CurUtc.Value);
+                if (resume && !isNew && kv.Value.Count > 0 && e.Active && e.CurUtc.HasValue) e.GotoUtc(e.CurUtc.Value);
             }
         }
 

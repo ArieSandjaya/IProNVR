@@ -120,6 +120,7 @@ namespace IproNvrTool
         {
             string m = mode;
             if (disposed) return;
+            lock (channels) { if (channels.Count == 0) return; }   // semua kamera di-pause
             if (m == "PLAY" || m == "BPLAY" || m == "FF" || m == "REW")
             {
                 if (worker.Pending > 1) return;
