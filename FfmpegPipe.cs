@@ -68,12 +68,25 @@ namespace IproNvrTool
 
         /// <summary>Dekode satu potongan stream Annex-B (mis. satu GOP playback) menjadi daftar JPEG. Proses ffmpeg sekali pakai:
         /// stdin ditutup setelah data ditulis sehingga semua gambar (termasuk yang terakhir) keluar. Blokir; panggil dari thread latar.</summary>
+        public static List<byte[]> DecodeOnce(string exe, bool h265, int width, byte[] data, out string error, bool hw)
+        {
+            List<byte[]> r = DecodeOnceCore(exe, h265, width, data, out error, hw);
+            if (r.Count == 0 && hw) r = DecodeOnceCore(exe, h265, width, data, out error, false); // GPU gagal -> CPU
+            return r;
+        }
+
         public static List<byte[]> DecodeOnce(string exe, bool h265, int width, byte[] data, out string error)
+        {
+            return DecodeOnceCore(exe, h265, width, data, out error, false);
+        }
+
+        static List<byte[]> DecodeOnceCore(string exe, bool h265, int width, byte[] data, out string error, bool hw)
         {
             error = null;
             var result = new List<byte[]>();
             var sb = new StringBuilder();
             sb.Append("-hide_banner -loglevel error -nostats ");
+            if (hw) sb.Append(HwAccels.Args(AppSettings.Current.HwAccel, h265 ? "hevc" : "h264"));
             sb.Append(h265 ? "-f hevc " : "-f h264 ");
             sb.Append("-i pipe:0 -an ");
             if (width > 0) sb.Append("-vf scale=" + width + ":-2:flags=fast_bilinear ");

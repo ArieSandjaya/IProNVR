@@ -20,6 +20,7 @@ namespace IproNvrTool
         public string LastCameras = "1,2,3,4";
         public string RecordFolder = "";
         public string DownloadFolder = "";
+        public int PlaybackFetchMs = 1000;    // jeda ambil data playback tampilan ASM (spec NVR menyarankan >= 3000; naikkan bila NVR menolak)
         public int PlaybackIntervalMs = 3000; // spec: kirim perintah minimal tiap 3 detik
         public string FfmpegPath = "";        // untuk dekode live H.264/H.265 (kosong = cari di folder aplikasi / PATH)
         public int LiveFormat = 2;            // 2 H.264, 3 H.265 (nilai lain, mis. dari versi lama, dianggap H.264)

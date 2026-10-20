@@ -272,6 +272,7 @@ namespace IproNvrTool
             p.Num("Restart bila memori melebihi (MB, 0 = mati)", 0, 32000, s.MemLimitMb, delegate(int v) { s.MemLimitMb = v; }, null);
             p.Check("Restart harian terjadwal", s.DailyRestart, delegate(bool v) { s.DailyRestart = v; }, null);
             p.Text("Jam restart harian (HH:mm)", s.DailyRestartTime, delegate(string v) { s.DailyRestartTime = v; }, null);
+            p.Num("Interval ambil data playback (ms)", 300, 10000, s.PlaybackFetchMs, delegate(int v) { s.PlaybackFetchMs = v; }, "Lebih kecil = playback lebih halus tetapi beban NVR lebih besar. Spec NVR menyarankan minimal 3000; naikkan bila NVR menolak/menutup koneksi.");
             p.Heading("Download");
             p.Check("Waktu download dianggap UTC (matikan = waktu lokal PC)", s.DownloadTimeUtc, delegate(bool v) { s.DownloadTimeUtc = v; }, "Spec NVR memakai UTC.");
             p.Num("Quick download: mundur (detik)", 0, 3600, s.QdPreSec, delegate(int v) { s.QdPreSec = v; }, null);

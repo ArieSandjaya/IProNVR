@@ -57,7 +57,7 @@ namespace IproNvrTool
         {
             Nvr = nvr;
             sess = new NvrSession("playback " + nvr.Name, nvr.ToEndpoint());
-            IntervalMs = Math.Max(300, AppSettings.Current.PlaybackIntervalMs);
+            IntervalMs = Math.Max(300, AppSettings.Current.PlaybackFetchMs);
         }
 
         public string Mode { get { return mode; } }
@@ -242,19 +242,44 @@ namespace IproNvrTool
 
         // ---------- ambil frame ----------
 
+        int lastFetchTick;
+        double periodMs = 1500;
+
         void Fetch()
         {
+            int nowTick = Environment.TickCount;
+            if (lastFetchTick != 0)
+            {
+                double d = unchecked(nowTick - lastFetchTick);
+                if (d > 200 && d < 20000) periodMs = periodMs * 0.6 + Math.Max(500, d) * 0.4; // jeda antar putaran ambil data (untuk menebar gambar GOP)
+            }
+            lastFetchTick = nowTick;
             List<int> list;
             lock (channels) list = new List<int>(channels);
-            foreach (int ch in list)
+            if (list.Count == 0) return;
+            var po = new ParallelOptions();
+            po.MaxDegreeOfParallelism = Math.Max(1, Math.Min(4, list.Count)); // ambil beberapa kamera sekaligus: satu putaran tidak lagi menumpuk 16 unduhan berurutan
+            try
+            {
+                Parallel.ForEach(list, po, delegate(int ch)
+                {
+                    try { FetchOne(ch); }
+                    catch (Exception ex) { Log.Write("Playback CAM " + ch + ": " + ex.Message); }
+                });
+            }
+            catch (AggregateException) { }
+        }
+
+        void FetchOne(int ch)
+        {
             {
                 if (disposed || mode == "STOP") return;
                 byte[] data;
                 try { data = sess.CmdBytes("camera.cgi", "CAM=" + ch, 30000); }
-                catch (Exception ex) { Log.Write("Playback CAM " + ch + ": " + ex.Message); ChStatus(ch, "Gagal ambil data dari NVR: " + ex.Message); continue; }
+                catch (Exception ex) { Log.Write("Playback CAM " + ch + ": " + ex.Message); ChStatus(ch, "Gagal ambil data dari NVR: " + ex.Message); return; }
                 ParsedFrame f;
                 try { f = FrameParser.Parse(data); }
-                catch (Exception ex) { Log.Write("Playback CAM " + ch + " parse: " + ex.Message); ChStatus(ch, "Data playback tidak bisa dibaca: " + ex.Message); continue; }
+                catch (Exception ex) { Log.Write("Playback CAM " + ch + " parse: " + ex.Message); ChStatus(ch, "Data playback tidak bisa dibaca: " + ex.Message); return; }
                 if (f.UtcTime.HasValue) curUtc = f.UtcTime;
                 else if (f.GopStartUtc.HasValue) curUtc = f.GopStartUtc;
                 else
@@ -272,7 +297,7 @@ namespace IproNvrTool
                     Status(why + " CAM " + ch);
                     ChStatus(ch, why);
                     Log.Write("Playback CAM " + ch + ": " + why);
-                    continue;
+                    return;
                 }
                 ChStatus(ch, null);
 
@@ -288,9 +313,6 @@ namespace IproNvrTool
             }
         }
 
-        readonly HashSet<int> decoding = new HashSet<int>();
-
-        /// <summary>GOP H.264/H.265 -> JPEG lewat ffmpeg sekali pakai per GOP (semua gambar keluar), lalu ditampilkan berurutan.</summary>
         DateTime lastDump = DateTime.MinValue;
         /// <summary>Simpan respons NVR yang tidak bisa dibaca ke folder log (playback_gagal_camN.bin) agar susunannya bisa dianalisis.</summary>
         string DumpFailure(int ch, byte[] data)
@@ -321,6 +343,14 @@ namespace IproNvrTool
             catch { return ""; }
         }
 
+        class ChanOut
+        {
+            public readonly Queue<List<byte[]>> Q = new Queue<List<byte[]>>();
+            public bool Running;
+        }
+        readonly Dictionary<int, ChanOut> outs = new Dictionary<int, ChanOut>();
+        static readonly SemaphoreSlim decodeSlots = new SemaphoreSlim(Math.Max(2, Environment.ProcessorCount / 2));
+
         void Decode(int ch, ParsedFrame f)
         {
             string exe = FfmpegPipe.FindExe();
@@ -330,7 +360,6 @@ namespace IproNvrTool
                 ChStatus(ch, "Butuh ffmpeg.exe untuk playback H.264/H.265");
                 return;
             }
-            lock (decoding) { if (decoding.Contains(ch)) return; }
             bool h265 = f.Codec == "H265";
             byte[] data;
             using (var ms = new MemoryStream())
@@ -338,36 +367,87 @@ namespace IproNvrTool
                 foreach (byte[] v in f.Video) ms.Write(v, 0, v.Length);
                 data = ms.ToArray();
             }
-            lock (decoding) { decoding.Add(ch); }
             int width = DecodeWidth;
-            int gap = Mode == "PAUSE" ? 0 : 70;
+            bool still = Mode == "PAUSE";
             ThreadPool.QueueUserWorkItem(delegate
             {
+                bool got = false;
                 try
                 {
+                    decodeSlots.Wait();
+                    got = true;
+                    if (disposed) return;
                     string err;
-                    List<byte[]> jpgs = FfmpegPipe.DecodeOnce(exe, h265, width, data, out err);
+                    List<byte[]> jpgs = FfmpegPipe.DecodeOnce(exe, h265, width, data, out err, AppSettings.Current.HwAccel != "none");
                     if (jpgs.Count == 0)
                     {
                         Status("Decode CAM " + ch + " gagal: " + err);
-                    ChStatus(ch, "Decode gagal: " + err);
+                        ChStatus(ch, "Decode gagal: " + err);
                         Log.Write("Decode playback CAM " + ch + ": " + err);
                         return;
                     }
                     Action<int, byte[]> h = Frame;
                     if (h == null) return;
-                    // diam (pause/step): tampilkan gambar terakhir saja; jalan: putar semua gambar GOP berurutan
-                    if (gap == 0) { h(ch, jpgs[jpgs.Count - 1]); return; }
-                    int step = Math.Max(1, jpgs.Count * gap / Math.Max(500, IntervalMs - 500));
-                    for (int i = 0; i < jpgs.Count && !disposed && mode != "STOP"; i += step)
-                    {
-                        h(ch, jpgs[i]);
-                        Thread.Sleep(gap);
-                    }
+                    if (still) { h(ch, jpgs[jpgs.Count - 1]); return; }
+                    Enqueue(ch, jpgs);
                 }
                 catch (Exception ex) { Log.Write("Decode playback CAM " + ch + ": " + ex.Message); }
-                finally { lock (decoding) decoding.Remove(ch); }
+                finally { if (got) decodeSlots.Release(); }
             });
+        }
+
+        /// <summary>Antrian putar per kamera: GOP berikutnya tidak dibuang saat GOP sebelumnya masih diputar (penyebab loncat/patah-patah).</summary>
+        void Enqueue(int ch, List<byte[]> jpgs)
+        {
+            ChanOut co;
+            bool start = false;
+            lock (outs)
+            {
+                if (!outs.TryGetValue(ch, out co)) { co = new ChanOut(); outs[ch] = co; }
+            }
+            lock (co.Q)
+            {
+                co.Q.Enqueue(jpgs);
+                while (co.Q.Count > 3) co.Q.Dequeue(); // tertinggal jauh: lompat ke yang terbaru
+                if (!co.Running) { co.Running = true; start = true; }
+            }
+            if (start) ThreadPool.QueueUserWorkItem(delegate { PlayOut(ch, co); });
+        }
+
+        void PlayOut(int ch, ChanOut co)
+        {
+            try
+            {
+                while (!disposed && mode != "STOP")
+                {
+                    List<byte[]> g; int pending;
+                    lock (co.Q)
+                    {
+                        if (co.Q.Count == 0) { co.Running = false; return; }
+                        g = co.Q.Dequeue();
+                        pending = co.Q.Count;
+                    }
+                    Action<int, byte[]> h = Frame;
+                    if (h == null) continue;
+                    // gambar satu GOP ditebar merata selama satu putaran ambil data; bila antrian menumpuk, diputar lebih cepat
+                    double span = Math.Max(400, periodMs * 0.95) / (1 + pending);
+                    double gap = span / g.Count;
+                    int step = 1;
+                    if (gap < 40) { step = (int)Math.Ceiling(40.0 / gap); gap = span / Math.Ceiling((double)g.Count / step); }
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    int shown = 0;
+                    for (int i = 0; i < g.Count && !disposed && mode != "STOP"; i += step)
+                    {
+                        h(ch, g[i]);
+                        shown++;
+                        double due = shown * gap;
+                        double wait = due - sw.Elapsed.TotalMilliseconds;
+                        if (wait > 1) Thread.Sleep((int)wait);
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Write("Playback putar CAM " + ch + ": " + ex.Message); }
+            finally { lock (co.Q) { co.Running = false; } }
         }
 
         public void Dispose()

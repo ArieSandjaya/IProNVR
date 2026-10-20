@@ -502,7 +502,7 @@ namespace IproNvrTool
             if (lblMsg != null && lblMsg.Visible) lblMsg.Visible = false;
             LastJpeg = jpg;
             Image img;
-            try { using (var ms = new MemoryStream(jpg)) img = new Bitmap(ms); }
+            try { img = Ui.DecodeImage(jpg); } // salinan mandiri: Bitmap dari MemoryStream yang ditutup bisa gagal digambar
             catch { return; }
             if (SoftFish)
             {
