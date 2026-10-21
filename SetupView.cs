@@ -275,15 +275,14 @@ namespace IproNvrTool
             p.Num("Interval ambil data playback (ms)", 300, 10000, s.PlaybackFetchMs, delegate(int v) { s.PlaybackFetchMs = v; }, "Lebih kecil = playback lebih halus tetapi beban NVR lebih besar. Spec NVR menyarankan minimal 3000; naikkan bila NVR menolak/menutup koneksi.");
             p.Heading("Server konfigurasi (client-server)");
             p.Check("Pakai server: NVR, kamera, group, sequence, dan user diambil dari server", s.ServerMode, delegate(bool v) { s.ServerMode = v; },
-                "Registrasi NVR/kamera dilakukan di halaman admin server. Saat pertama kali, database lokal dicadangkan otomatis lalu NVR/kamera/group lokal diganti data server. Tetap jalan dengan data terakhir bila server mati.");
+                "Registrasi NVR/kamera dilakukan di halaman admin server. Konfigurasi diambil saat aplikasi dibuka dan saat Anda memilih menu 'Periksa pembaruan dari server'. Saat pertama kali, database lokal dicadangkan otomatis lalu NVR/kamera/group lokal diganti data server. Tetap jalan dengan data terakhir bila server mati.");
             p.Text("Alamat server", s.ServerUrl, delegate(string v) { s.ServerUrl = v; }, "Contoh: http://192.168.1.5:8470");
             p.Text("Akun sinkron: user", s.ServerUser, delegate(string v) { s.ServerUser = v; }, "Akun server untuk tarik data otomatis (cukup operator / hanya baca).");
             p.Text("Akun sinkron: password", Secret.Unprotect(s.ServerPassEnc), delegate(string v) { s.ServerPassEnc = Secret.Protect(v); }, null);
-            p.Num("Cek perubahan di server tiap (detik)", 5, 3600, s.ServerSyncSec, delegate(int v) { s.ServerSyncSec = v; }, null);
             p.Button("Tes koneksi", "Tes koneksi dan sinkron sekarang", delegate
             {
                 p.Apply();
-                System.Threading.Tasks.Task.Run(delegate { string r = ServerLink.TestAndSync(); ServerLink.Start(); return r; })
+                System.Threading.Tasks.Task.Run(delegate { string r = ServerLink.TestAndSync(); return r; })
                     .ContinueWith(t => Ui.Post(this, delegate { MessageBox.Show(t.IsFaulted ? t.Exception.GetBaseException().Message : t.Result, "Server konfigurasi"); }));
             });
             p.Heading("Download");

@@ -26,8 +26,6 @@ namespace IproNvrTool
         static readonly JavaScriptSerializer js = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
         static readonly object syncLock = new object();
         static string syncTok;
-        static Thread loop;
-        static volatile bool stop;
 
         /// <summary>Token login interaktif terakhir (dipakai untuk menyimpan group/sequence/user ke server).</summary>
         public static string UserToken;
@@ -143,28 +141,19 @@ namespace IproNvrTool
 
         // ---------- sinkron ----------
 
+        /// <summary>Sinkron sekali saat aplikasi dibuka (bila server mati, dipakai data tersimpan terakhir). Selanjutnya hanya manual lewat menu / tombol.</summary>
         public static void Start()
         {
             if (!Enabled) return;
-            SyncNow(false, 6000);                       // sebelum tampilan dibuka: data terbaru bila server hidup
-            if (loop != null) return;
-            stop = false;
-            loop = new Thread(delegate()
-            {
-                while (!stop)
-                {
-                    int sec = Math.Max(5, AppSettings.Current.ServerSyncSec);
-                    for (int i = 0; i < sec && !stop; i++) Thread.Sleep(1000);
-                    if (stop) break;
-                    try { if (Enabled) SyncNow(false, 15000); } catch (Exception ex) { Log.Write("Sinkron server: " + ex.Message); }
-                }
-            });
-            loop.IsBackground = true;
-            loop.Name = "ServerSync";
-            loop.Start();
+            SyncNow(false, 6000);
         }
 
-        public static void Stop() { stop = true; }
+        /// <summary>Periksa perubahan di server sekarang (menu "Periksa pembaruan dari server"). Mengembalikan teks hasil.</summary>
+        public static string CheckNow(out bool changed)
+        {
+            changed = SyncNow(false, 10000);
+            return changed ? "Konfigurasi diperbarui dari server.\n\n" + Status : Status;
+        }
 
         /// <summary>Tarik konfigurasi bila versi di server berubah (force = selalu). True bila data lokal diperbarui.</summary>
         public static bool SyncNow(bool force, int timeoutMs)

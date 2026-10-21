@@ -353,6 +353,17 @@ namespace IproNvrTool
             }
             m.Items.Add(mag);
             Asm.Item(m, "Display setups...", delegate { OpenWindow("setup"); });
+            if (ServerLink.Enabled)
+                Asm.Item(m, "Periksa pembaruan dari server", delegate
+                {
+                    System.Threading.Tasks.Task.Run(delegate { bool ch; string r = ServerLink.CheckNow(out ch); return new KeyValuePair<bool, string>(ch, r); })
+                        .ContinueWith(t => OnUi(delegate
+                        {
+                            if (t.IsFaulted) { MessageBox.Show(t.Exception.GetBaseException().Message, "Server konfigurasi"); return; }
+                            if (t.Result.Key) op.RefreshFromSettings();
+                            MessageBox.Show(t.Result.Value, "Server konfigurasi");
+                        }));
+                });
             Asm.Item(m, fullScreen ? "Keluar layar penuh (F11)" : "Full screen (F11)", delegate { ToggleFull(); });
             m.Items.Add(new ToolStripSeparator());
 
