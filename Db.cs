@@ -101,6 +101,9 @@ namespace IproNvrTool
         public string ScannedAt = "";
         public string ScanDetail = "";      // hasil deteksi stream (opsional)
         public string RtspUrl = "";         // URL RTSP substream khusus kamera ini (kosong = pakai template NVR + IP kamera)
+        public string CamUser = "";         // login khusus kamera ini (kosong = pakai login kamera di data NVR)
+        public string CamPassEnc = "";
+        public string CamPassword { get { return Secret.Unprotect(CamPassEnc); } }
     }
 
     /// <summary>Satu baris CAM_CONNECT_nnCH=s dari as_getinfo.cgi?FILE=2.</summary>
@@ -410,6 +413,8 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                     EnsureColumn(c, "nvr", "rtsp_template", "TEXT NOT NULL DEFAULT '" + Rtsp.DefaultTemplate + "'");
                     EnsureColumn(c, "nvr", "substream_param", "TEXT NOT NULL DEFAULT ''");
                     EnsureColumn(c, "camera", "rtsp_url", "TEXT NOT NULL DEFAULT ''");
+                    EnsureColumn(c, "camera", "cam_user", "TEXT NOT NULL DEFAULT ''");        // login khusus kamera (mode server)
+                    EnsureColumn(c, "camera", "cam_pass_enc", "TEXT NOT NULL DEFAULT ''");
                     using (var cmd = new SQLiteCommand(AsmSql.Schema, c))
                     {
                         cmd.ExecuteNonQuery();
@@ -731,6 +736,8 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                         k.ScannedAt = S(r, "scanned_at");
                         k.ScanDetail = S(r, "scan_detail");
                         k.RtspUrl = S(r, "rtsp_url");
+                        k.CamUser = S(r, "cam_user");
+                        k.CamPassEnc = S(r, "cam_pass_enc");
                         list.Add(k);
                     }
                 }

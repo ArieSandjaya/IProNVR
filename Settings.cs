@@ -61,6 +61,14 @@ namespace IproNvrTool
         public bool MapOnStart = false;
         public string OpStartGroup = "";        // group/sequence yang dijalankan di Operation window saat start
         public string OpStartSequence = "";
+        // ---- client-server: konfigurasi dikelola di IPRO NVR Server ----
+        public bool ServerMode = false;         // true = NVR/kamera/group/sequence/user diambil dari server
+        public string ServerUrl = "";           // mis. http://192.168.1.5:8470
+        public string ServerUser = "";          // akun untuk sinkron otomatis (cukup operator, hanya baca)
+        public string ServerPassEnc = "";       // password akun sinkron (DPAPI)
+        public int ServerSyncSec = 30;          // jeda cek perubahan di server
+        public long ServerVersion = 0;          // nomor versi konfigurasi terakhir yang sudah disalin
+
         public string LiveStartItems = "";      // "1=g:Nama;2=s:Nama" per Live window
         public bool RequireLogin = false;       // tampilkan login saat aplikasi mulai
         public bool EventPopup = true;

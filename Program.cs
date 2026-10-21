@@ -44,6 +44,7 @@ namespace IproNvrTool
             try
             {
                 Db.Init();
+                ServerLink.Start();     // mode server: tarik konfigurasi terbaru sebelum Dir membaca database
                 Dir.Init();
                 Events.HookNetworkLog();
                 AppSettings s = AppSettings.Current;

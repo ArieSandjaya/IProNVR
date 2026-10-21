@@ -421,6 +421,7 @@ CREATE TABLE IF NOT EXISTS view_state (
 
         public static long SaveGroup(GroupRec g)
         {
+            if (ServerLink.Enabled) return ServerLink.SaveGroup(g);
             using (var t = new Tx())
             {
                 if (g.Id == 0)
@@ -443,11 +444,13 @@ CREATE TABLE IF NOT EXISTS view_state (
 
         public static void DeleteGroup(long id)
         {
+            if (ServerLink.Enabled) { ServerLink.DeleteGroup(id); return; }
             Exec("DELETE FROM grp WHERE id = @id", "@id", id);
         }
 
         public static void ReorderGroups(List<long> ids)
         {
+            if (ServerLink.Enabled) { ServerLink.Reorder("groups", ids); return; }
             Reorder("grp", ids);
         }
 
@@ -476,6 +479,7 @@ CREATE TABLE IF NOT EXISTS view_state (
 
         public static long SaveSequence(SeqRec s)
         {
+            if (ServerLink.Enabled) return ServerLink.SaveSequence(s);
             using (var t = new Tx())
             {
                 if (s.Id == 0)
@@ -493,11 +497,13 @@ CREATE TABLE IF NOT EXISTS view_state (
 
         public static void DeleteSequence(long id)
         {
+            if (ServerLink.Enabled) { ServerLink.DeleteSequence(id); return; }
             Exec("DELETE FROM seq WHERE id = @id", "@id", id);
         }
 
         public static void ReorderSequences(List<long> ids)
         {
+            if (ServerLink.Enabled) { ServerLink.Reorder("sequences", ids); return; }
             Reorder("seq", ids);
         }
 
@@ -603,6 +609,7 @@ CREATE TABLE IF NOT EXISTS view_state (
 
         public static List<UserRec> ListUsers()
         {
+            if (ServerLink.Enabled) { List<UserRec> su = ServerLink.ListUsers(); if (su != null) return su; }
             var list = new List<UserRec>();
             foreach (Row r in Rows("SELECT * FROM app_user ORDER BY is_admin DESC, name")) list.Add(LoadUser(r));
             return list;
@@ -610,12 +617,14 @@ CREATE TABLE IF NOT EXISTS view_state (
 
         public static bool HasAdmin()
         {
+            if (ServerLink.Enabled) return true;   // akun dikelola di server
             return Rows("SELECT id FROM app_user WHERE is_admin = 1").Count > 0;
         }
 
         /// <summary>Simpan user. pass null = password tidak diubah (untuk user yang sudah ada).</summary>
         public static void SaveUser(UserRec u, string pass)
         {
+            if (ServerLink.Enabled) { ServerLink.SaveUser(u, pass); return; }
             using (var t = new Tx())
             {
                 if (u.Id == 0)
@@ -640,18 +649,40 @@ CREATE TABLE IF NOT EXISTS view_state (
 
         public static void DeleteUser(long id)
         {
+            if (ServerLink.Enabled) { ServerLink.DeleteUser(id); return; }
             Exec("DELETE FROM app_user WHERE id = @id AND is_admin = 0", "@id", id);
         }
 
         /// <summary>User bila nama+password benar, selain itu null.</summary>
         public static UserRec Login(string name, string pass)
         {
+            if (ServerLink.Enabled)
+            {
+                string err; bool unreachable;
+                UserRec su = ServerLink.Login(name, pass, out err, out unreachable);
+                if (su != null) { try { CacheUser(su, pass); } catch (Exception ex) { Log.Write("Simpan cache user: " + ex.Message); } return su; }
+                if (!unreachable) return null;      // server menolak (nama/password salah)
+                // server mati: boleh masuk dengan akun yang pernah login di PC ini
+            }
             List<Row> rows = Rows("SELECT * FROM app_user WHERE name = @n", "@n", name ?? "");
             if (rows.Count == 0) return null;
             Row r = rows[0];
             string salt = r.S("salt");
             if (salt.Length == 0) return null;
             return Hash(pass, salt) == r.S("pass_hash") ? LoadUser(r) : null;
+        }
+
+        /// <summary>Simpan akun yang berhasil login ke server sebagai cache lokal (untuk login saat server tidak terjangkau).</summary>
+        static void CacheUser(UserRec u, string pass)
+        {
+            string salt = NewSalt();
+            using (var t = new Tx())
+            {
+                t.Exec("DELETE FROM app_user WHERE name = @n OR id = @id", "@n", u.Name, "@id", u.Id);
+                t.Exec("INSERT INTO app_user (id, name, pass_hash, salt, level, is_admin, use_group) VALUES (@id, @n, @h, @s, @l, @a, @g)",
+                    "@id", u.Id, "@n", u.Name, "@h", Hash(pass, salt), "@s", salt, "@l", u.Level, "@a", u.IsAdmin ? 1 : 0, "@g", u.UseGroup ? 1 : 0);
+                t.Commit();
+            }
         }
 
         /// <summary>Syarat password: 8-32 karakter, memuat minimal 3 dari 4 jenis (huruf besar, kecil, angka, simbol).</summary>

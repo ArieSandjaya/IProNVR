@@ -3,6 +3,14 @@
 Server konfigurasi terpisah dari aplikasi client (`IproNvrTool`). Menyimpan registrasi NVR, kamera, user, group, dan sequence.
 Video **tidak** lewat server; client tetap tersambung langsung ke NVR.
 
+## Client (IproNvrTool) mode server
+Di aplikasi client: **Setup > System > Server konfigurasi** - centang *Pakai server*, isi alamat server (mis. `http://192.168.1.5:8470`) dan akun sinkron (cukup operator), lalu *Tes koneksi dan sinkron sekarang*.
+- NVR, kamera, URL RTSP, group, sequence disalin ke database lokal (cache) tiap ada perubahan di server (cek tiap 30 detik, bisa diatur). Client tetap jalan dengan data terakhir bila server mati.
+- Pertama kali, database lokal dicadangkan otomatis (`nvr.db.sebelum-server-...`) lalu NVR/kamera/group lokal diganti data server.
+- Tab registrasi NVR/kamera menjadi hanya-lihat (diatur lewat halaman admin server). Group, sequence, dan user yang disimpan dari aplikasi dikirim ke server (butuh akun admin server).
+- Login aplikasi memakai akun server; bila server mati, boleh masuk dengan akun yang pernah login di PC itu.
+- Tetap lokal per PC: fisheye, map, folder device, hak per level, tampilan terakhir.
+
 ## Build
 Buka `Server/IproNvrServer/IproNvrServer.csproj` di Visual Studio (net48) lalu Build, atau `dotnet build`.
 

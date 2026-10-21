@@ -105,6 +105,7 @@ namespace IproNvrTool
             root.Controls.Add(cf, 0, 4);
 
             Controls.Add(root);
+            if (ServerLink.Enabled) LockForServer();
 
             VisibleChanged += delegate
             {
@@ -114,6 +115,48 @@ namespace IproNvrTool
                     LoadAll();
                 }
             };
+        }
+
+        /// <summary>Mode server: registrasi NVR/kamera dilakukan di server; tab ini hanya untuk melihat dan mengetes koneksi.</summary>
+        void LockForServer()
+        {
+            var banner = new Panel();
+            banner.Dock = DockStyle.Top;
+            banner.Height = Asm.S(40);
+            banner.BackColor = Color.FromArgb(60, 48, 20);
+            var lbl = new Label();
+            lbl.Dock = DockStyle.Fill;
+            lbl.UseMnemonic = false;
+            lbl.ForeColor = Color.FromArgb(255, 214, 120);
+            lbl.TextAlign = ContentAlignment.MiddleLeft;
+            lbl.Padding = new Padding(Asm.S(10), 0, 0, 0);
+            lbl.Text = "Mode server aktif: NVR, kamera, dan URL RTSP diatur di server (" + AppSettings.Current.ServerUrl + "). Tab ini hanya untuk melihat dan tes koneksi.";
+            var open = new Button();
+            open.Text = "Buka halaman admin";
+            open.Dock = DockStyle.Right;
+            open.Width = Asm.S(150);
+            open.Click += delegate { try { System.Diagnostics.Process.Start(AppSettings.Current.ServerUrl); } catch (Exception ex) { MessageBox.Show(ex.Message); } };
+            banner.Controls.Add(lbl);
+            banner.Controls.Add(open);
+            Controls.Add(banner);
+            banner.SendToBack();
+            string[] allow = { "Tes Koneksi & Sinkron", "Lihat Respons Mentah", "Batalkan proses" };
+            LockControls(this, allow);
+            gridCam.ReadOnly = true;
+        }
+
+        static void LockControls(Control parent, string[] allow)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (c is Button)
+                {
+                    if (Array.IndexOf(allow, c.Text) < 0 && c.Text != "Buka halaman admin") c.Enabled = false;
+                }
+                else if (c is TextBox) ((TextBox)c).ReadOnly = true;
+                else if (c is NumericUpDown || c is CheckBox) c.Enabled = false;
+                if (c.HasChildren) LockControls(c, allow);
+            }
         }
 
         void AddCamCol(string name, string title, bool readOnly, int width)
@@ -765,7 +808,8 @@ namespace IproNvrTool
                     Parallel.ForEach(todo, opt, delegate(CameraRecord k)
                     {
                         DiscoveryResult r;
-                        try { r = RtspDiscovery.Discover(exe, k.IpAddress, cu, cp, tpl, ct); }
+                        string ku = string.IsNullOrEmpty(k.CamUser) ? cu : k.CamUser, kp = string.IsNullOrEmpty(k.CamUser) ? cp : k.CamPassword;
+                        try { r = RtspDiscovery.Discover(exe, k.IpAddress, ku, kp, tpl, ct); }
                         catch (Exception ex) { r = new DiscoveryResult(); r.Note = ex.Message; }
                         var row = new Db.RtspRow();
                         row.Id = k.Id;

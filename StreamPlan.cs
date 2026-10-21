@@ -9,6 +9,13 @@ namespace IproNvrTool
         /// <summary>Contoh untuk kamera OEM Dahua: subtype=1 = substream. Placeholder: {user} {pass} {ip}.</summary>
         public const string DefaultTemplate = "rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1";
 
+        /// <summary>Login RTSP kamera: login khusus kamera bila diisi, selain itu login kamera di data NVR.</summary>
+        public static void Creds(NvrRecord nvr, CameraRecord cam, out string user, out string pass)
+        {
+            if (cam != null && !string.IsNullOrEmpty(cam.CamUser)) { user = cam.CamUser; pass = cam.CamPassword; }
+            else { user = nvr.CamUser; pass = nvr.CamPassword; }
+        }
+
         public static string Build(string template, string user, string pass, string ip)
         {
             if (string.IsNullOrWhiteSpace(template) || string.IsNullOrWhiteSpace(ip)) return "";
@@ -42,9 +49,11 @@ namespace IproNvrTool
             string url = "";
             if (cam != null)
             {
+                string cu, cp;
+                Rtsp.Creds(nvr, cam, out cu, out cp);
                 url = (cam.RtspUrl ?? "").Trim();
-                if (url.Contains("{")) url = Rtsp.Build(url, nvr.CamUser, nvr.CamPassword, cam.IpAddress); // URL tersimpan memakai {user} {pass} {ip}
-                if (url.Length == 0) url = Rtsp.Build(nvr.RtspTemplate, nvr.CamUser, nvr.CamPassword, cam.IpAddress);
+                if (url.Contains("{")) url = Rtsp.Build(url, cu, cp, cam.IpAddress); // URL tersimpan memakai {user} {pass} {ip}
+                if (url.Length == 0) url = Rtsp.Build(nvr.RtspTemplate, cu, cp, cam.IpAddress);
             }
             if (url.Length > 0)
             {

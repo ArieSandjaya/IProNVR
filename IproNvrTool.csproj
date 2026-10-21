@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Reference Include="System.Security" />
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
   <ItemGroup>

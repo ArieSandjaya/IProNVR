@@ -97,6 +97,17 @@ namespace IproNvrTool
             txtIp.TextChanged += delegate { UpdateEffective(); };
             Theme.ApplyTo(this, true);
             UpdateEffective();
+            if (ServerLink.Enabled)
+            {
+                // mode server: konfigurasi kamera diubah di server (halaman admin), di sini hanya untuk melihat / mengetes
+                foreach (Control c0 in Controls)
+                {
+                    var tb = c0 as TextBox;
+                    if (tb != null && tb != txtInfo) tb.ReadOnly = true;
+                }
+                save.Enabled = false;
+                Text += "  (dikelola di server)";
+            }
         }
 
         void Info(string label, string value, ref int y)
@@ -123,7 +134,9 @@ namespace IproNvrTool
         {
             string u = txtRtsp.Text.Trim();
             if (u.Length == 0) u = nvr.RtspTemplate;
-            return Rtsp.Build(u, nvr.CamUser, nvr.CamPassword, txtIp.Text.Trim());
+            string cu, cp;
+            Rtsp.Creds(nvr, cam, out cu, out cp);
+            return Rtsp.Build(u, cu, cp, txtIp.Text.Trim());
         }
 
         void UpdateEffective()
@@ -147,7 +160,9 @@ namespace IproNvrTool
             if (ip.Length == 0) { lblTest.Text = "Isi IP kamera dulu."; return; }
             b.Enabled = false; btnTest.Enabled = false;
             lblTest.Text = "Mencari URL RTSP (ONVIF, templat NVR, pola merk)... bisa sampai 1-2 menit";
-            string cu = nvr.CamUser, cp = nvr.CamPassword, tpl = nvr.RtspTemplate;
+            string cu, cp;
+            Rtsp.Creds(nvr, cam, out cu, out cp);
+            string tpl = nvr.RtspTemplate;
             Task.Run(delegate
             {
                 return RtspDiscovery.Discover(exe, ip, cu, cp, tpl, System.Threading.CancellationToken.None);

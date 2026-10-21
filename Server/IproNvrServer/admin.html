@@ -91,7 +91,7 @@ var META={
  cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',cam_user:'User kamera (khusus)',cam_pass:'Password kamera (khusus)',rtsp_url:'URL RTSP substream',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi'},full:['rtsp_url','scan_detail','note'],hint:{cam_user:'Kosongkan bila sama dengan login kamera di data NVR.',rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
  groups:{t:'Group',ic:'▦',lbl:{name:'Nama',layout:'Layout',slots:'Kamera per area',owner:'Pemilik',sort:'Urutan'},full:['slots'],hint:{slots:'Format: idNVR:kanal dipisah koma, area kosong dikosongkan. Contoh: 1:1,1:2,,1:5'}},
  sequences:{t:'Sequence',ic:'↻',lbl:{name:'Nama',steps:'Langkah',sort:'Urutan'},full:['steps'],hint:{steps:'Format: idGroup:detik dipisah koma. Contoh: 1:10,2:10,3:15'}},
- users:{t:'User',ic:'☺',lbl:{name:'Nama',level:'Level (1-8)',is_admin:'Admin',use_group:'Pakai group sendiri',password:'Password'},full:[]}
+ users:{t:'User',ic:'☺',lbl:{name:'Nama',level:'Level (0 = admin penuh, 1-5)',is_admin:'Admin',use_group:'Pakai group sendiri',password:'Password'},full:[]}
 };
 var BOOL={use_https:1,is_admin:1,use_group:1};
 function $(h){var d=document.createElement('div');d.innerHTML=h.trim();return d.firstChild}
