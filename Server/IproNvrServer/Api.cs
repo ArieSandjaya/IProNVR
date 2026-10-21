@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Security.Cryptography;
+using System.Diagnostics;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using IproNvrTool;
 using System.Web.Script.Serialization;
 
 namespace IproNvrServer
@@ -49,8 +52,114 @@ namespace IproNvrServer
             Log.Write("Server berjalan di port " + cfg.Port + ", data: " + cfg.DataDir);
         }
 
+        // ---------- pratinjau live (MJPEG) ----------
+
+        class Preview { public string Url, Error = ""; public DateTime Expires; }
+        readonly Dictionary<string, Preview> previews = new Dictionary<string, Preview>();
+        readonly List<Process> streams = new List<Process>();
+        const int MaxStreams = 4, MaxStreamSeconds = 600;
+
+        string NewKey()
+        {
+            var b = new byte[12];
+            using (var rng = new RNGCryptoServiceProvider()) rng.GetBytes(b);
+            return BitConverter.ToString(b).Replace("-", "").ToLowerInvariant();
+        }
+
+        /// <summary>Body: nvr_id, ip_address, cam_user, cam_pass, rtsp_url (nilai form saat ini, belum harus tersimpan).</summary>
+        string MakePreview(Dictionary<string, object> b, out string error)
+        {
+            error = null;
+            Func<string, string> g = delegate(string k) { object v; return b.TryGetValue(k, out v) && v != null ? Convert.ToString(v) : ""; };
+            long nid; long.TryParse(g("nvr_id"), out nid);
+            Row nvr = null;
+            foreach (Row r in store.List(Schema.ByRoute("nvrs"))) if (Convert.ToInt64(r["id"]) == nid) nvr = r;
+            string tpl = g("rtsp_url"), user = g("cam_user"), pass = g("cam_pass");
+            if (tpl.Length == 0 && nvr != null) tpl = Convert.ToString(nvr["rtsp_template"]);
+            if (user.Length == 0 && nvr != null) { user = Convert.ToString(nvr["cam_user"]); pass = Convert.ToString(nvr["cam_pass"]); }
+            string url = Rtsp.Build(tpl, user, pass, g("ip_address"));
+            if (url.Length == 0) { error = "URL RTSP belum ada: isi IP kamera dan URL RTSP (atau template RTSP di data NVR), atau jalankan Deteksi."; return null; }
+            string key = NewKey();
+            lock (previews)
+            {
+                var dead = new List<string>();
+                foreach (KeyValuePair<string, Preview> p in previews) if (p.Value.Expires < DateTime.UtcNow) dead.Add(p.Key);
+                foreach (string k in dead) previews.Remove(k);
+                previews[key] = new Preview { Url = url, Expires = DateTime.UtcNow.AddMinutes(10) };
+            }
+            return key;
+        }
+
+        void SetPreviewError(Preview pv, string e) { lock (previews) pv.Error = e; }
+
+        void Stream(HttpListenerContext ctx)
+        {
+            HttpListenerResponse rs = ctx.Response;
+            Preview pv;
+            string key = ctx.Request.QueryString["k"] ?? "";
+            lock (previews) { if (!previews.TryGetValue(key, out pv) || pv.Expires < DateTime.UtcNow) pv = null; }
+            if (pv == null) { Err(rs, 404, "Pratinjau kedaluwarsa, klik Live lagi."); return; }
+            string exe = disc.FindFfmpeg();
+            if (exe == null) { string m = "ffmpeg tidak ditemukan di server (letakkan ffmpeg.exe di folder server atau isi FfmpegPath di server.json)."; SetPreviewError(pv, m); Err(rs, 500, m); return; }
+            int w = 640, fps = 8;
+            int.TryParse(ctx.Request.QueryString["w"], out w); if (w < 160 || w > 1280) w = 640;
+            bool rtsp = pv.Url.StartsWith("rtsp://", StringComparison.OrdinalIgnoreCase);
+            string args = "-hide_banner -loglevel error " + (rtsp ? "-rtsp_transport tcp -fflags nobuffer -flags low_delay " : "-re ")
+                + "-i \"" + pv.Url.Replace("\"", "%22") + "\" -an -vf scale=" + w + ":-2 -r " + fps + " -q:v 6 -f mpjpeg pipe:1";
+            Process p;
+            lock (streams)
+            {
+                if (streams.Count >= MaxStreams) { string m = "Terlalu banyak pratinjau live bersamaan (maks " + MaxStreams + "). Tutup yang lain dulu."; SetPreviewError(pv, m); Err(rs, 429, m); return; }
+                var psi = new ProcessStartInfo(exe, args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                p = Process.Start(psi);
+                streams.Add(p);
+            }
+            var errText = new StringBuilder();
+            p.ErrorDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null && errText.Length < 4000) lock (errText) errText.AppendLine(e.Data); };
+            p.BeginErrorReadLine();
+            try
+            {
+                System.IO.Stream so = p.StandardOutput.BaseStream;
+                var buf = new byte[65536];
+                Task<int> first = so.ReadAsync(buf, 0, buf.Length);
+                int n = 0;
+                if (!first.Wait(20000) || (n = first.Result) <= 0)
+                {
+                    try { p.Kill(); } catch { }
+                    string last = "";
+                    lock (errText) foreach (string line in errText.ToString().Split('\n')) if (line.Trim().Length > 0) last = line.Trim();
+                    bool exited = false;
+                    try { exited = p.WaitForExit(500); } catch { }
+                    string m = (exited ? "Gagal membuka stream kamera" : "Kamera tidak memberi gambar dalam 20 detik") + (last.Length > 0 ? ": " + last : ".");
+                    if (pv.Url.Contains("@")) m = m.Replace(pv.Url, "(url)");
+                    SetPreviewError(pv, m);
+                    Err(rs, 502, m);
+                    return;
+                }
+                rs.SendChunked = true;
+                rs.StatusCode = 200;
+                rs.ContentType = "multipart/x-mixed-replace;boundary=ffmpeg";
+                rs.Headers["Cache-Control"] = "no-store";
+                DateTime end = DateTime.UtcNow.AddSeconds(MaxStreamSeconds);
+                while (n > 0 && DateTime.UtcNow < end)
+                {
+                    rs.OutputStream.Write(buf, 0, n);
+                    rs.OutputStream.Flush();
+                    n = so.Read(buf, 0, buf.Length);
+                }
+            }
+            catch { /* browser menutup gambar: normal */ }
+            finally
+            {
+                try { if (!p.HasExited) p.Kill(); } catch { }
+                lock (streams) streams.Remove(p);
+                try { p.Dispose(); } catch { }
+            }
+        }
+
         public void Stop()
         {
+            lock (streams) foreach (Process p in streams) { try { p.Kill(); } catch { } }
             stop = true;
             try { listener.Stop(); listener.Close(); } catch { }
         }
@@ -100,8 +209,10 @@ namespace IproNvrServer
         Session Auth(HttpListenerRequest rq)
         {
             string h = rq.Headers["Authorization"] ?? "";
-            if (!h.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return null;
-            string tok = h.Substring(7).Trim();
+            string tok;
+            if (h.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) tok = h.Substring(7).Trim();
+            else if (rq.Url.AbsolutePath == "/api/stream") tok = rq.QueryString["t"] ?? "";   // <img> tidak bisa mengirim header
+            else return null;
             lock (sessions)
             {
                 Session s;
@@ -211,6 +322,23 @@ namespace IproNvrServer
                     return;
                 }
 
+                if (head == "stream") { Stream(ctx); return; }
+                if (head == "preview")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (rq.HttpMethod == "POST")
+                    {
+                        string pe;
+                        string k = MakePreview(ReadBody(rq), out pe);
+                        if (k == null) { Err(rs, 400, pe); return; }
+                        Json(rs, 200, new Dictionary<string, object> { { "key", k } });
+                        return;
+                    }
+                    Preview pp;
+                    lock (previews) { previews.TryGetValue(seg.Length > 1 ? seg[1] : "", out pp); }
+                    Json(rs, 200, new Dictionary<string, object> { { "error", pp == null ? "Pratinjau kedaluwarsa." : pp.Error } });
+                    return;
+                }
                 if (head == "discover" && rq.HttpMethod == "POST")
                 {
                     if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }

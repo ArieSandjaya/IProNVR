@@ -72,6 +72,9 @@ pre.log{margin:8px 0 0;max-height:240px;overflow:auto;font:12px ui-monospace,Con
 #modal .mb{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
 #modal .mb label{display:block;font-weight:600;margin-bottom:3px}
 #modal .mb .f1{grid-column:1/-1}
+#pvbox{margin-top:8px;background:#000;border-radius:4px;min-height:60px;display:none;position:relative;text-align:center;color:#fff}
+#pvbox img{width:100%;display:block;border-radius:4px}
+#pvbox .pm{padding:22px 12px;color:#ffc107}
 #modal .mb input,#modal .mb select,#modal .mb textarea{width:100%;padding:6px 9px;border:1px solid #ced4da;border-radius:4px}
 #modal .mb small{color:var(--mut);display:block;margin-top:2px}
 #modal .mf{padding:12px 16px;border-top:1px solid var(--line);text-align:right;display:flex;gap:8px;justify-content:flex-end}
@@ -200,11 +203,27 @@ function edit(r,row){
     else if(full){inp='<textarea rows="3" data-n="'+n+'" data-k="T">'+esc(val)+'</textarea>'}
     else inp='<input data-n="'+n+'" data-k="'+c.kind+'" value="'+esc(val)+'"'+(c.secret?' type="password" autocomplete="new-password"':'')+(c.kind!='T'?' type="number"':'')+'>';
     f+='<div class="'+(full?'f1':'')+'"><label>'+lb+'</label>'+inp+(m.hint&&m.hint[n]?'<small>'+esc(m.hint[n])+'</small>':'')+'</div>'});
+  if(r=='cameras')f+='<div class="f1"><button class="btn i" id="pv">▶ Live</button> <button class="btn" id="ps" style="display:none">■ Stop</button><small style="display:inline;margin-left:8px">Memakai IP, login, dan URL RTSP yang sedang terisi di form (belum perlu disimpan).</small><div id="pvbox"></div></div>';
   if(s.password)f+='<div><label>'+(isNew?'Password':'Password baru')+'</label><input type="password" data-n="password" autocomplete="new-password">'+(isNew?'':'<small>Kosongkan bila tidak diubah.</small>')+'</div>';
   var el=document.getElementById('modal');
   el.innerHTML='<div class="m"><div class="mh"><h3>'+(isNew?'Tambah ':'Ubah ')+m.t+'</h3><button class="btn sm" id="mx">✕</button></div><div class="mb">'+f+'</div><div class="mf"><button class="btn" id="mc">Batal</button><button class="btn p" id="ms">Simpan</button></div></div>';
   el.style.display='flex';
-  function close(){el.style.display='none';el.innerHTML=''}
+  function stopLive(){var im=el.querySelector('#pvbox img');if(im){im.src='';im.remove()}var b=el.querySelector('#pvbox'),ps=el.querySelector('#ps'),pv=el.querySelector('#pv');if(b)b.style.display='none';if(ps)ps.style.display='none';if(pv)pv.style.display=''}
+  function close(){stopLive();el.style.display='none';el.innerHTML=''}
+  if(r=='cameras'){
+    var pvb=el.querySelector('#pv'),psb=el.querySelector('#ps'),box=el.querySelector('#pvbox');
+    psb.onclick=stopLive;
+    pvb.onclick=function(){
+      var b={};[].forEach.call(el.querySelectorAll('[data-n]'),function(i){b[i.dataset.n]=i.value});
+      box.style.display='block';box.scrollIntoView({block:'nearest'});box.innerHTML='<div class="pm">Menghubungkan ke kamera…</div>';pvb.style.display='none';psb.style.display='';
+      api('POST','/api/preview',b).then(function(r2){
+        var im=new Image();im.onload=function(){};
+        im.onerror=function(){fetch('/api/preview/'+r2.key,{headers:{Authorization:'Bearer '+tok}}).then(function(x){return x.json()}).then(function(j){box.innerHTML='<div class="pm">'+esc(j.error||'Stream berhenti.')+'</div>'})};
+        im.src='/api/stream?k='+r2.key+'&t='+tok+'&w=640';
+        var first=setInterval(function(){if(im.naturalWidth>0){clearInterval(first);box.innerHTML='';box.appendChild(im)}},300);
+        setTimeout(function(){clearInterval(first)},25000);
+      }).catch(function(e){box.innerHTML='<div class="pm">'+esc(e.message)+'</div>'})}
+  }
   el.querySelector('#mx').onclick=close;el.querySelector('#mc').onclick=close;
   el.querySelector('#ms').onclick=function(){
     var b={};if(row)b.id=row.id;

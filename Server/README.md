@@ -21,6 +21,9 @@ Di halaman admin: tab **NVR** tombol *Deteksi RTSP* (semua kamera NVR yang punya
 - kamera yang user/password-nya berbeda dari NVR: isi `cam_user`/`cam_pass` di data kamera itu (login khusus menggantikan login NVR)
 Hasil: `rtsp_url` (templat `{user}{pass}{ip}`), `codec`, `width`, `height`, `scan_detail`. Kodenya sama dengan di aplikasi client (file dipakai bersama).
 
+## Pratinjau live kamera
+Di form **Edit/Tambah kamera** tekan **▶ Live**: server membuka RTSP kamera dengan ffmpeg dan mengirimnya ke browser sebagai MJPEG (±8 fps, lebar 640, tanpa suara). Memakai nilai yang sedang terisi di form (IP, login khusus, URL RTSP), jadi bisa dicoba sebelum disimpan. Maksimal 4 pratinjau bersamaan, otomatis berhenti setelah 10 menit atau saat ditutup. Pesan error (login salah, kamera tidak terjangkau, dst.) tampil di kotak pratinjau.
+
 ## API (JSON, `Authorization: Bearer <token>`)
 | Endpoint | Fungsi |
 |---|---|
@@ -31,6 +34,7 @@ Hasil: `rtsp_url` (templat `{user}{pass}{ip}`), `codec`, `width`, `height`, `sca
 | `GET/POST /api/{nvrs,cameras,groups,sequences,users}` | daftar / simpan (POST tanpa `id` mendaftar baru; NVR host+port, kamera nvr_id+channel, nama group sama otomatis di-update) |
 | `DELETE /api/{tabel}/{id}` | hapus (NVR ikut menghapus kameranya) |
 
+| `POST /api/preview` lalu `GET /api/stream?k=KEY&t=TOKEN` | pratinjau live MJPEG (admin) |
 | `POST /api/discover` `{nvr_id, camera_ids?, overwrite?}` | deteksi URL RTSP otomatis di server (ONVIF, templat NVR, pola merk; tiap kandidat diuji ffmpeg), hasil disimpan ke kamera. Mengembalikan `job` |
 | `GET /api/jobs/{id}` / `DELETE /api/jobs/{id}` | progres + log deteksi / batalkan |
 
