@@ -15,6 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- kode deteksi RTSP dipakai bersama dengan aplikasi client -->
+    <Compile Include="..\..\RtspDiscovery.cs" Link="Shared\RtspDiscovery.cs" />
+    <Compile Include="..\..\StreamProbe.cs" Link="Shared\StreamProbe.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="admin.html" LogicalName="IproNvrServer.admin.html" />
   </ItemGroup>
 

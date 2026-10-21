@@ -22,10 +22,13 @@ td input.n{min-width:50px;width:70px}
 .box input{width:100%;margin:6px 0 12px;padding:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
 .msg{padding:6px 10px;margin:0 0 10px;border-radius:6px}.ok{background:#1b5e2022;color:var(--fg)}.er{background:#c6282822;color:var(--bad)}
 .mut{color:var(--mut)}
+#job{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 12px}
+#job pre{margin:8px 0 0;max-height:220px;overflow:auto;font:12px ui-monospace,Consolas,monospace;white-space:pre-wrap}
+.bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:var(--acc)}
 </style></head><body>
 <div id="app"></div>
 <script>
-var tok=sessionStorage.getItem('tok'),me=null,schema=[],cur='nvrs',data={},ver=0,msg=null;
+var job=null,poll=null,tok=sessionStorage.getItem('tok'),me=null,schema=[],cur='nvrs',data={},ver=0,msg=null;
 function $(h){var d=document.createElement('div');d.innerHTML=h;return d.firstChild}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
 function api(m,u,b){return fetch(u,{method:m,headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).then(function(r){return r.json().then(function(j){if(r.status==401){logout();throw new Error(j.error)}if(!r.ok)throw new Error(j.error||r.status);return j})})}
@@ -57,10 +60,26 @@ function render(){
   a.appendChild(h);
   var m=document.createElement('main');
   if(msg){m.appendChild($('<div class="msg '+(msg.bad?'er':'ok')+'">'+esc(msg.t)+'</div>'))}
+  m.appendChild($('<div id="job" style="display:none"></div>'));
   var s=schema.filter(function(x){return x.route==cur})[0];
   if(s){m.appendChild(table(s))}
+  drawJob();
   a.appendChild(m);
 }
+function startDisc(nvrId,camIds,overwrite){
+  api('POST','/api/discover',{nvr_id:nvrId,camera_ids:camIds||[],overwrite:overwrite}).then(function(r){job={id:r.job};pollJob()}).catch(function(e){say(e.message,true)})}
+function pollJob(){
+  clearTimeout(poll);if(!job)return;
+  api('GET','/api/jobs/'+job.id).then(function(j){job=j;drawJob();if(j.state=='running')poll=setTimeout(pollJob,1500);else reload()}).catch(function(){})}
+function drawJob(){
+  var el=document.getElementById('job');if(!el||!job||!job.state)return;
+  el.style.display='block';
+  var pct=job.total?Math.round(100*job.done/job.total):0;
+  var st={running:'Berjalan',done:'Selesai',cancelled:'Dibatalkan',error:'Error'}[job.state]||job.state;
+  el.innerHTML='<b>Deteksi RTSP otomatis - '+esc(job.nvr)+'</b> · '+st+' · '+job.done+'/'+job.total+' kamera, '+job.found+' ditemukan '+(job.state=='running'?'<button class="del" id="jc">Batal</button>':'<button id="jx">Tutup</button>')+'<div class="bar"><i style="width:'+pct+'%"></i></div><pre>'+esc((job.lines||[]).join('\n'))+'</pre>';
+  var c=document.getElementById('jc');if(c)c.onclick=function(){api('DELETE','/api/jobs/'+job.id)};
+  var x=document.getElementById('jx');if(x)x.onclick=function(){job=null;el.style.display='none'};
+  var pre=el.querySelector('pre');pre.scrollTop=pre.scrollHeight}
 function table(s){
   var rows=data[s.route]||[],admin=me.is_admin==1;
   var t=document.createElement('table'),hd='<tr>';
@@ -78,6 +97,8 @@ function table(s){
         [].forEach.call(tr.querySelectorAll('input'),function(i){var v=i.value;if(i.dataset.k=='I')v=v===''?0:Number(v);else if(i.dataset.k=='R')v=Number(v);b[i.dataset.n]=v});
         api('POST','/api/'+s.route,b).then(function(){msg={t:'Tersimpan.'};return reload()}).catch(function(e){say(e.message,true)})};
       td.appendChild(sv);
+      if(s.route=='nvrs'&&+tr.dataset.id){var dd=document.createElement('button');dd.textContent='Deteksi RTSP';dd.onclick=function(){var ow=confirm('Deteksi URL RTSP semua kamera NVR ini (yang punya IP).\n\nOK = timpa URL RTSP yang sudah ada\nBatal = lanjut tanpa menimpa (hanya mengisi yang kosong)\n\n(Ketuk Batal untuk mode aman, lalu lanjut ke konfirmasi berikutnya)');if(!confirm('Mulai deteksi? Bisa beberapa menit.'))return;startDisc(+tr.dataset.id,[],ow)};td.appendChild(dd)}
+      if(s.route=='cameras'&&+tr.dataset.id){var dc=document.createElement('button');dc.textContent='Deteksi';dc.onclick=function(){var nv=+tr.querySelector('[data-n=nvr_id]').value;startDisc(nv,[+tr.dataset.id],true)};td.appendChild(dc)}
       if(+tr.dataset.id){var d=document.createElement('button');d.textContent='Hapus';d.className='del';d.onclick=function(){if(!confirm('Hapus baris ini?'))return;api('DELETE','/api/'+s.route+'/'+tr.dataset.id).then(function(){msg={t:'Dihapus.'};return reload()}).catch(function(e){say(e.message,true)})};td.appendChild(d)}
     }
     tr.appendChild(td);return tr}

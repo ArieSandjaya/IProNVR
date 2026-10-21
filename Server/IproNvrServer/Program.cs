@@ -15,6 +15,7 @@ namespace IproNvrServer
         public int Port = 8470;
         public string DataDir = "";     // kosong = folder "data" di samping IproNvrServer.exe
         public int TokenDays = 30;
+        public string FfmpegPath = "";   // kosong = ffmpeg.exe di samping server atau di PATH
 
         public static string Dir { get { return AppDomain.CurrentDomain.BaseDirectory; } }
 

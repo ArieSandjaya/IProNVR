@@ -13,6 +13,13 @@ Buka `Server/IproNvrServer/IproNvrServer.csproj` di Visual Studio (net48) lalu B
 - Pengaturan: `server.json` di samping exe (`Port` 8470, `DataDir`, `TokenDays` 30)
 - Halaman admin web: `http://SERVER:8470/`
 
+## Deteksi RTSP otomatis
+Di halaman admin: tab **NVR** tombol *Deteksi RTSP* (semua kamera NVR yang punya IP) atau tab **Kamera** tombol *Deteksi* (satu kamera). Syarat:
+- `ffmpeg.exe` ada di folder `IproNvrServer.exe`, di PATH, atau isi `FfmpegPath` di `server.json`
+- server harus bisa menjangkau IP kamera (port RTSP 554 dan ONVIF)
+- isi `cam_user`/`cam_pass` dan `rtsp_template` di data NVR, serta `ip_address` kamera
+Hasil: `rtsp_url` (templat `{user}{pass}{ip}`), `codec`, `width`, `height`, `scan_detail`. Kodenya sama dengan di aplikasi client (file dipakai bersama).
+
 ## API (JSON, `Authorization: Bearer <token>`)
 | Endpoint | Fungsi |
 |---|---|
@@ -22,6 +29,9 @@ Buka `Server/IproNvrServer/IproNvrServer.csproj` di Visual Studio (net48) lalu B
 | `GET /api/config` | seluruh konfigurasi: nvrs, cameras, groups, sequences (+ users bila admin) |
 | `GET/POST /api/{nvrs,cameras,groups,sequences,users}` | daftar / simpan (POST tanpa `id` mendaftar baru; NVR host+port, kamera nvr_id+channel, nama group sama otomatis di-update) |
 | `DELETE /api/{tabel}/{id}` | hapus (NVR ikut menghapus kameranya) |
+
+| `POST /api/discover` `{nvr_id, camera_ids?, overwrite?}` | deteksi URL RTSP otomatis di server (ONVIF, templat NVR, pola merk; tiap kandidat diuji ffmpeg), hasil disimpan ke kamera. Mengembalikan `job` |
+| `GET /api/jobs/{id}` / `DELETE /api/jobs/{id}` | progres + log deteksi / batalkan |
 
 Hanya admin yang boleh menulis. Format `slots` group: `nvr:ch,nvr:ch,,` (kosong = area kosong). `steps` sequence: `groupId:detik,...`.
 Password NVR/kamera disimpan terenkripsi AES-256 (kunci `data\server.key`, **ikut di-backup**), dikirim ke client dalam bentuk asli — pakai HTTPS (reverse proxy/IIS ARR atau sertifikat `netsh http add sslcert`) bila jaringan tidak terpercaya.

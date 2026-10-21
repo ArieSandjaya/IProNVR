@@ -27,7 +27,8 @@ namespace IproNvrServer
         readonly Dictionary<string, int[]> fails = new Dictionary<string, int[]>();   // ip -> [jumlah gagal, tick terakhir]
         readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
-        public ApiServer(Store s, ServerConfig c) { store = s; cfg = c; }
+        readonly DiscoveryManager disc;
+        public ApiServer(Store s, ServerConfig c) { store = s; cfg = c; disc = new DiscoveryManager(s, c); }
 
         public void Start()
         {
@@ -207,6 +208,32 @@ namespace IproNvrServer
                         o[t.Route] = store.List(t);
                     }
                     Json(rs, 200, o);
+                    return;
+                }
+
+                if (head == "discover" && rq.HttpMethod == "POST")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    Dictionary<string, object> b = ReadBody(rq);
+                    string e;
+                    string jid = disc.Start(b, s.User["name"] + "", out e);
+                    if (jid == null) { Err(rs, 400, e); return; }
+                    Json(rs, 200, new Dictionary<string, object> { { "job", jid } });
+                    return;
+                }
+                if (head == "jobs")
+                {
+                    if (seg.Length < 2) { Json(rs, 200, disc.Latest()); return; }
+                    if (rq.HttpMethod == "DELETE")
+                    {
+                        if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                        disc.Cancel(seg[1]);
+                        Json(rs, 200, new Dictionary<string, object> { { "ok", true } });
+                        return;
+                    }
+                    object jo = disc.Get(seg[1]);
+                    if (jo == null) { Err(rs, 404, "Job tidak ada."); return; }
+                    Json(rs, 200, jo);
                     return;
                 }
 
