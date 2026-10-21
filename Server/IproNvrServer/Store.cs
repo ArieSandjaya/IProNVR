@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS camera (
     channel INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '', ip_address TEXT NOT NULL DEFAULT '',
     location TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', rtsp_url TEXT NOT NULL DEFAULT '',
     codec TEXT NOT NULL DEFAULT '', width INTEGER NOT NULL DEFAULT 0, height INTEGER NOT NULL DEFAULT 0,
-    scan_detail TEXT NOT NULL DEFAULT '',
+    scan_detail TEXT NOT NULL DEFAULT '', cam_user TEXT NOT NULL DEFAULT '', cam_pass TEXT NOT NULL DEFAULT '',
     UNIQUE (nvr_id, channel)
 );
 CREATE TABLE IF NOT EXISTS app_user (
@@ -83,7 +83,8 @@ CREATE TABLE IF NOT EXISTS seq (
             new TableDef { Route = "cameras", Table = "camera", Order = "nvr_id, channel", NatKey = new[] { "nvr_id", "channel" }, Cols = new Col[] {
                 new Col("nvr_id",'I',0), new Col("channel",'I',0), new Col("name",'T',""), new Col("ip_address",'T',""),
                 new Col("location",'T',""), new Col("note",'T',""), new Col("rtsp_url",'T',""),
-                new Col("codec",'T',""), new Col("width",'I',0), new Col("height",'I',0), new Col("scan_detail",'T',"") } },
+                new Col("codec",'T',""), new Col("width",'I',0), new Col("height",'I',0), new Col("scan_detail",'T',""),
+                new Col("cam_user",'T',""), new Col("cam_pass",'T',"",true) } },
             new TableDef { Route = "groups", Table = "grp", Order = "sort, name", NatKey = new[] { "name" }, Cols = new Col[] {
                 new Col("name",'T',""), new Col("layout",'T',"4"), new Col("slots",'T',""), new Col("owner",'T',""), new Col("sort",'I',0) } },
             new TableDef { Route = "sequences", Table = "seq", Order = "sort, name", NatKey = new[] { "name" }, Cols = new Col[] {
@@ -123,6 +124,8 @@ CREATE TABLE IF NOT EXISTS seq (
                 Exec(c, Schema.Sql);
                 // database lama: tambahkan kolom yang baru
                 try { Exec(c, "ALTER TABLE camera ADD COLUMN scan_detail TEXT NOT NULL DEFAULT ''"); } catch { }
+                try { Exec(c, "ALTER TABLE camera ADD COLUMN cam_user TEXT NOT NULL DEFAULT ''"); } catch { }
+                try { Exec(c, "ALTER TABLE camera ADD COLUMN cam_pass TEXT NOT NULL DEFAULT ''"); } catch { }
                 Exec(c, "INSERT OR IGNORE INTO meta (k, v) VALUES ('version', '1')");
             }
         }

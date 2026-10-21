@@ -85,7 +85,7 @@ var tok=sessionStorage.getItem('tok'),me=null,schema=[],data={},ver=0,page='home
 var META={
  nvrs:{t:'NVR',ic:'▣',lbl:{name:'Nama',host:'Host / IP',port:'Port',use_https:'HTTPS',username:'User NVR',password:'Password NVR',max_channels:'Jumlah kanal',model:'Model',location:'Lokasi',notes:'Catatan',cam_user:'User kamera (RTSP)',cam_pass:'Password kamera (RTSP)',rtsp_template:'Template RTSP substream',substream_param:'Parameter substream NVR'},
   full:['rtsp_template','substream_param','notes'],hint:{rtsp_template:'Contoh: rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1'}},
- cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',rtsp_url:'URL RTSP substream',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi'},full:['rtsp_url','scan_detail','note'],hint:{rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
+ cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',cam_user:'User kamera (khusus)',cam_pass:'Password kamera (khusus)',rtsp_url:'URL RTSP substream',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi'},full:['rtsp_url','scan_detail','note'],hint:{cam_user:'Kosongkan bila sama dengan login kamera di data NVR.',rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
  groups:{t:'Group',ic:'▦',lbl:{name:'Nama',layout:'Layout',slots:'Kamera per area',owner:'Pemilik',sort:'Urutan'},full:['slots'],hint:{slots:'Format: idNVR:kanal dipisah koma, area kosong dikosongkan. Contoh: 1:1,1:2,,1:5'}},
  sequences:{t:'Sequence',ic:'↻',lbl:{name:'Nama',steps:'Langkah',sort:'Urutan'},full:['steps'],hint:{steps:'Format: idGroup:detik dipisah koma. Contoh: 1:10,2:10,3:15'}},
  users:{t:'User',ic:'☺',lbl:{name:'Nama',level:'Level (1-8)',is_admin:'Admin',use_group:'Pakai group sendiri',password:'Password'},full:[]}
@@ -152,7 +152,7 @@ function home(){
 function cellFor(r,row){
   switch(r){
    case'nvrs':return[esc(row.name),esc(row.host)+':'+row.port+(row.use_https?' <span class="badge info">https</span>':''),esc(row.model),esc(row.location),(data.cameras||[]).filter(function(c){return c.nvr_id==row.id}).length+' / '+row.max_channels];
-   case'cameras':return[row.channel,esc(row.name),esc(row.ip_address),esc(nvrName(row.nvr_id)),esc(row.location),row.rtsp_url?'<span class="mono" title="'+esc(row.rtsp_url)+'">'+esc(row.rtsp_url)+'</span>':'<span class="badge">belum</span>',row.width?'<span class="badge ok">'+esc(row.codec)+' '+row.width+'×'+row.height+'</span>':'-'];
+   case'cameras':return[row.channel,esc(row.name),esc(row.ip_address)+(row.cam_user?' <span class="badge info" title="Login khusus kamera">login khusus</span>':''),esc(nvrName(row.nvr_id)),esc(row.location),row.rtsp_url?'<span class="mono" title="'+esc(row.rtsp_url)+'">'+esc(row.rtsp_url)+'</span>':'<span class="badge">belum</span>',row.width?'<span class="badge ok">'+esc(row.codec)+' '+row.width+'×'+row.height+'</span>':'-'];
    case'groups':return[esc(row.name),esc(row.layout),(row.slots||'').split(',').filter(function(x){return x}).length,esc(row.owner)];
    case'sequences':return[esc(row.name),(row.steps||'').split(',').filter(function(x){return x}).length+' langkah',esc(row.steps)];
    case'users':return[esc(row.name),row.level,row.is_admin?'<span class="badge ok">Admin</span>':'<span class="badge">Operator</span>',row.use_group?'Ya':'Tidak'];

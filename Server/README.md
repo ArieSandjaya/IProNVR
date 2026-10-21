@@ -18,6 +18,7 @@ Di halaman admin: tab **NVR** tombol *Deteksi RTSP* (semua kamera NVR yang punya
 - `ffmpeg.exe` ada di folder `IproNvrServer.exe`, di PATH, atau isi `FfmpegPath` di `server.json`
 - server harus bisa menjangkau IP kamera (port RTSP 554 dan ONVIF)
 - isi `cam_user`/`cam_pass` dan `rtsp_template` di data NVR, serta `ip_address` kamera
+- kamera yang user/password-nya berbeda dari NVR: isi `cam_user`/`cam_pass` di data kamera itu (login khusus menggantikan login NVR)
 Hasil: `rtsp_url` (templat `{user}{pass}{ip}`), `codec`, `width`, `height`, `scan_detail`. Kodenya sama dengan di aplikasi client (file dipakai bersama).
 
 ## API (JSON, `Authorization: Bearer <token>`)

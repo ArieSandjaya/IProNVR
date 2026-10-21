@@ -124,7 +124,10 @@ namespace IproNvrServer
                     string line;
                     try
                     {
-                        DiscoveryResult r = RtspDiscovery.Discover(exe, ip, cu, cp, tpl, job.Cts.Token);
+                        // login khusus kamera (bila diisi) menggantikan login NVR
+                        string ku = Convert.ToString(cam["cam_user"]), kp = Convert.ToString(cam["cam_pass"]);
+                        bool own = !string.IsNullOrEmpty(ku);
+                        DiscoveryResult r = RtspDiscovery.Discover(exe, ip, own ? ku : cu, own ? kp : cp, tpl, job.Cts.Token);
                         var upd = new Dictionary<string, object>();
                         upd["id"] = id;
                         upd["scan_detail"] = r.Summary();
@@ -136,7 +139,7 @@ namespace IproNvrServer
                             upd["width"] = r.Sub.Width;
                             upd["height"] = r.Sub.Height;
                             lock (lk) job.Found++;
-                            line = "OK   " + label + ": " + r.Summary() + (had && !overwrite ? "  (URL lama dipertahankan)" : "");
+                            line = "OK   " + label + (own ? " [login kamera]" : "") + ": " + r.Summary() + (had && !overwrite ? "  (URL lama dipertahankan)" : "");
                         }
                         else line = "GAGAL " + label + ": " + r.Note;
                         store.Upsert(Schema.ByRoute("cameras"), upd);
