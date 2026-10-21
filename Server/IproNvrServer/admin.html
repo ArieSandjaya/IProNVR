@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IPRO NVR Server</title>
+<style>
+:root{--bg:#f4f5f7;--fg:#1c2330;--card:#fff;--line:#d6dae1;--acc:#1f6feb;--bad:#c62828;--mut:#667}
+@media(prefers-color-scheme:dark){:root{--bg:#15181d;--fg:#e6e9ee;--card:#1e2229;--line:#343a44;--acc:#4c8dff;--bad:#ef5350;--mut:#99a}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:16px;margin:0 8px 0 0}
+nav button{margin-right:4px}
+button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
+button.on,button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button.del{color:var(--bad)}
+main{padding:16px;overflow:auto}
+table{border-collapse:collapse;background:var(--card);min-width:100%}
+th,td{border:1px solid var(--line);padding:3px 4px;text-align:left;white-space:nowrap}
+th{font-weight:600;background:var(--bg)}
+td input{width:100%;min-width:60px;background:transparent;color:var(--fg);border:0;padding:4px;font:inherit}
+td input:focus{outline:2px solid var(--acc)}
+td input.n{min-width:50px;width:70px}
+.box{max-width:340px;margin:12vh auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px}
+.box input{width:100%;margin:6px 0 12px;padding:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+.msg{padding:6px 10px;margin:0 0 10px;border-radius:6px}.ok{background:#1b5e2022;color:var(--fg)}.er{background:#c6282822;color:var(--bad)}
+.mut{color:var(--mut)}
+</style></head><body>
+<div id="app"></div>
+<script>
+var tok=sessionStorage.getItem('tok'),me=null,schema=[],cur='nvrs',data={},ver=0,msg=null;
+function $(h){var d=document.createElement('div');d.innerHTML=h;return d.firstChild}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function api(m,u,b){return fetch(u,{method:m,headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).then(function(r){return r.json().then(function(j){if(r.status==401){logout();throw new Error(j.error)}if(!r.ok)throw new Error(j.error||r.status);return j})})}
+function logout(){tok=null;sessionStorage.removeItem('tok');render()}
+function say(t,bad){msg={t:t,bad:bad};render()}
+function loginView(){
+  var a=document.getElementById('app');a.innerHTML='';
+  var d=$('<div class="box"><h2>IPRO NVR Server</h2><label>Nama</label><input id="u" autofocus><label>Password</label><input id="p" type="password"><button class="pri" id="go">Masuk</button><p class="mut" id="e"></p></div>');
+  a.appendChild(d);
+  function go(){fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:u.value,pass:p.value})}).then(function(r){return r.json().then(function(j){if(!r.ok){e.textContent=j.error;return}tok=j.token;me=j.user;sessionStorage.setItem('tok',tok);boot()})})}
+  d.querySelector('#go').onclick=go;d.querySelector('#p').onkeydown=function(ev){if(ev.key=='Enter')go()}
+  var u=d.querySelector('#u'),p=d.querySelector('#p'),e=d.querySelector('#e');
+}
+function boot(){
+  Promise.all([api('GET','/api/me'),api('GET','/api/schema'),api('GET','/api/config')]).then(function(r){me=r[0];schema=r[1];data=r[2];ver=data.version;render()}).catch(function(){})
+}
+function reload(){return api('GET','/api/config').then(function(c){data=c;ver=c.version;render()})}
+function render(){
+  var a=document.getElementById('app');
+  if(!tok){loginView();return}
+  if(!me){a.innerHTML='';return}
+  a.innerHTML='';
+  var h=$('<header><h1>IPRO NVR Server</h1><nav></nav><span style="flex:1"></span><span class="mut"></span><button>Keluar</button></header>');
+  var nav=h.querySelector('nav');
+  var names={nvrs:'NVR',cameras:'Kamera',groups:'Group',sequences:'Sequence',users:'User'};
+  schema.forEach(function(s){if(!data[s.route])return;var b=document.createElement('button');b.textContent=names[s.route]||s.route;if(s.route==cur)b.className='on';b.onclick=function(){cur=s.route;msg=null;render()};nav.appendChild(b)});
+  h.querySelector('.mut').textContent=me.name+' · versi konfigurasi '+ver;
+  h.querySelector('button:last-child').onclick=function(){api('POST','/api/logout').then(logout,logout)};
+  a.appendChild(h);
+  var m=document.createElement('main');
+  if(msg){m.appendChild($('<div class="msg '+(msg.bad?'er':'ok')+'">'+esc(msg.t)+'</div>'))}
+  var s=schema.filter(function(x){return x.route==cur})[0];
+  if(s){m.appendChild(table(s))}
+  a.appendChild(m);
+}
+function table(s){
+  var rows=data[s.route]||[],admin=me.is_admin==1;
+  var t=document.createElement('table'),hd='<tr>';
+  s.cols.forEach(function(c){hd+='<th>'+c.name+(c.secret?' 🔒':'')+'</th>'});
+  if(s.password)hd+='<th>password baru</th>';
+  hd+='<th></th></tr>';t.innerHTML=hd;
+  function line(r){
+    var tr=document.createElement('tr');tr.dataset.id=r.id||0;
+    s.cols.forEach(function(c){var td=document.createElement('td');var i=document.createElement('input');i.value=r[c.name]==null?'':r[c.name];i.dataset.n=c.name;i.dataset.k=c.kind;if(c.kind!='T')i.className='n';if(c.secret)i.type='password';i.disabled=!admin;td.appendChild(i);tr.appendChild(td)});
+    if(s.password){var td=document.createElement('td');var i=document.createElement('input');i.type='password';i.dataset.n='password';i.disabled=!admin;td.appendChild(i);tr.appendChild(td)}
+    var td=document.createElement('td');
+    if(admin){
+      var sv=document.createElement('button');sv.textContent='Simpan';sv.className='pri';sv.onclick=function(){
+        var b={};if(+tr.dataset.id)b.id=+tr.dataset.id;
+        [].forEach.call(tr.querySelectorAll('input'),function(i){var v=i.value;if(i.dataset.k=='I')v=v===''?0:Number(v);else if(i.dataset.k=='R')v=Number(v);b[i.dataset.n]=v});
+        api('POST','/api/'+s.route,b).then(function(){msg={t:'Tersimpan.'};return reload()}).catch(function(e){say(e.message,true)})};
+      td.appendChild(sv);
+      if(+tr.dataset.id){var d=document.createElement('button');d.textContent='Hapus';d.className='del';d.onclick=function(){if(!confirm('Hapus baris ini?'))return;api('DELETE','/api/'+s.route+'/'+tr.dataset.id).then(function(){msg={t:'Dihapus.'};return reload()}).catch(function(e){say(e.message,true)})};td.appendChild(d)}
+    }
+    tr.appendChild(td);return tr}
+  rows.forEach(function(r){t.appendChild(line(r))});
+  if(admin){var n={};s.cols.forEach(function(c){n[c.name]=c.kind=='T'?'':0});if(s.route=='nvrs'){n.port=80;n.max_channels=16}if(s.route=='users'){n.level=5;n.use_group=1}t.appendChild(line(n))}
+  var w=document.createElement('div');w.style.overflow='auto';w.appendChild(t);
+  if(admin)w.appendChild($('<p class="mut">Baris paling bawah = data baru. NVR yang sama (host+port) / kamera yang sama (nvr_id+channel) otomatis di-update, bukan dobel. nvr_id = nomor id NVR (lihat tab NVR).</p>'));
+  var idc=document.createElement('p');idc.className='mut';
+  if(s.route=='nvrs')idc.textContent='id NVR: '+rows.map(function(r){return r.id+'='+r.name}).join(', ');
+  w.appendChild(idc);return w}
+if(tok)boot();else render();
+</script></body></html>

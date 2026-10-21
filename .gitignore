@@ -5,3 +5,7 @@ obj/
 *.exe
 *.db
 settings.xml
+
+# server
+Server/**/data/
+Server/**/server.json
