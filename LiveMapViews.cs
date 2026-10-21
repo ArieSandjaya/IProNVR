@@ -153,6 +153,7 @@ namespace IproNvrTool
             Controls.Add(fp);
 
             grid.SetLayout(ScreenLayout.ById(AppSettings.Current.LiveLayout));
+            grid.StateName = "live" + Number;
         }
 
         void ApplyGroup(GroupRec g)
@@ -198,6 +199,10 @@ namespace IproNvrTool
         public void ApplyStartup()
         {
             string spec = AppSettings.Current.LiveStartItems ?? "";
+            bool configured = false;
+            foreach (string part in spec.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                if (part.StartsWith(Number + "=", StringComparison.Ordinal)) configured = true;
+            if (!configured) { if (grid.RestoreState()) lblInfo.Text = "Tampilan terakhir dipulihkan"; return; }
             foreach (string part in spec.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 int eq = part.IndexOf('=');

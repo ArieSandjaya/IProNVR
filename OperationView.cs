@@ -97,6 +97,7 @@ namespace IproNvrTool
 
             string id = AppSettings.Current.OpLayout;
             Grid.SetLayout(ScreenLayout.ById(id));
+            Grid.StateName = "op";
             UpdateShortcutState();
             UpdateOpPanelState();
         }
@@ -945,7 +946,14 @@ namespace IproNvrTool
                     foreach (SeqRec x in AsmDb.ListSequences()) if (x.Name == q) { StartSequence(x); return; }
                 }
             }
-            catch (Exception ex) { Log.Write("Startup group/sequence: " + ex.Message); }
+            catch (Exception ex) { Log.Write("Startup group/sequence: " + ex.Message); return; }
+            // tidak ada group/sequence awal: pulihkan tampilan terakhir sebelum aplikasi mati
+            if (Grid.RestoreState())
+            {
+                AppSettings.Current.OpLayout = Grid.Layout.Id;
+                UpdateShortcutState();
+                lblInfo.Text = "Tampilan terakhir dipulihkan";
+            }
         }
 
         public void RefreshFromSettings()

@@ -93,6 +93,12 @@ CREATE TABLE IF NOT EXISTS fisheye (
     cam_url    TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (nvr_id, channel)
 );
+CREATE TABLE IF NOT EXISTS view_state (
+    name    TEXT PRIMARY KEY,
+    layout  TEXT NOT NULL DEFAULT '',
+    slots   TEXT NOT NULL DEFAULT '',
+    updated TEXT NOT NULL DEFAULT ''
+);
 ";
     }
 
@@ -273,6 +279,38 @@ CREATE TABLE IF NOT EXISTS fisheye (
                 for (int i = 0; i < ids.Count; i++) t.Exec("UPDATE " + table + " SET sort = @s WHERE id = @id", "@s", i, "@id", ids[i]);
                 t.Commit();
             }
+        }
+
+        // ---------- status tampilan terakhir (dipulihkan saat aplikasi / PC restart) ----------
+
+        public static void SaveViewState(string name, string layout, CamRef[] slots)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; slots != null && i < slots.Length; i++)
+            {
+                if (i > 0) sb.Append(',');
+                if (slots[i] != null) sb.Append(slots[i].NvrId).Append(':').Append(slots[i].Channel);
+            }
+            Exec("INSERT OR REPLACE INTO view_state (name, layout, slots, updated) VALUES (@n, @l, @s, @u)",
+                "@n", name, "@l", layout ?? "", "@s", sb.ToString(), "@u", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+        }
+
+        /// <summary>Status tampilan terakhir; null bila belum pernah disimpan.</summary>
+        public static string LoadViewState(string name, out CamRef[] slots)
+        {
+            slots = null;
+            List<Row> rows = Rows("SELECT layout, slots FROM view_state WHERE name = @n", "@n", name);
+            if (rows.Count == 0) return null;
+            string[] parts = Convert.ToString(rows[0]["slots"]).Split(',');
+            slots = new CamRef[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string[] p = parts[i].Split(':');
+                long n; int c;
+                if (p.Length == 2 && long.TryParse(p[0], out n) && int.TryParse(p[1], out c)) slots[i] = new CamRef(n, c);
+            }
+            string lay = Convert.ToString(rows[0]["layout"]);
+            return lay.Length == 0 ? null : lay;
         }
 
         // ---------- fisheye ----------

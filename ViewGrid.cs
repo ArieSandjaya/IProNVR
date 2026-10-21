@@ -568,6 +568,51 @@ namespace IproNvrTool
 
         public event Action SelectionChanged;
         public event Action MaximizedChanged;
+
+        // ---- status terakhir: layout + kamera disimpan ke database lokal (tertunda 1,5 dtk agar tidak menulis terus) ----
+        string stateName;
+        System.Windows.Forms.Timer stateTimer;
+
+        /// <summary>Nama kunci penyimpanan status (mis. "op", "live1"); null = tidak disimpan.</summary>
+        public string StateName
+        {
+            get { return stateName; }
+            set
+            {
+                stateName = value;
+                if (value == null) return;
+                if (stateTimer == null)
+                {
+                    stateTimer = new System.Windows.Forms.Timer();
+                    stateTimer.Interval = 1500;
+                    stateTimer.Tick += delegate { stateTimer.Stop(); SaveState(); };
+                    CamerasChanged += delegate { if (stateName != null && stateTimer != null) { stateTimer.Stop(); stateTimer.Start(); } };
+                }
+            }
+        }
+
+        public void SaveState()
+        {
+            if (stateName == null || cells.Count == 0) return;
+            try { AsmDb.SaveViewState(stateName, layout.Id, Slots()); }
+            catch (Exception ex) { Log.Write("Simpan status tampilan: " + ex.Message); }
+        }
+
+        /// <summary>Pulihkan layout dan kamera terakhir. False bila belum ada status tersimpan.</summary>
+        public bool RestoreState()
+        {
+            if (stateName == null) return false;
+            try
+            {
+                CamRef[] slots;
+                string lay = AsmDb.LoadViewState(stateName, out slots);
+                if (lay == null || !ScreenLayout.Exists(lay)) return false;
+                SetLayout(ScreenLayout.ById(lay));
+                LoadSlots(slots);
+                return true;
+            }
+            catch (Exception ex) { Log.Write("Pulihkan status tampilan: " + ex.Message); return false; }
+        }
         public event Action CamerasChanged;
         public event Action<CamRef> QuickDownloadRequested;
         public event Action<ViewCell, PointF> CellImageClicked;
@@ -894,7 +939,7 @@ namespace IproNvrTool
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { StopAll(); menu.Opening -= OnMenuOpening; }
+            if (disposing) { if (stateTimer != null) { stateTimer.Stop(); SaveState(); stateTimer.Dispose(); stateTimer = null; } StopAll(); menu.Opening -= OnMenuOpening; }
             base.Dispose(disposing);
         }
     }
