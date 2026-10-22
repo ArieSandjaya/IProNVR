@@ -105,6 +105,26 @@ namespace IproNvrTool
             return c == null ? 0 : c.RegStatus;
         }
 
+        static readonly Dictionary<long, bool> nvrRecording = new Dictionary<long, bool>();
+
+        /// <summary>Hasil polling HDD: true bila ada HDD NVR yang sedang merekam (tanda (R) di recordedtime.cgi).</summary>
+        public static void SetNvrRecording(long nvrId, bool recording)
+        {
+            lock (lk) nvrRecording[nvrId] = recording;
+        }
+
+        /// <summary>Perkiraan kamera sedang direkam: NVR merekam (HDD bertanda R) dan kamera terhubung.
+        /// Spec NVR tidak memberi status rekam per kamera, jadi ini turunan dari status HDD dan koneksi kamera.</summary>
+        public static bool IsRecording(long nvrId, int channel)
+        {
+            lock (lk)
+            {
+                bool r;
+                if (!nvrRecording.TryGetValue(nvrId, out r) || !r) return false;
+            }
+            return Status(nvrId, channel) != 2;
+        }
+
         public static void SetLiveStatus(long nvrId, int channel, int status)
         {
             lock (lk) liveStatus[nvrId + ":" + channel] = status;
@@ -410,6 +430,13 @@ namespace IproNvrTool
                     Events.Add(Events.Device, e, false);
                 }
             }
+            try
+            {
+                bool rec = false;
+                foreach (DiskRecord d in NvrScanner.FetchDisks(ep)) if (d.Recording) rec = true;
+                Dir.SetNvrRecording(n.Id, rec);
+            }
+            catch (Exception ex) { Log.Write("Monitor " + n.Name + ": info HDD tidak terbaca: " + ex.Message); }
             Dir.RaiseStatusChanged();
 
             if (AppSettings.Current.ErrLogPoll) PollErrorLog(n, ep);

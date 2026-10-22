@@ -96,6 +96,7 @@ namespace IproNvrTool
             int st = Dir.Status(nvrId, ch);
             n.ForeColor = st == 2 ? Asm.Danger : (st == 0 ? Asm.Muted : Asm.Text);
             if (st == 2) n.Text += "  (error)";
+            else if (Dir.IsRecording(nvrId, ch)) n.Text += "  \u25CF R";
             return n;
         }
 
@@ -127,7 +128,7 @@ namespace IproNvrTool
                     {
                         if (Dir.Nvr(r.NvrId) == null || !Match(r.NvrId, r.Channel)) continue;
                         TreeNode cn = CamNode(r.NvrId, r.Channel);
-                        cn.Text = Dir.Title(r.NvrId, r.Channel) + (Dir.Status(r.NvrId, r.Channel) == 2 ? "  (error)" : "");
+                        cn.Text = Dir.Title(r.NvrId, r.Channel) + (Dir.Status(r.NvrId, r.Channel) == 2 ? "  (error)" : (Dir.IsRecording(r.NvrId, r.Channel) ? "  \u25CF R" : ""));
                         fn.Nodes.Add(cn);
                         any = true;
                     }

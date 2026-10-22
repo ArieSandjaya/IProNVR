@@ -115,6 +115,15 @@ namespace IproNvrTool
     /// <summary>Registrasi (tes login + info HDD + daftar kamera) dan deteksi stream opsional sebuah NVR.</summary>
     public static class NvrScanner
     {
+        /// <summary>Info HDD (recordedtime.cgi, tanpa UID). Dipakai monitor untuk tanda perekaman (R).</summary>
+        public static List<DiskRecord> FetchDisks(NvrEndpoint ep)
+        {
+            string text;
+            try { text = NvrSession.DownloadText(ep, "/cgi-bin/recordedtime.cgi", 15000); }
+            catch (Exception) { text = NvrSession.DownloadText(ep, "/cgi-bin//cgi-bin/recordedtime.cgi", 15000); }   // penulisan URL di dokumen spec
+            return HddParser.Parse(text);
+        }
+
         /// <summary>Daftar kamera + status koneksi: GET /cgi-bin/as_getinfo.cgi?FILE=2 (tanpa UID, cukup digest/basic auth).
         /// Baris yang dicari: CAM_CONNECT_nnCH=s  (0 tidak terdaftar, 1 terdaftar &amp; normal, 2 terdaftar &amp; error koneksi).</summary>
         public static CameraListResult FetchCameraList(NvrEndpoint ep)

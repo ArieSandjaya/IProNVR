@@ -82,6 +82,7 @@ namespace IproNvrTool
 
         NvrSession sess;
         readonly Label lblName = new Label();
+        readonly Label lblRec = new Label();   // tanda rekam: ● R
         readonly Label lblEmpty = new Label();
         bool placed;
 
@@ -117,6 +118,18 @@ namespace IproNvrTool
             lblName.AutoEllipsis = true;
             lblName.Tag = "nostyle";
             lblName.Visible = false;
+            lblRec.Dock = DockStyle.Right;
+            lblRec.Width = Asm.S(36);
+            lblRec.AutoSize = false;
+            lblRec.UseMnemonic = false;
+            lblRec.Text = "\u25CF R";
+            lblRec.Font = Asm.F(8.5f, true);
+            lblRec.ForeColor = Color.White;
+            lblRec.BackColor = Color.FromArgb(200, 30, 30);
+            lblRec.TextAlign = ContentAlignment.MiddleCenter;
+            lblRec.Tag = "nostyle";
+            lblRec.Visible = false;
+            lblName.Controls.Add(lblRec);
             Controls.Add(lblName);
 
             HookMouse(this);
@@ -320,6 +333,13 @@ namespace IproNvrTool
         {
             lblName.Text = " " + TitleText() + (StatusText.Length > 0 ? "  -  " + StatusText : "");
             lblName.Visible = AppSettings.Current.ShowCamNames && HasCamera;
+            RefreshRec();
+        }
+
+        /// <summary>Tanda ● R di judul area bila kamera ini sedang direkam NVR.</summary>
+        public void RefreshRec()
+        {
+            lblRec.Visible = HasCamera && Dir.IsRecording(NvrId, Channel);
         }
 
         public void ClearContent()
@@ -625,8 +645,14 @@ namespace IproNvrTool
         public bool PlaybackMode { get { return playbackMode; } }
         public int MaximizedIndex { get { return maximized; } }
 
+        void OnDirStatus()
+        {
+            Ui.Post(this, delegate { foreach (ViewCell c in cells) c.RefreshRec(); });
+        }
+
         public ViewGrid()
         {
+            Dir.StatusChanged += OnDirStatus;
             BackColor = Asm.Bg;
             DoubleBuffered = true;
             menu = Asm.Menu();
@@ -939,7 +965,7 @@ namespace IproNvrTool
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { if (stateTimer != null) { stateTimer.Stop(); SaveState(); stateTimer.Dispose(); stateTimer = null; } StopAll(); menu.Opening -= OnMenuOpening; }
+            if (disposing) { Dir.StatusChanged -= OnDirStatus; if (stateTimer != null) { stateTimer.Stop(); SaveState(); stateTimer.Dispose(); stateTimer = null; } StopAll(); menu.Opening -= OnMenuOpening; }
             base.Dispose(disposing);
         }
     }
