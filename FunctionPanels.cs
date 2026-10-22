@@ -433,12 +433,23 @@ namespace IproNvrTool
         }
 
         /// <summary>Quick download: mulai (waktu playback - QdPreSec) selama QdMinutes menit dengan format di Setup.</summary>
-        public void Quick(CamRef r, DateTime atLocal)
+        public void Quick(CamRef r, DateTime atLocal, bool live)
         {
             if (!AsmApp.Can(Perm.Download)) { MessageBox.Show("Tidak ada hak download."); return; }
             AppSettings s = AppSettings.Current;
-            DateTime a = atLocal.AddSeconds(-Math.Max(0, s.QdPreSec));
-            DateTime b = a.AddMinutes(Math.Max(1, s.QdMinutes));
+            DateTime a, b;
+            if (live)
+            {
+                // dari tampilan live: ambil rekaman beberapa menit TERAKHIR (rentang tidak boleh melewati sekarang)
+                b = DateTime.Now.AddSeconds(-5);
+                a = b.AddMinutes(-Math.Max(1, s.QdMinutes));
+            }
+            else
+            {
+                a = atLocal.AddSeconds(-Math.Max(0, s.QdPreSec));
+                b = a.AddMinutes(Math.Max(1, s.QdMinutes));
+                if (b > DateTime.Now) b = DateTime.Now.AddSeconds(-5);
+            }
             dtS.Value = a;
             dtE.Value = b;
             Start(r, a, b, s.QdMp4 ? "MP4" : "N3");

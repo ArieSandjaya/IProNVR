@@ -763,7 +763,7 @@ namespace IproNvrTool
                 if (engines.TryGetValue(r.NvrId, out e) && e.CurUtc.HasValue) at = e.CurUtc.Value.ToLocalTime();
             }
             fp.Open("dl");
-            dlPanel.Quick(r, at);
+            dlPanel.Quick(r, at, !Grid.PlaybackMode);
         }
 
         // =============== group / sequence ===============

@@ -59,31 +59,57 @@ namespace IproNvrTool
         {
             Directory.CreateDirectory(folder);
             bool utc = AppSettings.Current.DownloadTimeUtc;
-            DateTime s = utc ? startLocal.ToUniversalTime() : startLocal;
-            DateTime e = utc ? endLocal.ToUniversalTime() : endLocal;
             var sess = new NvrSession("download " + nvr.Name, nvr.ToEndpoint());
             try
             {
                 sess.EnsureLogin();
-                DateTime a = new DateTime(s.Year, s.Month, s.Day, s.Hour, s.Minute, 0, s.Kind); // detik awal selalu 00 (spec); cegah chunk saling tumpang
-                while (a < e && !job.Cancel)
+                Pass(sess, channel, startLocal, endLocal, kind, folder, job, status, utc);
+                if (!job.Cancel && job.Result.Length == 0 && job.Files == 0 && job.Bytes == 0 && job.NoRecording)
                 {
-                    DateTime b = a.AddMinutes(60);
-                    if (b > e) b = e;
-                    string st = a.ToString("yyMMddHHmm", CultureInfo.InvariantCulture) + "00";
-                    string en = b.ToString("yyMMddHHmmss", CultureInfo.InvariantCulture);
-                    if (!Chunk(sess, st, en, kind, channel, folder, job, status)) break;
-                    a = b;
+                    // spec tidak menyebut zona waktu STARTTIME/ENDTIME: bila "tidak ada rekaman", coba sekali lagi dengan zona waktu sebaliknya
+                    job.NoRecording = false;
+                    if (status != null) status("Tidak ada rekaman, mencoba zona waktu " + (utc ? "lokal" : "UTC") + "...");
+                    Log.Write("Download: tidak ada rekaman dengan waktu " + (utc ? "UTC" : "lokal") + ", mencoba " + (utc ? "lokal" : "UTC") + ".");
+                    Pass(sess, channel, startLocal, endLocal, kind, folder, job, status, !utc);
+                    if (job.Files > 0 || job.Bytes > 0)
+                    {
+                        AppSettings.Current.DownloadTimeUtc = !utc;
+                        try { AppSettings.Current.Save(); } catch { }
+                        Log.Write("Download: zona waktu yang cocok = " + (!utc ? "UTC" : "lokal") + " (disimpan di pengaturan).");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                if (job.Result.Length == 0) job.Result = "Error: " + ex.Message;
+                Log.Write("Download: " + ex.Message);
             }
             finally
             {
                 try { sess.Logout(); } catch { }
             }
             if (job.Cancel) job.Result = "Dibatalkan.";
-            else if (job.Result.Length == 0 && job.Files == 0 && job.Bytes == 0 && job.NoRecording) job.Result = "Tidak ada rekaman pada rentang waktu itu.";
+            else if (job.Result.Length == 0 && job.Files == 0 && job.Bytes == 0 && job.NoRecording) job.Result = "Tidak ada rekaman pada rentang waktu itu (sudah dicoba waktu UTC dan lokal).";
             else if (job.Result.Length == 0) job.Result = "Selesai: " + job.Files + " file, " + (job.Bytes / 1024) + " KB -> " + folder;
             if (status != null) status(job.Result);
+        }
+
+        static void Pass(NvrSession sess, int channel, DateTime startLocal, DateTime endLocal, string kind,
+            string folder, DownloadJob job, Action<string> status, bool utc)
+        {
+            DateTime s = utc ? startLocal.ToUniversalTime() : startLocal;
+            DateTime e = utc ? endLocal.ToUniversalTime() : endLocal;
+            DateTime a = new DateTime(s.Year, s.Month, s.Day, s.Hour, s.Minute, 0, s.Kind); // detik awal selalu 00 (spec); cegah chunk saling tumpang
+            while (a < e && !job.Cancel)
+            {
+                DateTime b = a.AddMinutes(60);
+                if (b > e) b = e;
+                string st = a.ToString("yyMMddHHmm", CultureInfo.InvariantCulture) + "00";
+                string en = b.ToString("yyMMddHHmmss", CultureInfo.InvariantCulture);
+                Log.Write("Download: CAM " + channel + " " + st + " - " + en + " " + kind + (utc ? " (UTC)" : " (lokal)"));
+                if (!Chunk(sess, st, en, kind, channel, folder, job, status)) break;
+                a = b;
+            }
         }
 
         static bool Chunk(NvrSession sess, string st, string en, string kind, int cam, string folder, DownloadJob job, Action<string> status)

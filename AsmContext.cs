@@ -162,6 +162,7 @@ namespace IproNvrTool
             public NvrSession Sess;
             public HashSet<int> Channels = new HashSet<int>();
             public bool Keep;
+            public int Pending;      // STOP ke NVR masih berjalan: sesi jangan di-logout dulu
         }
 
         static readonly object lk = new object();
@@ -191,6 +192,46 @@ namespace IproNvrTool
                 list.Add(ne);
                 return ne.Sess;
             }
+        }
+
+        /// <summary>Kanal dilepas sekarang (boleh langsung dipakai lagi pada sesi yang sama), tetapi sesi tetap hidup sampai EndRelease
+        /// supaya perintah STOP ke NVR masih bisa dikirim.</summary>
+        public static void BeginRelease(long nvrId, NvrSession s, int channel)
+        {
+            lock (lk)
+            {
+                List<Entry> list;
+                if (!map.TryGetValue(nvrId, out list)) return;
+                foreach (Entry e in list)
+                {
+                    if (e.Sess != s) continue;
+                    e.Channels.Remove(channel);
+                    e.Pending++;
+                    break;
+                }
+            }
+        }
+
+        public static void EndRelease(long nvrId, NvrSession s)
+        {
+            NvrSession toLogout = null;
+            lock (lk)
+            {
+                List<Entry> list;
+                if (!map.TryGetValue(nvrId, out list)) return;
+                foreach (Entry e in list)
+                {
+                    if (e.Sess != s) continue;
+                    if (e.Pending > 0) e.Pending--;
+                    if (e.Channels.Count == 0 && e.Pending == 0 && !e.Keep)
+                    {
+                        list.Remove(e);
+                        toLogout = e.Sess;
+                    }
+                    break;
+                }
+            }
+            if (toLogout != null) Task.Run(delegate { try { toLogout.Logout(); } catch { } });
         }
 
         public static void Release(long nvrId, NvrSession s, int channel)

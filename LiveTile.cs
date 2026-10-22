@@ -171,6 +171,11 @@ namespace IproNvrTool
         /// <summary>Jumlah stream live yang sedang berjalan (untuk indikator beban).</summary>
         public static int ActiveStreams { get { return _active; } }
 
+        /// <summary>Tile sebelumnya untuk kamera yang sama masih mengirim STOP ke NVR: START baru menunggu sampai selesai + jeda spec (3 dtk).</summary>
+        public System.Threading.Tasks.Task StartAfter;
+        public int StartAfterTick;
+        public bool UsesPush { get { return _comp != null; } }
+
         public void Start(int delayMs)
         {
             _stop = false;
@@ -239,6 +244,13 @@ namespace IproNvrTool
         void Run(object delayObj)
         {
             int delay = (int)delayObj;
+            if (StartAfter != null)
+            {
+                try { StartAfter.Wait(10000); } catch { }
+                int left = 3200 - unchecked(Environment.TickCount - StartAfterTick);
+                for (; left > 0 && !_stop; left -= 100) Thread.Sleep(100);
+            }
+            if (_stop) return;
             if (delay > 0) Thread.Sleep(delay);
             int backoff = 0;
             while (!_stop)

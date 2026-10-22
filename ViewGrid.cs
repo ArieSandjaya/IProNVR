@@ -56,6 +56,41 @@ namespace IproNvrTool
         }
     }
 
+    /// <summary>Mencatat STOP yang masih berjalan per kamera, agar START berikutnya untuk kamera yang sama tidak mendahului STOP
+    /// (maximize / kembali ke multiview berulang cepat) dan tidak melanggar jeda perintah NVR.</summary>
+    static class StopGate
+    {
+        static readonly object lk = new object();
+        static readonly Dictionary<string, KeyValuePair<Task, int>> map = new Dictionary<string, KeyValuePair<Task, int>>();
+
+        public static void Set(long nvr, int ch, Task t)
+        {
+            lock (lk)
+            {
+                map[nvr + ":" + ch] = new KeyValuePair<Task, int>(t, Environment.TickCount);
+                if (map.Count > 256)
+                {
+                    var del = new List<string>();
+                    foreach (var kv in map) if (kv.Value.Key.IsCompleted && unchecked(Environment.TickCount - kv.Value.Value) > 10000) del.Add(kv.Key);
+                    foreach (string k in del) map.Remove(k);
+                }
+            }
+        }
+
+        /// <summary>task = null bila tidak ada STOP yang perlu ditunggu (sudah lewat > 3,2 dtk).</summary>
+        public static void Get(long nvr, int ch, out Task task, out int tick)
+        {
+            task = null; tick = 0;
+            lock (lk)
+            {
+                KeyValuePair<Task, int> e;
+                if (!map.TryGetValue(nvr + ":" + ch, out e)) return;
+                if (e.Key.IsCompleted && unchecked(Environment.TickCount - e.Value) >= 3200) { map.Remove(nvr + ":" + ch); return; }
+                task = e.Key; tick = e.Value;
+            }
+        }
+    }
+
     /// <summary>Satu area gambar: live (LiveTile) atau playback (PictureBox).</summary>
     public class ViewCell : Panel
     {
@@ -370,11 +405,14 @@ namespace IproNvrTool
                 t.Dispose();
                 if (s != null)
                 {
-                    Task.Run(delegate
+                    bool push = t.UsesPush;
+                    Pool.BeginRelease(nid, s, ch);
+                    Task done = Task.Run(delegate
                     {
                         try { t.SendStop(); } catch { }
-                        Pool.Release(nid, s, ch);
+                        Pool.EndRelease(nid, s);
                     });
+                    if (push) StopGate.Set(nid, ch, done);
                 }
             }
         }
@@ -408,6 +446,8 @@ namespace IproNvrTool
                 if (decodeWidth > 0 && decodeWidth < 1280) decodeWidth = 1280;
             }
             sess = Pool.Acquire(nvr, channel);
+            Task gate; int gateTick;
+            StopGate.Get(nvr.Id, channel, out gate, out gateTick);
             Tile = new LiveTile(channel, sess, LiveFormats.FromStored(AppSettings.Current.LiveFormat), decodeWidth);
             Tile.Caption = TitleText();
             if (useSub) Tile.Sources = StreamPlan.ForMultiview(nvr, Dir.Cam(nvr.Id, channel));
@@ -442,6 +482,7 @@ namespace IproNvrTool
             lblName.SendToBack();
             Tile.BringToFront();
             SetName();
+            if (gate != null) { Tile.StartAfter = gate; Tile.StartAfterTick = gateTick; }
             Tile.Start(delayMs);
         }
 

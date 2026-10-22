@@ -49,7 +49,7 @@ namespace IproNvrTool
 
         static NvrSession()
         {
-            ServicePointManager.DefaultConnectionLimit = 64;
+            ServicePointManager.DefaultConnectionLimit = 512;   // 48 stream + keep alive + playback + download pada satu NVR tidak boleh antre
             ServicePointManager.Expect100Continue = false;
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
             ServicePointManager.ServerCertificateValidationCallback = delegate { return AppSettings.Current.IgnoreCertErrors; };
