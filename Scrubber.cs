@@ -28,9 +28,9 @@ namespace IproNvrTool
         public Scrubber()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            Height = Asm.S(44);
+            Height = Asm.S(44) + Asm.S(19);   // +19 px (~0,5 cm) ruang kosong di bawah: strip naik
             Dock = DockStyle.Bottom;
-            BackColor = Asm.Panel;
+            BackColor = Color.Black;
             Cursor = Cursors.Hand;
             Tag = "nostyle";
             menu = Asm.Menu();
@@ -83,7 +83,7 @@ namespace IproNvrTool
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            g.Clear(Asm.Panel);
+            g.Clear(Color.Black);   // latar menyatu dengan area gambar
             int top = Asm.S(20), h = Asm.S(10);
             var track = new Rectangle(Pad(), top, Math.Max(1, Width - 2 * Pad()), h);
             using (var b = new SolidBrush(Asm.Bar)) g.FillRectangle(b, track);
