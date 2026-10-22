@@ -80,6 +80,29 @@ pre.log{margin:8px 0 0;max-height:240px;overflow:auto;font:12px ui-monospace,Con
 #modal .mf{padding:12px 16px;border-top:1px solid var(--line);text-align:right;display:flex;gap:8px;justify-content:flex-end}
 .empty{text-align:center;color:var(--mut);padding:24px}
 @media(max-width:800px){#side{position:fixed;inset:0 auto 0 0;z-index:10;margin-left:-250px}body.open #side{margin-left:0}#modal .mb{grid-template-columns:1fr}}
+
+#modal .m.wide{max-width:1100px}
+.ge{display:grid;grid-template-columns:200px minmax(320px,1fr) 260px;gap:14px;padding:16px}
+.ge label{display:block;font-weight:600;margin-bottom:3px}
+.ge input,.ge select{width:100%;padding:6px 9px;border:1px solid #ced4da;border-radius:4px}
+.lays{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:340px;overflow:auto;margin-top:6px}
+.lay{border:1px solid var(--line);border-radius:4px;background:#fff;padding:3px;cursor:pointer;text-align:center;font-size:11px;color:var(--mut)}
+.lay.on{border-color:var(--acc);box-shadow:0 0 0 2px #007bff40;color:var(--fg)}
+.lay .pv{display:grid;gap:1px;background:#8a95a8;aspect-ratio:16/10;margin-bottom:2px}.lay .pv i{background:#1e232e}
+.gv{display:grid;gap:3px;background:#000;padding:3px;aspect-ratio:16/9;border-radius:4px;width:100%}
+.ga{background:#1b202b;color:#9aa3b5;border:2px solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:12px;padding:2px;overflow:hidden;cursor:pointer;position:relative;min-width:0}
+.ga b{font-size:20px;color:#6b7690;font-weight:700}
+.ga.has{background:#233048;color:#e8ecf4}.ga.has b{font-size:13px;color:#fff}
+.ga.sel{border-color:#d4af37}
+.ga.over{background:#2b3b5c}
+.ga .x{position:absolute;top:1px;right:3px;font-size:14px;cursor:pointer;color:#ff8a8a;display:none}.ga.has:hover .x{display:block}
+.ctree{border:1px solid var(--line);border-radius:4px;max-height:420px;overflow:auto;margin-top:6px;background:#fff}
+.ctree .nh{background:#f1f3f5;padding:5px 8px;font-weight:600;position:sticky;top:0;cursor:pointer}
+.ctree .ci{padding:4px 10px;cursor:grab;border-top:1px solid #f1f3f5;display:flex;gap:6px;align-items:center}
+.ctree .ci:hover{background:#e8f1ff}.ctree .ci.used{color:#9aa0a6}
+.ctree .ci em{margin-left:auto;font-style:normal;font-size:11px}
+.ghint{color:var(--mut);font-size:12px;margin-top:6px}
+@media(max-width:900px){.ge{grid-template-columns:1fr}}
 </style></head><body>
 <div id="app"></div>
 <div id="modal"></div>
@@ -194,7 +217,68 @@ function listPage(r){
 function btn(t,c,f){var b=document.createElement('button');b.className='btn sm '+c;b.textContent=t;b.style.marginLeft='4px';b.onclick=f;return b}
 
 /* ---------- form tambah/ubah ---------- */
+
+/* ---------- editor group (sama seperti aplikasi client: pilih pola layar, lalu taruh kamera di area) ---------- */
+var LAYOUTS=[["1",1,1,[[0,0,1,1]]],["2A",2,1,[[0,0,1,1],[1,0,1,1]]],["2B",1,2,[[0,0,1,1],[0,1,1,1]]],["3A",2,2,[[0,0,1,2],[1,0,1,1],[1,1,1,1]]],["3B",2,2,[[0,0,1,1],[0,1,1,1],[1,0,1,2]]],["3C",3,1,[[0,0,1,1],[1,0,1,1],[2,0,1,1]]],["4",2,2,[[0,0,1,1],[1,0,1,1],[0,1,1,1],[1,1,1,1]]],["4A",3,3,[[0,0,3,2],[0,2,1,1],[1,2,1,1],[2,2,1,1]]],["4B",3,3,[[0,0,2,3],[2,0,1,1],[2,1,1,1],[2,2,1,1]]],["4C",4,1,[[0,0,1,1],[1,0,1,1],[2,0,1,1],[3,0,1,1]]],["4D",1,4,[[0,0,1,1],[0,1,1,1],[0,2,1,1],[0,3,1,1]]],["4E",3,3,[[0,0,1,1],[0,1,1,1],[0,2,1,1],[1,0,2,3]]],["5",6,2,[[0,0,3,1],[3,0,3,1],[0,1,2,1],[2,1,2,1],[4,1,2,1]]],["6",3,2,[[0,0,1,1],[1,0,1,1],[2,0,1,1],[0,1,1,1],[1,1,1,1],[2,1,1,1]]],["6A",3,3,[[0,0,2,2],[2,0,1,1],[2,1,1,1],[0,2,1,1],[1,2,1,1],[2,2,1,1]]],["7",4,3,[[0,0,2,2],[2,0,1,1],[3,0,1,1],[2,1,1,1],[3,1,1,1],[0,2,2,1],[2,2,2,1]]],["7A",3,4,[[0,0,3,2],[0,2,1,1],[1,2,1,1],[2,2,1,1],[0,3,1,1],[1,3,1,1],[2,3,1,1]]],["9",3,3,[[0,0,1,1],[1,0,1,1],[2,0,1,1],[0,1,1,1],[1,1,1,1],[2,1,1,1],[0,2,1,1],[1,2,1,1],[2,2,1,1]]],["10",4,4,[[0,0,2,2],[2,0,2,2],[0,2,1,1],[1,2,1,1],[2,2,1,1],[3,2,1,1],[0,3,1,1],[1,3,1,1],[2,3,1,1],[3,3,1,1]]],["13",4,4,[[0,0,2,2],[2,0,1,1],[3,0,1,1],[2,1,1,1],[3,1,1,1],[0,2,1,1],[1,2,1,1],[2,2,1,1],[3,2,1,1],[0,3,1,1],[1,3,1,1],[2,3,1,1],[3,3,1,1]]],["16",4,4,[[0,0,1,1],[1,0,1,1],[2,0,1,1],[3,0,1,1],[0,1,1,1],[1,1,1,1],[2,1,1,1],[3,1,1,1],[0,2,1,1],[1,2,1,1],[2,2,1,1],[3,2,1,1],[0,3,1,1],[1,3,1,1],[2,3,1,1],[3,3,1,1]]]];
+function layById(id){for(var i=0;i<LAYOUTS.length;i++)if(LAYOUTS[i][0]==id)return LAYOUTS[i];return LAYOUTS[6]}
+function camTitle(nid,ch){var c=(data.cameras||[]).filter(function(x){return x.nvr_id==nid&&x.channel==ch})[0];return nvrName(nid)+' - CH'+ch+(c&&c.name&&c.name!='CH'+ch?' '+c.name:'')}
+function editGroup(row){
+  var isNew=!row,v=row||{},lay=layById(v.layout||'4'),slots=[];
+  (v.slots||'').split(',').forEach(function(s){var p=s.split(':');slots.push(p.length==2&&+p[0]>0&&+p[1]>0?{n:+p[0],c:+p[1]}:null)});
+  var sel=0,q='';
+  var el=document.getElementById('modal');
+  function fit(){while(slots.length<lay[3].length)slots.push(null);slots.length=lay[3].length;if(sel>=slots.length)sel=0}
+  function used(n,c){for(var i=0;i<slots.length;i++)if(slots[i]&&slots[i].n==n&&slots[i].c==c)return i+1;return 0}
+  function put(i,n,c){for(var k=0;k<slots.length;k++)if(slots[k]&&slots[k].n==n&&slots[k].c==c)slots[k]=null;slots[i]={n:n,c:c}}
+  function nextEmpty(from){for(var k=1;k<=slots.length;k++){var j=(from+k)%slots.length;if(!slots[j])return j}return from}
+  function draw(){
+    fit();
+    var users=(data.users||[]).map(function(u){return '<option'+(v.owner==u.name?' selected':'')+'>'+esc(u.name)+'</option>'}).join('');
+    var lh=LAYOUTS.map(function(L){return '<div class="lay'+(L[0]==lay[0]?' on':'')+'" data-l="'+L[0]+'" title="Pola '+L[0]+' ('+L[3].length+' area)"><div class="pv" style="grid-template-columns:repeat('+L[1]+',1fr);grid-template-rows:repeat('+L[2]+',1fr)">'+L[3].map(function(r){return '<i style="grid-column:'+(r[0]+1)+'/span '+r[2]+';grid-row:'+(r[1]+1)+'/span '+r[3]+'"></i>'}).join('')+'</div>'+L[0]+'</div>'}).join('');
+    var gv=lay[3].map(function(r,i){var s=slots[i];return '<div class="ga'+(s?' has':'')+(i==sel?' sel':'')+'" data-i="'+i+'" style="grid-column:'+(r[0]+1)+'/span '+r[2]+';grid-row:'+(r[1]+1)+'/span '+r[3]+'">'+(s?'<b>'+esc(camTitle(s.n,s.c))+'</b><span class="x" data-x="'+i+'" title="Kosongkan area">✕</span>':'<b>'+(i+1)+'</b>')+'</div>'}).join('');
+    var tree=(data.nvrs||[]).map(function(n){
+      var cams=(data.cameras||[]).filter(function(c){return c.nvr_id==n.id&&(!q||(c.name+' CH'+c.channel+' '+c.location+' '+n.name).toLowerCase().indexOf(q)>=0)});
+      if(!cams.length)return '';
+      return '<div class="nh">'+esc(n.name)+' <small>('+cams.length+')</small></div>'+cams.map(function(c){var u=used(n.id,c.channel);return '<div class="ci'+(u?' used':'')+'" draggable="true" data-n="'+n.id+'" data-c="'+c.channel+'">CH'+c.channel+' '+esc(c.name&&c.name!='CH'+c.channel?c.name:'')+(u?'<em>area '+u+'</em>':(c.reg_status==2?'<em style="color:#dc3545">error</em>':''))+'</div>'}).join('')}).join('')||'<div class="ci">Tidak ada kamera. Tambahkan kamera di menu NVR / Kamera.</div>';
+    el.innerHTML='<div class="m wide"><div class="mh"><h3>'+(isNew?'Tambah Group':'Ubah Group')+'</h3><button class="btn sm" id="mx">✕</button></div>'+
+     '<div class="ge"><div><label>Nama group</label><input id="gn" value="'+esc(v.name||'')+'"><label style="margin-top:10px">Pemilik</label><select id="go"><option value="">Semua user</option>'+users+'</select><label style="margin-top:10px">Pola layar</label><div class="lays">'+lh+'</div></div>'+
+     '<div><label>Tampilan ('+lay[3].length+' area)</label><div class="gv" style="grid-template-columns:repeat('+lay[1]+',1fr);grid-template-rows:repeat('+lay[2]+',1fr)">'+gv+'</div><div class="ghint">Klik area untuk memilih (bingkai emas), lalu klik kamera di daftar kanan, atau seret kamera ke area. Seret antar area untuk menukar.</div></div>'+
+     '<div><label>Kamera</label><input id="gq" placeholder="Cari kamera…" value="'+esc(q)+'"><div class="ctree">'+tree+'</div></div></div>'+
+     '<div class="mf"><button class="btn" id="gclr">Kosongkan semua</button><span style="flex:1"></span><button class="btn" id="mc">Batal</button><button class="btn p" id="ms">Simpan</button></div></div>';
+    el.style.display='flex';
+    var keepq=el.querySelector('#gq');
+    el.querySelector('#mx').onclick=el.querySelector('#mc').onclick=close;
+    el.querySelector('#gn').oninput=function(){v.name=this.value};
+    el.querySelector('#go').onchange=function(){v.owner=this.value};
+    el.querySelector('#gclr').onclick=function(){slots=slots.map(function(){return null});draw()};
+    [].forEach.call(el.querySelectorAll('.lay'),function(d){d.onclick=function(){lay=layById(d.dataset.l);draw()}});
+    [].forEach.call(el.querySelectorAll('.ga'),function(d){
+      var i=+d.dataset.i;
+      d.onclick=function(e){if(e.target.dataset.x!=null){slots[+e.target.dataset.x]=null;draw();return}sel=i;draw()};
+      d.draggable=!!slots[i];
+      d.ondragstart=function(e){e.dataTransfer.setData('text/plain','a:'+i)};
+      d.ondragover=function(e){e.preventDefault();d.classList.add('over')};
+      d.ondragleave=function(){d.classList.remove('over')};
+      d.ondrop=function(e){e.preventDefault();var t=e.dataTransfer.getData('text/plain').split(':');
+        if(t[0]=='c'){put(i,+t[1],+t[2]);sel=i}
+        else if(t[0]=='a'){var j=+t[1],tmp=slots[i];slots[i]=slots[j];slots[j]=tmp;sel=i}
+        draw()}});
+    [].forEach.call(el.querySelectorAll('.ci[data-n]'),function(d){
+      d.ondragstart=function(e){e.dataTransfer.setData('text/plain','c:'+d.dataset.n+':'+d.dataset.c)};
+      d.onclick=function(){put(sel,+d.dataset.n,+d.dataset.c);sel=nextEmpty(sel);draw()}});
+    keepq.oninput=function(){q=this.value.toLowerCase();var pos=this.selectionStart;draw();var nq=el.querySelector('#gq');nq.focus();nq.setSelectionRange(pos,pos)};
+    el.querySelector('#ms').onclick=function(){
+      var name=(v.name||'').trim();if(!name){alert('Isi nama group.');return}
+      var b={name:name,layout:lay[0],slots:slots.map(function(s){return s?s.n+':'+s.c:''}).join(','),owner:v.owner||''};
+      if(row){b.id=row.id;b.sort=row.sort}
+      api('POST','/api/groups',b).then(function(){close();msg={t:'Group tersimpan.'};return reload()}).catch(function(e){alert(e.message)})}
+  }
+  function close(){el.style.display='none';el.innerHTML=''}
+  draw();
+}
+
 function edit(r,row){
+  if(r=='groups')return editGroup(row);
   var s=sch(r),m=META[r],isNew=!row,v=row||{};
   var f='';
   s.cols.forEach(function(c){
