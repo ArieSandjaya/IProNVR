@@ -143,7 +143,7 @@ function render(){
   if(!me){a.innerHTML='';return}
   var admin=me.is_admin==1,cnt=function(r){return (data[r]||[]).length};
   var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Konfigurasi</div>';
-  ['nvrs','cameras','groups','sequences','users'].forEach(function(r){if(!data[r])return;menu+='<a data-p="'+r+'" class="'+(page==r?'on':'')+'"><span class="ic">'+META[r].ic+'</span>'+META[r].t+'<em>'+cnt(r)+'</em></a>'});
+  ['nvrs','cameras','groups','users'].forEach(function(r){if(!data[r])return;menu+='<a data-p="'+r+'" class="'+(page==r?'on':'')+'"><span class="ic">'+META[r].ic+'</span>'+META[r].t+'<em>'+cnt(r)+'</em></a>'});
   a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">IP</div><span><b>IPRO</b> NVR</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (hanya baca)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Versi konfigurasi: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Keluar</button></div><div id="content"></div></div></div>';
   [].forEach.call(a.querySelectorAll('#side a'),function(x){x.onclick=function(){page=x.dataset.p;msg=null;document.body.classList.remove('open');render()}});
   a.querySelector('.burger').onclick=function(){document.body.classList.toggle('open')};
