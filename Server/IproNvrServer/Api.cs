@@ -30,6 +30,49 @@ namespace IproNvrServer
         readonly Dictionary<string, int[]> fails = new Dictionary<string, int[]>();   // ip -> [jumlah gagal, tick terakhir]
         readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
+        /// <summary>Baca daftar kamera yang terdaftar di NVR (as_getinfo.cgi?FILE=2) dan buat kamera yang belum ada di server.</summary>
+        object FetchNvrCameras(Dictionary<string, object> body, string by, out string error)
+        {
+            error = null;
+            object o;
+            long nvrId = 0;
+            if (body.TryGetValue("nvr_id", out o) && o != null) nvrId = Convert.ToInt64(Convert.ToDouble(o, System.Globalization.CultureInfo.InvariantCulture));
+            Row nvr = null;
+            foreach (Row r in store.List(Schema.ByRoute("nvrs"))) if (Convert.ToInt64(r["id"]) == nvrId) nvr = r;
+            if (nvr == null) { error = "NVR tidak ditemukan."; return null; }
+            string host = Convert.ToString(nvr["host"]);
+            int port = Convert.ToInt32(nvr["port"]);
+            string text;
+            try
+            {
+                text = NvrList.Download(host, port, Convert.ToInt32(nvr["use_https"]) != 0, Convert.ToString(nvr["username"]), Convert.ToString(nvr["password"]), "/cgi-bin/as_getinfo.cgi?FILE=2", 20000);
+            }
+            catch (Exception ex) { error = "Gagal menghubungi NVR " + host + ":" + port + " - " + ex.Message; return null; }
+            SortedDictionary<int, int> cl = NvrList.Parse(text);
+            if (cl.Count == 0)
+            {
+                string raw = (text ?? "").Replace("\r", " ").Replace("\n", " | ");
+                error = "NVR menjawab tetapi tidak ada baris CAM_CONNECT_nnCH. Cuplikan respons: " + (raw.Length > 200 ? raw.Substring(0, 200) : raw);
+                return null;
+            }
+            var have = new HashSet<long>();
+            foreach (Row c in store.List(Schema.ByRoute("cameras")))
+                if (Convert.ToInt64(c["nvr_id"]) == nvrId) have.Add(Convert.ToInt64(c["channel"]));
+            int registered = 0, added = 0, bad = 0;
+            foreach (KeyValuePair<int, int> cs in cl)
+            {
+                if (cs.Value == 0) continue;
+                registered++;
+                if (cs.Value == 2) bad++;
+                if (have.Contains(cs.Key)) continue;
+                store.Upsert(Schema.ByRoute("cameras"), new Dictionary<string, object> {
+                    { "nvr_id", (double)nvrId }, { "channel", (double)cs.Key }, { "name", "CH" + cs.Key } });
+                added++;
+            }
+            Log.Write("Ambil kamera dari NVR " + Convert.ToString(nvr["name"]) + " oleh " + by + ": terdaftar " + registered + ", baru " + added);
+            return new Dictionary<string, object> { { "registered", registered }, { "added", added }, { "error_conn", bad }, { "total_slots", cl.Count } };
+        }
+
         readonly DiscoveryManager disc;
         public ApiServer(Store s, ServerConfig c) { store = s; cfg = c; disc = new DiscoveryManager(s, c); }
 
@@ -337,6 +380,15 @@ namespace IproNvrServer
                     Preview pp;
                     lock (previews) { previews.TryGetValue(seg.Length > 1 ? seg[1] : "", out pp); }
                     Json(rs, 200, new Dictionary<string, object> { { "error", pp == null ? "Pratinjau kedaluwarsa." : pp.Error } });
+                    return;
+                }
+                if (head == "nvr-cameras" && rq.HttpMethod == "POST")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    string fe;
+                    object fr = FetchNvrCameras(ReadBody(rq), s.User["name"] + "", out fe);
+                    if (fr == null) { Err(rs, 400, fe); return; }
+                    Json(rs, 200, fr);
                     return;
                 }
                 if (head == "discover" && rq.HttpMethod == "POST")

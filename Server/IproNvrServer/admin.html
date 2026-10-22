@@ -172,6 +172,7 @@ function listPage(r){
     var q=$('<input placeholder="Cari nama / IP" value="'+esc(flt.q)+'">');q.onchange=function(){flt.q=q.value;render()};tools.appendChild(q);
     rows=rows.filter(function(c){return (!flt.nvr||c.nvr_id==flt.nvr)&&(!flt.q||(c.name+' '+c.ip_address+' '+c.location).toLowerCase().indexOf(flt.q.toLowerCase())>=0)});
     if(admin){var dn=$('<button class="btn i">Deteksi RTSP (NVR terpilih)</button>');dn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}askDisc(+flt.nvr,[])};tools.appendChild(dn);
+      var fn=$('<button class="btn p">Ambil kamera dari NVR</button>');fn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}fetchCams(+flt.nvr)};tools.appendChild(fn);
       var gen=$('<button class="btn w">Buat kanal</button>');gen.onclick=genChannels;tools.appendChild(gen)}
   }
   if(admin){var add=$('<button class="btn p">＋ Tambah</button>');add.onclick=function(){edit(r,null)};tools.appendChild(add)}
@@ -181,6 +182,7 @@ function listPage(r){
     var tr=document.createElement('tr'),cs=cellFor(r,row),h='';cs.forEach(function(x){h+='<td>'+x+'</td>'});h+='<td class="act"></td>';tr.innerHTML=h;
     var ac=tr.querySelector('.act');
     if(admin){
+      if(r=='nvrs')ac.appendChild(btn('Ambil kamera','p',function(){fetchCams(row.id)}));
       if(r=='nvrs')ac.appendChild(btn('Deteksi RTSP','i',function(){askDisc(row.id,[])}));
       if(r=='cameras')ac.appendChild(btn('Deteksi','i',function(){startDisc(row.nvr_id,[row.id],true)}));
       ac.appendChild(btn('Edit','p',function(){edit(r,row)}));
@@ -229,6 +231,9 @@ function edit(r,row){
     var b={};if(row)b.id=row.id;
     [].forEach.call(el.querySelectorAll('[data-n]'),function(i){var val=i.value,k=i.dataset.k;if(i.dataset.n=='nvr_id'||k=='I')val=Number(val||0);else if(k=='R')val=Number(val);b[i.dataset.n]=val});
     api('POST','/api/'+r,b).then(function(){close();msg={t:'Tersimpan.'};return reload()}).catch(function(e){alert(e.message)})}}
+function fetchCams(id){
+  say('Menghubungi NVR...');
+  api('POST','/api/nvr-cameras',{nvr_id:id}).then(function(r){msg={t:r.registered+' kamera terdaftar di NVR ('+r.error_conn+' bermasalah koneksi); '+r.added+' kamera baru ditambahkan. Isi IP kamera lalu jalankan Deteksi RTSP.'};reload()}).catch(function(e){say(e.message,true)})}
 function genChannels(){
   var nv=+flt.nvr;if(!nv){alert('Pilih NVR dulu pada filter.');return}
   var n=prompt('Buat kamera kanal 1 sampai berapa untuk NVR "'+nvrName(nv)+'"? (kanal yang sudah ada tidak berubah)',String(((data.nvrs||[]).filter(function(x){return x.id==nv})[0]||{}).max_channels||16));
