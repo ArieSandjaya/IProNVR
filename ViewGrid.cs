@@ -354,7 +354,7 @@ namespace IproNvrTool
         public void SetSelected(bool sel)
         {
             Selected = sel;
-            BackColor = sel ? Asm.Yellow : Asm.Bg;
+            BackColor = Color.Black;   // tanpa bingkai kuning pada area terpilih
         }
 
         // ---------- isi ----------
