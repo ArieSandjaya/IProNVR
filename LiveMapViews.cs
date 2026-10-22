@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace IproNvrTool
@@ -50,7 +51,7 @@ namespace IproNvrTool
         }
     }
 
-    /// <summary>Live window: hanya menampilkan gambar live (tanpa playback/kontrol), dengan Group dan Sequence di panel kiri.</summary>
+    /// <summary>Live window: gambar live; Playback dan Quick download tetap ada (toolbar / klik kanan), dengan Group dan Sequence di panel kiri.</summary>
     public class LiveView : UserControl
     {
         public readonly int Number;
@@ -76,6 +77,16 @@ namespace IproNvrTool
             grid.Dock = DockStyle.Fill;
             grid.ReadOnlyMode = true;
             grid.AllowRegisterLayout = false;
+            // saat satu area dipilih / diperbesar, playback dan download tetap bisa dipakai dari klik kanan
+            grid.PlaybackRequested += delegate(CamRef r)
+            {
+                NvrRecord pn = Dir.Nvr(r.NvrId);
+                CameraRecord pc = Dir.Cam(r.NvrId, r.Channel);
+                if (pn == null) return;
+                if (pc == null) { pc = new CameraRecord(); pc.NvrId = pn.Id; pc.Channel = r.Channel; }
+                if (AsmApp.PlayCameraAt != null) AsmApp.PlayCameraAt(pn, pc, DateTime.UtcNow.AddMinutes(-5));
+            };
+            grid.QuickDownloadRequested += delegate(CamRef r) { QuickDownload(r); };
 
             toolbar.Dock = DockStyle.Top;
             toolbar.Height = Asm.S(38);
@@ -93,6 +104,16 @@ namespace IproNvrTool
             {
                 ViewCell c = grid.Selected;
                 if (c != null && c.CurrentImage != null && AsmApp.Can(Perm.StillPrint)) lblInfo.Text = "Tersimpan: " + Stills.Save(c.CurrentImage, Dir.Title(c.NvrId, c.Channel));
+            }));
+            flow.Controls.Add(new AsmButton(AsmIcon.Play, "Playback area terpilih (5 menit lalu)", delegate
+            {
+                ViewCell c = grid.Selected;
+                if (c != null && c.HasCamera && AsmApp.Can(Perm.Playback)) grid.RaisePlayback(c.Ref);
+            }));
+            flow.Controls.Add(new AsmButton(AsmIcon.Download, "Quick download area terpilih", delegate
+            {
+                ViewCell c = grid.Selected;
+                if (c != null && c.HasCamera) QuickDownload(c.Ref);
             }));
             flow.Controls.Add(new AsmButton(AsmIcon.Close, "Kosongkan semua area", delegate { StopSeq(); grid.ClearAll(); }));
             lblInfo.AutoSize = false;
@@ -155,6 +176,34 @@ namespace IproNvrTool
             grid.SetLayout(ScreenLayout.ById(AppSettings.Current.LiveLayout));
             grid.StateName = "live" + Number;
         }
+
+        DownloadJob dlJob;
+
+        /// <summary>Quick download dari live: rekaman beberapa menit terakhir (QdMinutes) kamera terpilih.</summary>
+        void QuickDownload(CamRef r)
+        {
+            if (r == null || !AsmApp.Can(Perm.Download)) return;
+            if (dlJob != null && dlJob.Result.Length == 0 && !dlJob.Cancel && dlBusy) { lblInfo.Text = "Download sebelumnya masih berjalan."; return; }
+            NvrRecord nvr = Dir.Nvr(r.NvrId);
+            if (nvr == null) return;
+            AppSettings s = AppSettings.Current;
+            string folder = string.IsNullOrWhiteSpace(s.QdFolder) ? s.ResolveDownloadFolder() : s.QdFolder;
+            DateTime b = DateTime.Now.AddSeconds(-5);
+            DateTime a = b.AddMinutes(-Math.Max(1, s.QdMinutes));
+            string kind = s.QdMp4 ? "MP4" : "N3";
+            int ch = r.Channel;
+            var j = new DownloadJob();
+            dlJob = j;
+            dlBusy = true;
+            lblInfo.Text = "Download " + Dir.Title(r.NvrId, ch) + "...";
+            Task.Run(delegate
+            {
+                try { NvrDownloader.Run(nvr, ch, a, b, kind, folder, j, delegate(string t) { Ui.Post(this, delegate { lblInfo.Text = "Download: " + t; }); }); }
+                catch (Exception ex) { Ui.Post(this, delegate { lblInfo.Text = "Download error: " + ex.Message; }); }
+                finally { dlBusy = false; }
+            });
+        }
+        volatile bool dlBusy;
 
         void ApplyGroup(GroupRec g)
         {

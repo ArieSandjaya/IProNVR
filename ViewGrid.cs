@@ -676,6 +676,9 @@ namespace IproNvrTool
         }
         public event Action CamerasChanged;
         public event Action<CamRef> QuickDownloadRequested;
+        /// <summary>Menu "Playback" pada klik kanan (hanya tampil bila ada yang berlangganan, mis. Live window).</summary>
+        public event Action<CamRef> PlaybackRequested;
+        public void RaisePlayback(CamRef r) { if (PlaybackRequested != null && r != null) PlaybackRequested(r); }
         public event Action<ViewCell, PointF> CellImageClicked;
         public event Action RegisterLayoutRequested;
         public bool AllowRegisterLayout = true;
@@ -969,9 +972,14 @@ namespace IproNvrTool
             it.Enabled = has && cell.CurrentImage != null && AsmApp.Can(Perm.StillPrint);
             it = Asm.Item(menu, "Print", delegate { Stills.Print(cell.CurrentImage, Dir.Title(cell.NvrId, cell.Channel)); });
             it.Enabled = has && cell.CurrentImage != null && AsmApp.Can(Perm.StillPrint);
-            if (!ReadOnlyMode)
+            if (PlaybackRequested != null && !playbackMode)
             {
-                it = Asm.Item(menu, "Quick download", delegate { if (QuickDownloadRequested != null) QuickDownloadRequested(cell.Ref); });
+                it = Asm.Item(menu, "Playback (5 menit lalu)", delegate { if (PlaybackRequested != null) PlaybackRequested(cell.Ref); });
+                it.Enabled = has && AsmApp.Can(Perm.Playback);
+            }
+            if (QuickDownloadRequested != null)
+            {
+                it = Asm.Item(menu, "Quick download", delegate { QuickDownloadRequested(cell.Ref); });
                 it.Enabled = has && AsmApp.Can(Perm.Download);
             }
             menu.Items.Add(new ToolStripSeparator());
