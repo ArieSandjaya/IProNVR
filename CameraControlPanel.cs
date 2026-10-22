@@ -24,7 +24,6 @@ namespace IproNvrTool
         int holdPan, holdTilt, holdZoom;
         NvrRecord holdNvr; int holdCh;
 
-        public event Action<CamRef, DateTime> PlayRequested;     // waktu lokal
         public event Action<CamRef> QuickDownloadRequested;
 
         public bool CenterMode { get { return btnCenter != null && btnCenter.Checked; } }
@@ -168,6 +167,10 @@ namespace IproNvrTool
             tCam.Controls.Add(pad);
         }
 
+        /// <summary>Diisi Live window: playback berjalan di tampilan yang sama.</summary>
+        public PlaybackController Pb;
+        ComboBox cmbSkip;
+
         void BuildPlayback()
         {
             var h = new FlowLayoutPanel();
@@ -183,17 +186,56 @@ namespace IproNvrTool
             dtpGo.Margin = new Padding(2, 6, 2, 0);
             dtpGo.Value = DateTime.Now.AddMinutes(-10);
             h.Controls.Add(dtpGo);
-            h.Controls.Add(OpBtn(AsmIcon.Play, "Playback", "Buka playback kamera terpilih dari waktu ini (di Operation window)", delegate
+            h.Controls.Add(OpBtn(AsmIcon.Play, "Go", "Putar dari waktu ini (di tampilan ini)", delegate
             {
-                CamRef r = SelRef();
-                if (r != null && PlayRequested != null) PlayRequested(r, dtpGo.Value);
-            }, 100));
-            h.Controls.Add(OpBtn(AsmIcon.Download, "Quick DL", "Quick download kamera terpilih (beberapa menit terakhir)", delegate
+                if (Pb != null && SelRef() != null) Pb.PlayAtUtc(dtpGo.Value.ToUniversalTime());
+            }, 64));
+            var live = OpBtn(AsmIcon.Live, "Live", "Kembali ke live", delegate { if (Pb != null) Pb.Exit(); }, 70);
+            h.Controls.Add(live);
+            h.SetFlowBreak(live, true);
+
+            h.Controls.Add(OpBtn(AsmIcon.FastRew, "", "Fast reverse", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.FastReverse(); }); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.PrevFrame, "", "Frame sebelumnya", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Step(false); }); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.Reverse, "", "Putar mundur", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Reverse(); }); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.Pause, "", "Pause", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Pause(); }); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.Play, "", "Putar maju", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Play(); }); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.NextFrame, "", "Frame berikutnya", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Step(true); }); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.Minus, "Lambat", "Perlambat putaran (0.25x - 8x)", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.SpeedDown(); }); }, 74));
+            h.Controls.Add(OpBtn(AsmIcon.Plus, "Cepat", "Percepat putaran (0.25x - 8x)", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.SpeedUp(); }); }, 70));
+            h.Controls.Add(OpBtn(AsmIcon.FastFwd, "", "Fast forward", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.FastForward(); }); }, 40));
+            var stp = OpBtn(AsmIcon.Stop, "", "Stop", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Stop(); }); }, 40);
+            h.Controls.Add(stp);
+            h.SetFlowBreak(stp, true);
+
+            h.Controls.Add(OpLab("Skip"));
+            cmbSkip = new ComboBox();
+            cmbSkip.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbSkip.Items.AddRange(new object[] { "10 detik", "30 detik", "1 menit", "5 menit", "10 menit", "30 menit", "1 jam" });
+            cmbSkip.SelectedIndex = 2;
+            cmbSkip.Width = Asm.S(90);
+            cmbSkip.Margin = new Padding(2, 6, 2, 0);
+            h.Controls.Add(cmbSkip);
+            h.Controls.Add(OpBtn(AsmIcon.SkipBack, "", "Mundur sebesar nilai skip", delegate { SkipBy(-1); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.SkipFwd, "", "Maju sebesar nilai skip", delegate { SkipBy(1); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.Download, "Quick DL", "Quick download kamera terpilih (dari posisi ini bila sedang playback)", delegate
             {
                 CamRef r = SelRef();
                 if (r != null && QuickDownloadRequested != null) QuickDownloadRequested(r);
             }, 90));
             tPb.Controls.Add(h);
+        }
+
+        void SkipBy(int dir)
+        {
+            int[] sec = { 10, 30, 60, 300, 600, 1800, 3600 };
+            int sk = sec[Math.Max(0, cmbSkip.SelectedIndex)] * dir;
+            if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Skip(sk); });
+        }
+
+        /// <summary>Pindah ke tab Playback (saat playback mulai) atau Camera (kembali ke live).</summary>
+        public void ShowTab(bool playback)
+        {
+            tabs.SelectedIndex = playback ? 1 : 0;
         }
 
         CamRef SelRef()
@@ -208,7 +250,7 @@ namespace IproNvrTool
             ViewCell c = selected();
             bool cam = c != null && c.HasCamera && !c.Playback && AsmApp.Can(Perm.Camera);
             foreach (Control k in tCam.Controls) k.Enabled = cam;
-            foreach (Control k in tPb.Controls) k.Enabled = c != null && c.HasCamera && AsmApp.Can(Perm.Playback);
+            foreach (Control k in tPb.Controls) k.Enabled = AsmApp.Can(Perm.Playback) && ((Pb != null && Pb.Active) || (c != null && c.HasCamera));
         }
 
         // ---- PTZ ----

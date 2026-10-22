@@ -69,6 +69,9 @@ namespace IproNvrTool
         QuickPlaybackPanel qpp;
         DownloadPanel dlp;
         CameraControlPanel ctl;
+        PlaybackController pbc;
+        readonly Scrubber scrub = new Scrubber();
+        readonly System.Windows.Forms.Timer pbTimer = new System.Windows.Forms.Timer();
         readonly CollapseHandle hBottom = new CollapseHandle(true);
 
         public LiveView(int number)
@@ -112,7 +115,7 @@ namespace IproNvrTool
                 ViewCell c = grid.Selected;
                 if (c != null && c.HasCamera) QuickDownload(c.Ref);
             }));
-            flow.Controls.Add(new AsmButton(AsmIcon.Close, "Kosongkan semua area", delegate { StopSeq(); grid.ClearAll(); }));
+            flow.Controls.Add(new AsmButton(AsmIcon.Close, "Kosongkan semua area", delegate { StopSeq(); if (pbc != null) pbc.Exit(); grid.ClearAll(); }));
             lblInfo.AutoSize = false;
             lblInfo.Width = Asm.S(500);
             lblInfo.Height = Asm.S(30);
@@ -137,6 +140,7 @@ namespace IproNvrTool
             dev.CameraActivated += delegate(CamRef r)
             {
                 StopSeq();
+                if (pbc.Active) pbc.Exit();
                 int i = grid.SelectedIndex < 0 ? 0 : grid.SelectedIndex;
                 grid.Assign(i, r.NvrId, r.Channel, true);
                 int n = grid.FirstEmpty();
@@ -171,7 +175,16 @@ namespace IproNvrTool
 
             ctl = new CameraControlPanel(delegate { return grid.Selected; });
             ctl.Dock = DockStyle.Bottom;
-            ctl.PlayRequested += delegate(CamRef r, DateTime local) { PlayCamera(r, local.ToUniversalTime()); };
+            pbc = new PlaybackController(grid, this);
+            pbc.Info += delegate(string t) { lblInfo.Text = t; };
+            pbc.ModeChanged += OnPlaybackModeChanged;
+            ctl.Pb = pbc;
+            scrub.Dock = DockStyle.Bottom;
+            scrub.Visible = false;
+            scrub.Seek += delegate(DateTime local) { if (pbc.Active) pbc.PlayAtUtc(local.ToUniversalTime()); };
+            pbTimer.Interval = 500;
+            pbTimer.Tick += delegate { PlaybackTick(); };
+            pbTimer.Start();
             ctl.QuickDownloadRequested += delegate(CamRef r) { QuickDownload(r); };
             hBottom.Dock = DockStyle.Bottom;
             hBottom.Click += delegate { ctl.Visible = !ctl.Visible; hBottom.Collapsed = !ctl.Visible; hBottom.Invalidate(); };
@@ -182,6 +195,7 @@ namespace IproNvrTool
             var center = new Panel();
             center.Dock = DockStyle.Fill;
             center.Controls.Add(grid);
+            center.Controls.Add(scrub);
             center.Controls.Add(hBottom);
             center.Controls.Add(ctl);
             center.Controls.Add(toolbar);
@@ -193,46 +207,53 @@ namespace IproNvrTool
             grid.StateName = "live" + Number;
         }
 
+        /// <summary>Playback di tampilan ini juga (kamera tidak pindah ke Operation window).</summary>
         void PlayCamera(CamRef r, DateTime utc)
         {
-            if (!AsmApp.Can(Perm.Playback)) { MessageBox.Show("Tidak ada hak playback."); return; }
-            NvrRecord pn = Dir.Nvr(r.NvrId);
-            CameraRecord pc = Dir.Cam(r.NvrId, r.Channel);
-            if (pn == null) return;
-            if (pc == null) { pc = new CameraRecord(); pc.NvrId = pn.Id; pc.Channel = r.Channel; }
-            if (AsmApp.PlayCameraAt != null) AsmApp.PlayCameraAt(pn, pc, utc);
+            StopSeq();
+            if (pbc.PlayAtUtc(utc))
+            {
+                scrub.Visible = true;
+                scrub.SetPosition(utc.ToLocalTime(), true);
+                ctl.ShowTab(true);
+                ctl.RefreshState();
+            }
         }
 
-        DownloadJob dlJob;
+        void OnPlaybackModeChanged()
+        {
+            bool pb = pbc.Active;
+            scrub.Visible = pb;
+            ctl.ShowTab(pb);
+            ctl.RefreshState();
+            if (!pb) lblInfo.Text = "Live";
+        }
 
-        /// <summary>Quick download dari live: rekaman beberapa menit terakhir (QdMinutes) kamera terpilih.</summary>
+        void PlaybackTick()
+        {
+            if (!pbc.Active) return;
+            DateTime? t = pbc.ShownLocal();
+            if (t.HasValue)
+            {
+                scrub.SetPosition(t.Value, false);
+                lblInfo.Text = pbc.ModeText() + "   " + Asm.FormatTime(t.Value);
+            }
+        }
+
+        /// <summary>Quick download kamera terpilih: dari posisi playback bila sedang playback, bila live = beberapa menit terakhir.</summary>
         void QuickDownload(CamRef r)
         {
-            if (r == null || !AsmApp.Can(Perm.Download)) return;
-            if (dlJob != null && dlJob.Result.Length == 0 && !dlJob.Cancel && dlBusy) { lblInfo.Text = "Download sebelumnya masih berjalan."; return; }
-            NvrRecord nvr = Dir.Nvr(r.NvrId);
-            if (nvr == null) return;
-            AppSettings s = AppSettings.Current;
-            string folder = string.IsNullOrWhiteSpace(s.QdFolder) ? s.ResolveDownloadFolder() : s.QdFolder;
-            DateTime b = DateTime.Now.AddSeconds(-5);
-            DateTime a = b.AddMinutes(-Math.Max(1, s.QdMinutes));
-            string kind = s.QdMp4 ? "MP4" : "N3";
-            int ch = r.Channel;
-            var j = new DownloadJob();
-            dlJob = j;
-            dlBusy = true;
-            lblInfo.Text = "Download " + Dir.Title(r.NvrId, ch) + "...";
-            Task.Run(delegate
-            {
-                try { NvrDownloader.Run(nvr, ch, a, b, kind, folder, j, delegate(string t) { Ui.Post(this, delegate { lblInfo.Text = "Download: " + t; }); }); }
-                catch (Exception ex) { Ui.Post(this, delegate { lblInfo.Text = "Download error: " + ex.Message; }); }
-                finally { dlBusy = false; }
-            });
+            if (r == null) return;
+            DateTime at = DateTime.Now;
+            if (pbc.Active) { DateTime? t = pbc.ShownLocal(); if (t.HasValue) at = t.Value; }
+            if (!fp.Visible) { fp.Visible = true; handle.Collapsed = false; handle.Invalidate(); }
+            fp.Open("dl");
+            dlp.Quick(r, at, !pbc.Active);
         }
-        volatile bool dlBusy;
 
         void ApplyGroup(GroupRec g)
         {
+            if (pbc != null && pbc.Active) pbc.Exit();
             grid.SetLayout(ScreenLayout.ById(g.Layout));
             grid.LoadSlots(g.Slots);
         }
@@ -312,6 +333,8 @@ namespace IproNvrTool
         public void Shutdown()
         {
             runner.Stop();
+            pbTimer.Stop();
+            if (pbc != null) pbc.Dispose();
             grid.StopAll();
         }
 
