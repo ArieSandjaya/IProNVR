@@ -107,9 +107,10 @@ namespace IproNvrTool
             if (hw) sb.Append(HwAccels.Args(AppSettings.Current.HwAccel, h265 ? "hevc" : "h264"));
             sb.Append(h265 ? "-f hevc " : "-f h264 ");
             sb.Append("-i pipe:0 -an ");
-            if (width > 0) sb.Append("-vf scale=" + width + ":-2:flags=fast_bilinear ");
+            // playback: perkecil hanya bila sumber lebih besar dari lebar tampil (tidak pernah diperbesar), skala bicubic, JPEG kualitas tinggi
+            if (width > 0) sb.Append("-vf scale=w=min(" + width + "\\,iw):h=-2:flags=bicubic ");
             sb.Append(VsyncArg());
-            sb.Append("-pix_fmt yuvj420p -q:v 4 -f image2pipe -vcodec mjpeg pipe:1");
+            sb.Append("-pix_fmt yuvj420p -q:v 2 -f image2pipe -vcodec mjpeg pipe:1");
             var psi = new ProcessStartInfo(exe, sb.ToString());
             psi.UseShellExecute = false;
             psi.CreateNoWindow = true;

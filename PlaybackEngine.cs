@@ -62,6 +62,8 @@ namespace IproNvrTool
             return sb.ToString().Trim();
         }
         public int DecodeWidth = 0;
+        /// <summary>Lebar decode saat itu (0 = asli). Dihitung tiap decode agar mengikuti ukuran area / maximize.</summary>
+        public Func<int> DecodeWidthProvider;
         public int IntervalMs = 3000;
 
         public PlaybackEngine(NvrRecord nvr)
@@ -435,7 +437,9 @@ namespace IproNvrTool
                 foreach (byte[] v in f.Video) ms.Write(v, 0, v.Length);
                 data = ms.ToArray();
             }
+            Func<int> wp = DecodeWidthProvider;
             int width = DecodeWidth;
+            if (wp != null) { try { width = wp(); } catch { } }
             bool still = Mode == "PAUSE";
             ThreadPool.QueueUserWorkItem(delegate
             {

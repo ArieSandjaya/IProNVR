@@ -25,6 +25,21 @@ namespace IproNvrTool
 
         public bool Active { get { return grid.PlaybackMode; } }
 
+        /// <summary>Lebar decode playback: mengikuti lebar area di layar (maks. 2560), satu kamera diperbesar = hampir lebar area penuh. Tidak pernah diperbesar melebihi resolusi rekaman.</summary>
+        static int PbWidth(ViewGrid g)
+        {
+            int w = 0;
+            int mx = g.MaximizedIndex;
+            foreach (ViewCell c in g.Cells)
+            {
+                if (mx >= 0 && c.Index != mx) continue;
+                w = Math.Max(w, c.Width);
+            }
+            if (w <= 0) w = 640;
+            return Math.Max(320, Math.Min(2560, w));
+        }
+
+
         void Say(string t) { Action<string> h = Info; if (h != null) h(t); }
 
         public void Each(Action<PlaybackEngine> a)
@@ -102,7 +117,7 @@ namespace IproNvrTool
                     {
                         try { if (host.IsHandleCreated && !host.IsDisposed) host.BeginInvoke((Action)delegate { Say("Playback: " + st); }); } catch { }
                     };
-                    e.DecodeWidth = grid.Layout.Count <= 4 ? 960 : (grid.Layout.Count <= 16 ? 480 : 320);
+                    e.DecodeWidthProvider = delegate { return PbWidth(grid); };
                     engines[kv.Key] = e;
                     isNew = true;
                 }

@@ -891,7 +891,13 @@ namespace IproNvrTool
                     {
                         try { if (IsHandleCreated && !IsDisposed) BeginInvoke((Action)delegate { lblInfo.Text = "Playback: " + st; }); } catch { }
                     };
-                    e.DecodeWidth = Grid.Layout.Count <= 4 ? 960 : (Grid.Layout.Count <= 16 ? 480 : 320);
+                    e.DecodeWidthProvider = delegate
+                    {
+                        int w = 0, mxi = Grid.MaximizedIndex;
+                        foreach (ViewCell c in Grid.Cells) { if (mxi >= 0 && c.Index != mxi) continue; w = Math.Max(w, c.Width); }
+                        if (w <= 0) w = 640;
+                        return Math.Max(320, Math.Min(2560, w));
+                    };
                     engines[kv.Key] = e;
                     isNew = true;
                 }
