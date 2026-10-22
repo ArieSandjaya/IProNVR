@@ -30,6 +30,17 @@ namespace IproNvrTool
         }
         bool disposed;
         int ffStep = 1;
+        static readonly double[] Speeds = { 0.25, 0.5, 1, 2, 4, 8 };
+        volatile int speedIdx = 2;
+        /// <summary>Kecepatan putar (0.25x - 8x) pada mode PLAY / putar mundur. Diatur di sisi aplikasi: gambar tiap GOP ditebar menurut durasi rekamannya / kecepatan.</summary>
+        public double Speed { get { return Speeds[speedIdx]; } }
+        public void SpeedUp() { if (speedIdx < Speeds.Length - 1) speedIdx++; }
+        public void SpeedDown() { if (speedIdx > 0) speedIdx--; }
+        public void SpeedReset() { speedIdx = 2; }
+        DateTime? _shownUtc;
+        /// <summary>Waktu rekaman pada gambar yang sedang tampil (CurUtc = posisi data yang sudah diambil dari NVR, bisa mendahului beberapa detik).</summary>
+        public DateTime? ShownUtc { get { lock (curLock) return _shownUtc ?? _curUtc; } }
+        void SetShown(DateTime? t) { lock (curLock) _shownUtc = t; }
         DateTime? reqUtc;
 
         /// <summary>kanal, JPEG (dari thread latar).</summary>
@@ -110,10 +121,34 @@ namespace IproNvrTool
             return Timef.Format(c0.HasValue ? c0.Value : fallbackUtc);
         }
 
+        const int TickMs = 200;
+
         void StartTimer()
         {
             if (timer != null) timer.Dispose();
-            timer = new System.Threading.Timer(delegate { Tick(); }, null, IntervalMs, IntervalMs);
+            lastFetchStart = 0;
+            timer = new System.Threading.Timer(delegate { Tick(); }, null, TickMs, TickMs);
+        }
+
+        int lastFetchStart;
+        volatile bool gopMode;   // data terakhir berupa H.264/H.265 (GOP) -> pacing berdasarkan isi buffer; JPEG: berdasarkan interval
+
+        /// <summary>Detik (waktu putar nyata) yang masih tersimpan di antrian kamera paling kosong.</summary>
+        double BufferedWallSec()
+        {
+            double min = double.MaxValue;
+            lock (channels)
+            {
+                foreach (int c in channels)
+                {
+                    ChanOut co;
+                    lock (outs) { if (!outs.TryGetValue(c, out co)) co = null; }
+                    double v = 0;
+                    if (co != null) lock (co.Q) { foreach (Gop g in co.Q) v += g.Dur; v += co.Playing; }
+                    min = Math.Min(min, v);
+                }
+            }
+            return min == double.MaxValue ? 0 : min / Speed;
         }
 
         void Tick()
@@ -121,9 +156,26 @@ namespace IproNvrTool
             string m = mode;
             if (disposed) return;
             lock (channels) { if (channels.Count == 0) return; }   // semua kamera di-pause
-            if (m == "PLAY" || m == "BPLAY" || m == "FF" || m == "REW")
+            if (m == "PLAY" || m == "BPLAY")
             {
                 if (worker.Pending > 1) return;
+                int now = Environment.TickCount;
+                int since = unchecked(now - lastFetchStart);
+                if (gopMode)
+                {
+                    // jaga buffer sekitar 2,5 dtk waktu putar: kecepatan tidak lagi tergantung lama unduh / interval tetap
+                    if (since < 300 || BufferedWallSec() > 2.5) return;
+                }
+                else if (since < IntervalMs / Speed) return;
+                lastFetchStart = now;
+                worker.Post(delegate { Fetch(); });
+            }
+            else if (m == "FF" || m == "REW")
+            {
+                if (worker.Pending > 1) return;
+                int now = Environment.TickCount;
+                if (unchecked(now - lastFetchStart) < IntervalMs) return;
+                lastFetchStart = now;
                 worker.Post(delegate { Fetch(); });
             }
         }
@@ -147,6 +199,8 @@ namespace IproNvrTool
                     return;
                 }
                 curUtc = null;
+                SetShown(null);
+                lock (outs) foreach (ChanOut o in outs.Values) lock (o.Q) o.Q.Clear();   // sisa buffer posisi lama dibuang
                 Status("PLAY " + Asm.FormatTime(t.ToLocalTime()));
                 Fetch();
             });
@@ -281,6 +335,7 @@ namespace IproNvrTool
                 ParsedFrame f;
                 try { f = FrameParser.Parse(data); }
                 catch (Exception ex) { Log.Write("Playback CAM " + ch + " parse: " + ex.Message); ChStatus(ch, "Data playback tidak bisa dibaca: " + ex.Message); return; }
+                gopMode = f.Codec != "JPEG";
                 if (f.UtcTime.HasValue) curUtc = f.UtcTime;
                 else if (f.GopStartUtc.HasValue) curUtc = f.GopStartUtc;
                 else
@@ -344,16 +399,28 @@ namespace IproNvrTool
             catch { return ""; }
         }
 
+        class Gop
+        {
+            public List<byte[]> Jpgs;
+            public DateTime? Start;
+            public double Dur;       // detik waktu rekaman
+        }
+
         class ChanOut
         {
-            public readonly Queue<List<byte[]>> Q = new Queue<List<byte[]>>();
+            public readonly Queue<Gop> Q = new Queue<Gop>();
             public bool Running;
+            public double Playing;   // sisa detik rekaman pada GOP yang sedang diputar (perkiraan)
+            public double LastDur = 1.0;
         }
         readonly Dictionary<int, ChanOut> outs = new Dictionary<int, ChanOut>();
         static readonly SemaphoreSlim decodeSlots = new SemaphoreSlim(Math.Max(2, Environment.ProcessorCount / 2));
 
         void Decode(int ch, ParsedFrame f)
         {
+            DateTime? gStart = f.GopStartUtc ?? f.UtcTime;
+            double gDur = 0;
+            if (f.GopStartUtc.HasValue && f.GopEndUtc.HasValue) gDur = (f.GopEndUtc.Value - f.GopStartUtc.Value).TotalSeconds;
             string exe = FfmpegPipe.FindExe();
             if (exe == null)
             {
@@ -390,7 +457,7 @@ namespace IproNvrTool
                     Action<int, byte[]> h = Frame;
                     if (h == null) return;
                     if (still) { h(ch, jpgs[jpgs.Count - 1]); return; }
-                    Enqueue(ch, jpgs);
+                    Enqueue(ch, jpgs, gStart, gDur);
                 }
                 catch (Exception ex) { Log.Write("Decode playback CAM " + ch + ": " + ex.Message); }
                 finally { if (got) decodeSlots.Release(); }
@@ -398,21 +465,24 @@ namespace IproNvrTool
         }
 
         /// <summary>Antrian putar per kamera: GOP berikutnya tidak dibuang saat GOP sebelumnya masih diputar (penyebab loncat/patah-patah).</summary>
-        void Enqueue(int ch, List<byte[]> jpgs)
+        void Enqueue(int ch, List<byte[]> jpgs, DateTime? start, double dur)
         {
             ChanOut co;
-            bool start = false;
+            bool startThread = false;
             lock (outs)
             {
                 if (!outs.TryGetValue(ch, out co)) { co = new ChanOut(); outs[ch] = co; }
             }
             lock (co.Q)
             {
-                co.Q.Enqueue(jpgs);
-                while (co.Q.Count > 3) co.Q.Dequeue(); // tertinggal jauh: lompat ke yang terbaru
-                if (!co.Running) { co.Running = true; start = true; }
+                // durasi GOP: dari waktu rekaman; bila NVR tidak menyertakannya pakai durasi GOP sebelumnya
+                if (dur < 0.05 || dur > 30) dur = co.LastDur; else co.LastDur = dur;
+                var g = new Gop(); g.Jpgs = jpgs; g.Start = start; g.Dur = dur;
+                co.Q.Enqueue(g);
+                while (co.Q.Count > 4) co.Q.Dequeue(); // tertinggal jauh: lompat ke yang terbaru
+                if (!co.Running) { co.Running = true; startThread = true; }
             }
-            if (start) ThreadPool.QueueUserWorkItem(delegate { PlayOut(ch, co); });
+            if (startThread) ThreadPool.QueueUserWorkItem(delegate { PlayOut(ch, co); });
         }
 
         void PlayOut(int ch, ChanOut co)
@@ -421,26 +491,40 @@ namespace IproNvrTool
             {
                 while (!disposed && mode != "STOP")
                 {
-                    List<byte[]> g; int pending;
+                    Gop gp; int pending;
                     lock (co.Q)
                     {
-                        if (co.Q.Count == 0) { co.Running = false; return; }
-                        g = co.Q.Dequeue();
+                        if (co.Q.Count == 0) { co.Running = false; co.Playing = 0; return; }
+                        gp = co.Q.Dequeue();
                         pending = co.Q.Count;
+                        co.Playing = gp.Dur;
                     }
+                    List<byte[]> g = gp.Jpgs;
                     Action<int, byte[]> h = Frame;
-                    if (h == null) continue;
-                    // gambar satu GOP ditebar merata selama satu putaran ambil data; bila antrian menumpuk, diputar lebih cepat
-                    double span = Math.Max(400, periodMs * 0.95) / (1 + pending);
+                    if (h == null || g.Count == 0) continue;
+                    string m = mode;
+                    double span;   // milidetik waktu putar nyata untuk GOP ini
+                    if (m == "FF" || m == "REW") span = Math.Max(400, periodMs * 0.95) / (1 + pending);
+                    else
+                    {
+                        span = gp.Dur * 1000.0 / Speed;
+                        if (pending > 2) span /= 1 + 0.25 * (pending - 2);   // buffer menumpuk: kejar pelan-pelan, bukan loncat
+                    }
                     double gap = span / g.Count;
                     int step = 1;
-                    if (gap < 40) { step = (int)Math.Ceiling(40.0 / gap); gap = span / Math.Ceiling((double)g.Count / step); }
+                    if (gap < 30) { step = (int)Math.Ceiling(30.0 / gap); gap = span / Math.Ceiling((double)g.Count / step); }
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     int shown = 0;
                     for (int i = 0; i < g.Count && !disposed && mode != "STOP"; i += step)
                     {
                         h(ch, g[i]);
+                        if (gp.Start.HasValue)
+                        {
+                            DateTime t = gp.Start.Value.AddSeconds(gp.Dur * i / g.Count);
+                            SetShown(t);
+                        }
                         shown++;
+                        lock (co.Q) { co.Playing = gp.Dur * Math.Max(0, g.Count - i) / g.Count; }
                         double due = shown * gap;
                         double wait = due - sw.Elapsed.TotalMilliseconds;
                         if (wait > 1) Thread.Sleep((int)wait);
@@ -448,7 +532,7 @@ namespace IproNvrTool
                 }
             }
             catch (Exception ex) { Log.Write("Playback putar CAM " + ch + ": " + ex.Message); }
-            finally { lock (co.Q) { co.Running = false; } }
+            finally { lock (co.Q) { co.Running = false; co.Playing = 0; } }
         }
 
         public void Dispose()

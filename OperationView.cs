@@ -402,13 +402,16 @@ namespace IproNvrTool
                     else if (e.Mode == "FF") mode = "FF";
                     else if (e.Mode == "REW") mode = "REW";
                     else if (e.Mode == "BPLAY") mode = "REV";
-                    if (e.CurUtc.HasValue && !t.HasValue) t = e.CurUtc.Value.ToLocalTime();
+                    DateTime? shown = e.ShownUtc;
+                    if (shown.HasValue && !t.HasValue) t = shown.Value.ToLocalTime();
                     step = Math.Max(step, e.FfStep);
                 }
             }
             lblMode.Text = mode;
             lblMode.BackColor = pb ? Asm.BarOpen : Asm.Panel;
-            lblStep.Text = pb && step > 1 ? "x" + step : "";
+            double spd = 1;
+            foreach (PlaybackEngine e2 in engines.Values) { spd = e2.Speed; break; }
+            lblStep.Text = pb && step > 1 ? "x" + step : (pb && spd != 1 && (mode == "PLAY" || mode == "REV") ? "x" + spd.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : "");
             lblSeq.Text = seq != null ? "SEQ" : "";
             lblSeq.BackColor = seq != null ? Asm.Ok : Asm.Panel;
             lblSeq.ForeColor = seq != null ? Color.Black : Asm.Text;
@@ -572,6 +575,8 @@ namespace IproNvrTool
             h.Controls.Add(OpBtn(AsmIcon.Pause, "", "Pause", delegate { Each(delegate(PlaybackEngine e) { e.Pause(); }); }, 40));
             h.Controls.Add(OpBtn(AsmIcon.Play, "", "Putar maju", delegate { Each(delegate(PlaybackEngine e) { e.Play(); }); }, 40));
             h.Controls.Add(OpBtn(AsmIcon.NextFrame, "", "Frame berikutnya", delegate { Each(delegate(PlaybackEngine e) { e.Step(true); }); }, 40));
+            h.Controls.Add(OpBtn(AsmIcon.Minus, "Lambat", "Perlambat putaran (0.25x - 8x)", delegate { Each(delegate(PlaybackEngine e) { e.SpeedDown(); }); }, 74));
+            h.Controls.Add(OpBtn(AsmIcon.Plus, "Cepat", "Percepat putaran (0.25x - 8x)", delegate { Each(delegate(PlaybackEngine e) { e.SpeedUp(); }); }, 70));
             h.Controls.Add(OpBtn(AsmIcon.FastFwd, "", "Fast forward", delegate { Each(delegate(PlaybackEngine e) { e.FastForward(); }); }, 40));
             var stp = OpBtn(AsmIcon.Stop, "", "Stop", delegate { Each(delegate(PlaybackEngine e) { e.Stop(); }); }, 40);
             h.Controls.Add(stp);
