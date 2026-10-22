@@ -51,7 +51,7 @@ namespace IproNvrTool
         }
     }
 
-    /// <summary>Live window: gambar live; Playback dan Quick download tetap ada (toolbar / klik kanan), dengan Group dan Sequence di panel kiri.</summary>
+    /// <summary>Live window: gambar live + sidebar Quick playback/Download + panel Camera/Playback di bawah gambar, dengan Group dan Sequence di panel kiri.</summary>
     public class LiveView : UserControl
     {
         public readonly int Number;
@@ -66,6 +66,10 @@ namespace IproNvrTool
         DeviceTreePanel dev;
         GroupPanel grp;
         SequencePanel seqp;
+        QuickPlaybackPanel qpp;
+        DownloadPanel dlp;
+        CameraControlPanel ctl;
+        readonly CollapseHandle hBottom = new CollapseHandle(true);
 
         public LiveView(int number)
         {
@@ -78,14 +82,7 @@ namespace IproNvrTool
             grid.ReadOnlyMode = true;
             grid.AllowRegisterLayout = false;
             // saat satu area dipilih / diperbesar, playback dan download tetap bisa dipakai dari klik kanan
-            grid.PlaybackRequested += delegate(CamRef r)
-            {
-                NvrRecord pn = Dir.Nvr(r.NvrId);
-                CameraRecord pc = Dir.Cam(r.NvrId, r.Channel);
-                if (pn == null) return;
-                if (pc == null) { pc = new CameraRecord(); pc.NvrId = pn.Id; pc.Channel = r.Channel; }
-                if (AsmApp.PlayCameraAt != null) AsmApp.PlayCameraAt(pn, pc, DateTime.UtcNow.AddMinutes(-5));
-            };
+            grid.PlaybackRequested += delegate(CamRef r) { PlayCamera(r, DateTime.UtcNow.AddMinutes(-5)); };
             grid.QuickDownloadRequested += delegate(CamRef r) { QuickDownload(r); };
 
             toolbar.Dock = DockStyle.Top;
@@ -151,8 +148,15 @@ namespace IproNvrTool
             seqp.StartRequested += delegate(SeqRec s) { runner.Start(s); UpdateSeq(); };
             seqp.StopRequested += delegate { StopSeq(); };
             fp.AddSection("grp", "Group", grp, true);
+            qpp = new QuickPlaybackPanel();
+            qpp.CameraSource = delegate { ViewCell sc = grid.Selected; return sc != null && sc.HasCamera ? sc.Ref : null; };
+            qpp.PlayRequested += delegate(CamRef r, DateTime t) { PlayCamera(r, t.ToUniversalTime()); };
+            dlp = new DownloadPanel();
+            dlp.CameraSource = qpp.CameraSource;
             fp.AddSection("seq", "Sequence", seqp, true);
             fp.AddSection("dev", "Device", dev, true);
+            fp.AddSection("qpb", "Quick playback", qpp, false);
+            fp.AddSection("dl", "Download", dlp, false);
             fp.Width = Asm.S(230);
             fp.Open("grp");
             fp.SearchTextChanged += delegate(string t)
@@ -165,9 +169,21 @@ namespace IproNvrTool
             handle.Dock = DockStyle.Left;
             handle.Click += delegate { fp.Visible = !fp.Visible; handle.Collapsed = !fp.Visible; handle.Invalidate(); };
 
+            ctl = new CameraControlPanel(delegate { return grid.Selected; });
+            ctl.Dock = DockStyle.Bottom;
+            ctl.PlayRequested += delegate(CamRef r, DateTime local) { PlayCamera(r, local.ToUniversalTime()); };
+            ctl.QuickDownloadRequested += delegate(CamRef r) { QuickDownload(r); };
+            hBottom.Dock = DockStyle.Bottom;
+            hBottom.Click += delegate { ctl.Visible = !ctl.Visible; hBottom.Collapsed = !ctl.Visible; hBottom.Invalidate(); };
+            grid.SelectionChanged += delegate { ctl.RefreshState(); qpp.RefreshCamera(); dlp.RefreshCamera(); };
+            grid.CamerasChanged += delegate { ctl.RefreshState(); qpp.RefreshCamera(); dlp.RefreshCamera(); };
+            grid.CellImageClicked += delegate(ViewCell vc, PointF p) { if (!vc.Playback) ctl.Center(p); };
+
             var center = new Panel();
             center.Dock = DockStyle.Fill;
             center.Controls.Add(grid);
+            center.Controls.Add(hBottom);
+            center.Controls.Add(ctl);
             center.Controls.Add(toolbar);
             Controls.Add(center);
             Controls.Add(handle);
@@ -175,6 +191,16 @@ namespace IproNvrTool
 
             grid.SetLayout(ScreenLayout.ById(AppSettings.Current.LiveLayout));
             grid.StateName = "live" + Number;
+        }
+
+        void PlayCamera(CamRef r, DateTime utc)
+        {
+            if (!AsmApp.Can(Perm.Playback)) { MessageBox.Show("Tidak ada hak playback."); return; }
+            NvrRecord pn = Dir.Nvr(r.NvrId);
+            CameraRecord pc = Dir.Cam(r.NvrId, r.Channel);
+            if (pn == null) return;
+            if (pc == null) { pc = new CameraRecord(); pc.NvrId = pn.Id; pc.Channel = r.Channel; }
+            if (AsmApp.PlayCameraAt != null) AsmApp.PlayCameraAt(pn, pc, utc);
         }
 
         DownloadJob dlJob;
