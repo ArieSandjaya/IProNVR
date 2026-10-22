@@ -42,12 +42,17 @@ namespace IproNvrServer
             if (nvr == null) { error = "NVR tidak ditemukan."; return null; }
             string host = Convert.ToString(nvr["host"]);
             int port = Convert.ToInt32(nvr["port"]);
+            bool https = Convert.ToInt32(nvr["use_https"]) != 0;
+            string nu = Convert.ToString(nvr["username"]), np = Convert.ToString(nvr["password"]);
             string text;
             try
             {
-                text = NvrList.Download(host, port, Convert.ToInt32(nvr["use_https"]) != 0, Convert.ToString(nvr["username"]), Convert.ToString(nvr["password"]), "/cgi-bin/as_getinfo.cgi?FILE=2", 20000);
+                // 1) tes login (UID), 2) daftar kamera yang terdaftar di NVR: sama dengan "Tes login" + "Ambil Daftar Kamera" di aplikasi client
+                string uid = NvrList.Login(host, port, https, nu, np);
+                NvrList.Logout(host, port, https, nu, np, uid);
+                text = NvrList.Download(host, port, https, nu, np, "/cgi-bin/as_getinfo.cgi?FILE=2", 20000);
             }
-            catch (Exception ex) { error = "Gagal menghubungi NVR " + host + ":" + port + " - " + ex.Message; return null; }
+            catch (Exception ex) { error = "Gagal menghubungi NVR " + host + ":" + port + " - " + NvrList.Explain(ex); return null; }
             SortedDictionary<int, int> cl = NvrList.Parse(text);
             if (cl.Count == 0)
             {
@@ -58,19 +63,26 @@ namespace IproNvrServer
             var have = new HashSet<long>();
             foreach (Row c in store.List(Schema.ByRoute("cameras")))
                 if (Convert.ToInt64(c["nvr_id"]) == nvrId) have.Add(Convert.ToInt64(c["channel"]));
-            int registered = 0, added = 0, bad = 0;
+            int registered = 0, added = 0, bad = 0, gone = 0;
+            int maxCh = 0;
             foreach (KeyValuePair<int, int> cs in cl)
             {
-                if (cs.Value == 0) continue;
+                maxCh = Math.Max(maxCh, cs.Key);
+                var cb = new Dictionary<string, object> { { "nvr_id", (double)nvrId }, { "channel", (double)cs.Key }, { "reg_status", (double)cs.Value } };
+                if (cs.Value == 0)
+                {
+                    if (have.Contains(cs.Key)) { store.Upsert(Schema.ByRoute("cameras"), cb); gone++; }   // sudah ada di server tetapi dihapus dari NVR: ditandai, tidak dihapus
+                    continue;
+                }
                 registered++;
                 if (cs.Value == 2) bad++;
-                if (have.Contains(cs.Key)) continue;
-                store.Upsert(Schema.ByRoute("cameras"), new Dictionary<string, object> {
-                    { "nvr_id", (double)nvrId }, { "channel", (double)cs.Key }, { "name", "CH" + cs.Key } });
-                added++;
+                if (!have.Contains(cs.Key)) { cb["name"] = "CH" + cs.Key; added++; }
+                store.Upsert(Schema.ByRoute("cameras"), cb);
             }
+            if (maxCh > 0 && maxCh != Convert.ToInt32(nvr["max_channels"]))
+                store.Upsert(Schema.ByRoute("nvrs"), new Dictionary<string, object> { { "id", (double)nvrId }, { "max_channels", (double)maxCh } });
             Log.Write("Ambil kamera dari NVR " + Convert.ToString(nvr["name"]) + " oleh " + by + ": terdaftar " + registered + ", baru " + added);
-            return new Dictionary<string, object> { { "registered", registered }, { "added", added }, { "error_conn", bad }, { "total_slots", cl.Count } };
+            return new Dictionary<string, object> { { "registered", registered }, { "added", added }, { "error_conn", bad }, { "unregistered", gone }, { "total_slots", cl.Count }, { "max_channels", maxCh } };
         }
 
         readonly DiscoveryManager disc;

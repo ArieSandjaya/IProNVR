@@ -19,6 +19,7 @@ Buka `Server/IproNvrServer/IproNvrServer.csproj` di Visual Studio (net48) lalu B
 - Service Windows (jalankan sebagai Administrator): `IproNvrServer.exe install` (juga membuka firewall dan urlacl), `uninstall` untuk menghapus
 - Pertama kali jalan dibuat user `admin` dengan password acak (tampil di konsol/log dan `data\admin-awal.txt`). Ganti: `IproNvrServer.exe setpass admin PASSWORDBARU`
 - Pengaturan: `server.json` di samping exe (`Port` 8470, `DataDir`, `TokenDays` 30)
+- Pendaftaran NVR: setelah NVR baru disimpan, server otomatis tes login dan membaca kamera yang terdaftar di NVR (kanal, status normal/error, jumlah kanal). Ulangi dengan tombol "Deteksi kamera".
 - Halaman admin web: `http://SERVER:8470/`
 
 ## Deteksi RTSP otomatis

@@ -88,7 +88,7 @@ var tok=sessionStorage.getItem('tok'),me=null,schema=[],data={},ver=0,page='home
 var META={
  nvrs:{t:'NVR',ic:'▣',lbl:{name:'Nama',host:'Host / IP',port:'Port',use_https:'HTTPS',username:'User NVR',password:'Password NVR',max_channels:'Jumlah kanal',model:'Model',location:'Lokasi',notes:'Catatan',cam_user:'User kamera (RTSP)',cam_pass:'Password kamera (RTSP)',rtsp_template:'Template RTSP substream',substream_param:'Parameter substream NVR'},
   full:['rtsp_template','substream_param','notes'],hint:{rtsp_template:'Contoh: rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1'}},
- cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',cam_user:'User kamera (khusus)',cam_pass:'Password kamera (khusus)',rtsp_url:'URL RTSP substream',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi'},full:['rtsp_url','scan_detail','note'],hint:{cam_user:'Kosongkan bila sama dengan login kamera di data NVR.',rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
+ cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',cam_user:'User kamera (khusus)',cam_pass:'Password kamera (khusus)',rtsp_url:'URL RTSP substream',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi',reg_status:'Status di NVR (0 tidak terdaftar, 1 normal, 2 error koneksi)'},full:['rtsp_url','scan_detail','note'],hint:{cam_user:'Kosongkan bila sama dengan login kamera di data NVR.',rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
  groups:{t:'Group',ic:'▦',lbl:{name:'Nama',layout:'Layout',slots:'Kamera per area',owner:'Pemilik',sort:'Urutan'},full:['slots'],hint:{slots:'Format: idNVR:kanal dipisah koma, area kosong dikosongkan. Contoh: 1:1,1:2,,1:5'}},
  sequences:{t:'Sequence',ic:'↻',lbl:{name:'Nama',steps:'Langkah',sort:'Urutan'},full:['steps'],hint:{steps:'Format: idGroup:detik dipisah koma. Contoh: 1:10,2:10,3:15'}},
  users:{t:'User',ic:'☺',lbl:{name:'Nama',level:'Level (0 = admin penuh, 1-5)',is_admin:'Admin',use_group:'Pakai group sendiri',password:'Password'},full:[]}
@@ -155,7 +155,7 @@ function home(){
 function cellFor(r,row){
   switch(r){
    case'nvrs':return[esc(row.name),esc(row.host)+':'+row.port+(row.use_https?' <span class="badge info">https</span>':''),esc(row.model),esc(row.location),(data.cameras||[]).filter(function(c){return c.nvr_id==row.id}).length+' / '+row.max_channels];
-   case'cameras':return[row.channel,esc(row.name),esc(row.ip_address)+(row.cam_user?' <span class="badge info" title="Login khusus kamera">login khusus</span>':''),esc(nvrName(row.nvr_id)),esc(row.location),row.rtsp_url?'<span class="mono" title="'+esc(row.rtsp_url)+'">'+esc(row.rtsp_url)+'</span>':'<span class="badge">belum</span>',row.width?'<span class="badge ok">'+esc(row.codec)+' '+row.width+'×'+row.height+'</span>':'-'];
+   case'cameras':return[row.channel+(row.reg_status==1?' <span class="badge ok" title="Terdaftar di NVR, koneksi normal">NVR</span>':row.reg_status==2?' <span class="badge warn" title="Terdaftar di NVR tetapi koneksi kamera error">error</span>':' <span class="badge" title="Tidak terdaftar di NVR (belum dideteksi atau sudah dihapus dari NVR)">-</span>'),esc(row.name),esc(row.ip_address)+(row.cam_user?' <span class="badge info" title="Login khusus kamera">login khusus</span>':''),esc(nvrName(row.nvr_id)),esc(row.location),row.rtsp_url?'<span class="mono" title="'+esc(row.rtsp_url)+'">'+esc(row.rtsp_url)+'</span>':'<span class="badge">belum</span>',row.width?'<span class="badge ok">'+esc(row.codec)+' '+row.width+'×'+row.height+'</span>':'-'];
    case'groups':return[esc(row.name),esc(row.layout),(row.slots||'').split(',').filter(function(x){return x}).length,esc(row.owner)];
    case'sequences':return[esc(row.name),(row.steps||'').split(',').filter(function(x){return x}).length+' langkah',esc(row.steps)];
    case'users':return[esc(row.name),row.level,row.is_admin?'<span class="badge ok">Admin</span>':'<span class="badge">Operator</span>',row.use_group?'Ya':'Tidak'];
@@ -172,7 +172,7 @@ function listPage(r){
     var q=$('<input placeholder="Cari nama / IP" value="'+esc(flt.q)+'">');q.onchange=function(){flt.q=q.value;render()};tools.appendChild(q);
     rows=rows.filter(function(c){return (!flt.nvr||c.nvr_id==flt.nvr)&&(!flt.q||(c.name+' '+c.ip_address+' '+c.location).toLowerCase().indexOf(flt.q.toLowerCase())>=0)});
     if(admin){var dn=$('<button class="btn i">Deteksi RTSP (NVR terpilih)</button>');dn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}askDisc(+flt.nvr,[])};tools.appendChild(dn);
-      var fn=$('<button class="btn p">Ambil kamera dari NVR</button>');fn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}fetchCams(+flt.nvr)};tools.appendChild(fn);
+      var fn=$('<button class="btn p">Deteksi kamera dari NVR</button>');fn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}fetchCams(+flt.nvr)};tools.appendChild(fn);
       var gen=$('<button class="btn w">Buat kanal</button>');gen.onclick=genChannels;tools.appendChild(gen)}
   }
   if(admin){var add=$('<button class="btn p">＋ Tambah</button>');add.onclick=function(){edit(r,null)};tools.appendChild(add)}
@@ -182,7 +182,7 @@ function listPage(r){
     var tr=document.createElement('tr'),cs=cellFor(r,row),h='';cs.forEach(function(x){h+='<td>'+x+'</td>'});h+='<td class="act"></td>';tr.innerHTML=h;
     var ac=tr.querySelector('.act');
     if(admin){
-      if(r=='nvrs')ac.appendChild(btn('Ambil kamera','p',function(){fetchCams(row.id)}));
+      if(r=='nvrs')ac.appendChild(btn('Deteksi kamera','p',function(){fetchCams(row.id)}));
       if(r=='nvrs')ac.appendChild(btn('Deteksi RTSP','i',function(){askDisc(row.id,[])}));
       if(r=='cameras')ac.appendChild(btn('Deteksi','i',function(){startDisc(row.nvr_id,[row.id],true)}));
       ac.appendChild(btn('Edit','p',function(){edit(r,row)}));
@@ -230,10 +230,10 @@ function edit(r,row){
   el.querySelector('#ms').onclick=function(){
     var b={};if(row)b.id=row.id;
     [].forEach.call(el.querySelectorAll('[data-n]'),function(i){var val=i.value,k=i.dataset.k;if(i.dataset.n=='nvr_id'||k=='I')val=Number(val||0);else if(k=='R')val=Number(val);b[i.dataset.n]=val});
-    api('POST','/api/'+r,b).then(function(){close();msg={t:'Tersimpan.'};return reload()}).catch(function(e){alert(e.message)})}}
+    api('POST','/api/'+r,b).then(function(rs){close();msg={t:'Tersimpan.'};return reload().then(function(){if(r=='nvrs'&&!row&&rs&&rs.id)return fetchCams(rs.id)})}).catch(function(e){alert(e.message)})}}
 function fetchCams(id){
-  say('Menghubungi NVR...');
-  api('POST','/api/nvr-cameras',{nvr_id:id}).then(function(r){msg={t:r.registered+' kamera terdaftar di NVR ('+r.error_conn+' bermasalah koneksi); '+r.added+' kamera baru ditambahkan. Isi IP kamera lalu jalankan Deteksi RTSP.'};reload()}).catch(function(e){say(e.message,true)})}
+  say('Menghubungi NVR (tes login dan baca daftar kamera)...');
+  return api('POST','/api/nvr-cameras',{nvr_id:id}).then(function(r){msg={t:'Login NVR berhasil. '+r.registered+' kamera terdaftar di NVR ('+(r.registered-r.error_conn)+' normal, '+r.error_conn+' error koneksi) dari '+r.total_slots+' kanal; '+r.added+' kamera baru ditambahkan'+(r.unregistered?'; '+r.unregistered+' kamera sudah tidak terdaftar di NVR (ditandai)':'')+'. Isi IP kamera lalu jalankan Deteksi RTSP.'};return reload()}).catch(function(e){say(e.message,true)})}
 function genChannels(){
   var nv=+flt.nvr;if(!nv){alert('Pilih NVR dulu pada filter.');return}
   var n=prompt('Buat kamera kanal 1 sampai berapa untuk NVR "'+nvrName(nv)+'"? (kanal yang sudah ada tidak berubah)',String(((data.nvrs||[]).filter(function(x){return x.id==nv})[0]||{}).max_channels||16));
