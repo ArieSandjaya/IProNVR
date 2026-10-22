@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>IPRO NVR Server</title>
+<title>Plaza Indonesia VMS</title>
 <style>
 :root{--side:#343a40;--side2:#3f474e;--acc:#007bff;--bg:#f4f6f9;--line:#dee2e6;--fg:#212529;--mut:#6c757d;--ok:#28a745;--warn:#ffc107;--bad:#dc3545;--info:#17a2b8}
 *{box-sizing:border-box}
@@ -105,7 +105,7 @@ function sch(r){return schema.filter(function(x){return x.route==r})[0]}
 /* ---------- login ---------- */
 function loginView(){
   var a=document.getElementById('app');
-  a.innerHTML='<div id="login"><div class="lbox"><h1><b>IPRO</b> NVR Server</h1><p>Masuk untuk mengelola konfigurasi</p><input id="u" placeholder="Nama user" autofocus><input id="p" type="password" placeholder="Password"><button class="btn p" id="go" style="width:100%;justify-content:center">Masuk</button><p id="e" style="color:var(--bad);margin:10px 0 0"></p></div></div>';
+  a.innerHTML='<div id="login"><div class="lbox"><h1><b>PIR</b> VMS Server</h1><p>Masuk untuk mengelola konfigurasi</p><input id="u" placeholder="Nama user" autofocus><input id="p" type="password" placeholder="Password"><button class="btn p" id="go" style="width:100%;justify-content:center">Masuk</button><p id="e" style="color:var(--bad);margin:10px 0 0"></p></div></div>';
   var u=a.querySelector('#u'),p=a.querySelector('#p'),e=a.querySelector('#e');
   function go(){fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:u.value,pass:p.value})}).then(function(r){return r.json().then(function(j){if(!r.ok){e.textContent=j.error;return}tok=j.token;me=j.user;sessionStorage.setItem('tok',tok);boot()})})}
   a.querySelector('#go').onclick=go;p.onkeydown=function(ev){if(ev.key=='Enter')go()}
