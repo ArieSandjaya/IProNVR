@@ -174,7 +174,7 @@ namespace IproNvrTool
             lb.ForeColor = Asm.Text;
             lb.BorderStyle = BorderStyle.None;
             lb.Font = Asm.F(9f, false);
-            lb.ItemHeight = Asm.S(22);
+            lb.ItemHeight = Asm.S(28);
             lb.DrawMode = DrawMode.OwnerDrawFixed;
             lb.Tag = "nostyle";
             lb.DrawItem += delegate(object s, DrawItemEventArgs e)
@@ -182,7 +182,16 @@ namespace IproNvrTool
                 if (e.Index < 0) return;
                 bool sel = (e.State & DrawItemState.Selected) != 0;
                 using (var b = new SolidBrush(sel ? Asm.BarOpen : Asm.Panel)) e.Graphics.FillRectangle(b, e.Bounds);
-                TextRenderer.DrawText(e.Graphics, Convert.ToString(lb.Items[e.Index]), lb.Font, e.Bounds, Asm.Text,
+                // ikon = gambar kecil pola layar group ini
+                int iw = Asm.S(30), ih = Asm.S(20);
+                Rectangle ir = new Rectangle(e.Bounds.X + Asm.S(6), e.Bounds.Y + (e.Bounds.Height - ih) / 2, iw, ih);
+                if (e.Index < shown.Count)
+                {
+                    Bitmap pv = LayoutIcon(shown[e.Index].Layout, iw, ih);
+                    if (pv != null) e.Graphics.DrawImage(pv, ir);
+                }
+                Rectangle tr = new Rectangle(ir.Right + Asm.S(8), e.Bounds.Y, e.Bounds.Width - ir.Right - Asm.S(8), e.Bounds.Height);
+                TextRenderer.DrawText(e.Graphics, Convert.ToString(lb.Items[e.Index]), lb.Font, tr, Asm.Text,
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
             };
             lb.DoubleClick += delegate
@@ -195,6 +204,23 @@ namespace IproNvrTool
         }
 
         readonly List<GroupRec> shown = new List<GroupRec>();
+        readonly Dictionary<string, Bitmap> icons = new Dictionary<string, Bitmap>();
+
+        Bitmap LayoutIcon(string layoutId, int w, int h)
+        {
+            Bitmap b;
+            if (icons.TryGetValue(layoutId, out b)) return b;
+            try { b = ScreenLayout.ById(layoutId).Preview(w, h); } catch { b = null; }
+            icons[layoutId] = b;
+            return b;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) foreach (Bitmap b in icons.Values) if (b != null) b.Dispose();
+            icons.Clear();
+            base.Dispose(disposing);
+        }
 
         public void Reload()
         {
@@ -212,7 +238,7 @@ namespace IproNvrTool
                 if (g.Owner.Length > 0 && g.Owner != AsmApp.UserKey) continue;
                 if (filter.Length > 0 && g.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 shown.Add(g);
-                lb.Items.Add(g.Name + "   [" + g.Layout + "]");
+                lb.Items.Add(g.Name + "   (" + g.Layout + ")");
             }
         }
 
