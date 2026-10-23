@@ -117,7 +117,7 @@ namespace IproNvrTool
             center.Tag = "nostyle";
 
             toolbar.Dock = DockStyle.Top;
-            toolbar.Height = Asm.S(38);
+            toolbar.Height = Asm.S(54);
             toolbar.BackColor = Asm.Panel;
             toolbar.Tag = "nostyle";
             statusBar.Dock = DockStyle.Bottom;
@@ -125,7 +125,7 @@ namespace IproNvrTool
             statusBar.BackColor = Asm.Panel;
             statusBar.Tag = "nostyle";
             opPanel.Dock = DockStyle.Bottom;
-            opPanel.Height = Asm.S(176);
+            opPanel.Height = Asm.S(214);
             opPanel.BackColor = Asm.Panel;
             opPanel.Tag = "nostyle";
             hBottom.Dock = DockStyle.Bottom;
@@ -211,7 +211,8 @@ namespace IproNvrTool
             toolFlow.Tag = "nostyle";
             toolbar.Controls.Add(toolFlow);
 
-            var layBtn = new AsmButton(AsmIcon.Layout, "Pola layar", null);
+            var layBtn = new AsmButton(AsmIcon.ChevronDown, "Pola layar", null);
+            layBtn.Size = new Size(Asm.S(26), Asm.S(44));
             layBtn.Click += delegate { ShowLayoutMenu(layBtn); };
             toolFlow.Controls.Add(layBtn);
 
@@ -224,13 +225,12 @@ namespace IproNvrTool
             BuildShortcuts();
 
             toolFlow.Controls.Add(Spacer());
-            toolFlow.Controls.Add(new AsmButton(AsmIcon.Full, "Layar penuh (Esc untuk keluar)", delegate
-            {
-                using (var f = new FullScreenForm(Grid)) f.ShowDialog(this);
-            }));
-            toolFlow.Controls.Add(new AsmButton(AsmIcon.Camera, "Still picture", delegate { DoStill(); }));
-            toolFlow.Controls.Add(new AsmButton(AsmIcon.Print, "Print", delegate { DoPrint(); }));
-            toolFlow.Controls.Add(new AsmButton(AsmIcon.Close, "Kosongkan semua area", delegate { StopSequence(); ExitPlayback(); Grid.ClearAll(); }));
+            AsmButton[] tb = {
+                new AsmButton(AsmIcon.Full, "Layar penuh (Esc untuk keluar)", delegate { using (var f = new FullScreenForm(Grid)) f.ShowDialog(this); }),
+                new AsmButton(AsmIcon.Camera, "Still picture", delegate { DoStill(); }),
+                new AsmButton(AsmIcon.Print, "Print", delegate { DoPrint(); }),
+                new AsmButton(AsmIcon.Close, "Kosongkan semua area", delegate { StopSequence(); ExitPlayback(); Grid.ClearAll(); }) };
+            foreach (AsmButton tbb in tb) { tbb.Size = new Size(Asm.S(60), Asm.S(44)); tbb.Margin = new Padding(0, 0, Asm.S(2), 0); toolFlow.Controls.Add(tbb); }
         }
 
         static Control Spacer()
@@ -252,8 +252,10 @@ namespace IproNvrTool
                 string id = raw.Trim();
                 if (!ScreenLayout.Exists(id)) continue;
                 var b = new AsmButton();
-                b.Label = id;
-                b.Width = Asm.S(36);
+                int cnt = ScreenLayout.ById(id).Count;
+                b.GridN = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(cnt)));
+                b.Size = new Size(Asm.S(60), Asm.S(44));
+                b.Margin = new Padding(0, 0, Asm.S(2), 0);
                 b.Tag = id;
                 tips.SetToolTip(b, "Pola " + id);
                 string cap = id;
@@ -469,7 +471,7 @@ namespace IproNvrTool
             opTabs.Dock = DockStyle.Fill;
             var tCam = new TabPage("Camera");
             var tHdd = new TabPage("HDD");
-            tCam.BackColor = Asm.Panel2;
+            tCam.BackColor = Asm.Bg;
             tHdd.BackColor = Asm.Panel2;
             opTabs.TabPages.Add(tCam);
             opTabs.TabPages.Add(tHdd);
@@ -477,7 +479,6 @@ namespace IproNvrTool
 
             // ---- Camera ----
             pad = new PtzPad();
-            pad.Dock = DockStyle.Left;
             pad.Width = Asm.S(130);
             pad.Move += delegate(int dx, int dy, double frac)
             {
@@ -489,66 +490,82 @@ namespace IproNvrTool
             };
             pad.Released += delegate { StopHold(); };
 
-            var fl = new FlowLayoutPanel();
-            fl.Dock = DockStyle.Fill;
-            fl.Padding = new Padding(Asm.S(6), Asm.S(4), 0, 0);
-            fl.Tag = "nostyle";
-            fl.BackColor = Asm.Panel2;
+            var cp = new Panel();
+            cp.Dock = DockStyle.Fill;
+            cp.Tag = "nostyle";
+            cp.BackColor = Asm.Bg;
+            Action<string, int, int, int> cap = delegate(string t, int x, int y, int w)
+            {
+                var l = new Label();
+                l.Text = t; l.ForeColor = Asm.Text; l.Font = Asm.F(9.5f, false); l.Tag = "nostyle";
+                l.TextAlign = ContentAlignment.MiddleCenter;
+                l.SetBounds(Asm.S(x), Asm.S(y), Asm.S(w), Asm.S(18));
+                cp.Controls.Add(l);
+            };
+            Func<AsmButton, int, int, int, int, AsmButton> put = delegate(AsmButton b, int x, int y, int bw, int bh)
+            {
+                b.SetBounds(Asm.S(x), Asm.S(y), Asm.S(bw), Asm.S(bh));
+                b.Margin = new Padding(0);
+                b.Font = Asm.F(10f, false);
+                cp.Controls.Add(b);
+                return b;
+            };
 
-            fl.Controls.Add(OpLab("Zoom"));
-            fl.Controls.Add(HoldBtn("Tele +", "Zoom in (tahan)", 1, null));
-            fl.Controls.Add(HoldBtn("Wide -", "Zoom out (tahan)", -1, null));
-            fl.Controls.Add(OpLab("Focus"));
-            fl.Controls.Add(HoldBtn("Near", "Focus dekat", 0, "CMD=FOCUS&CTRL=NEAR&CTRL=START"));
-            fl.Controls.Add(HoldBtn("Far", "Focus jauh", 0, "CMD=FOCUS&CTRL=FAR&CTRL=START"));
-            fl.Controls.Add(HoldBtn("Auto", "Auto focus", 0, "CMD=FOCUS&CTRL=AUTO&CTRL=START"));
-            fl.SetFlowBreak(fl.Controls[fl.Controls.Count - 1], true);
-
-            fl.Controls.Add(OpLab("Brightness"));
-            fl.Controls.Add(HoldBtn("Open", "Iris buka", 0, "CMD=IRIS&CTRL=OPEN&CTRL=START"));
-            fl.Controls.Add(HoldBtn("Close", "Iris tutup", 0, "CMD=IRIS&CTRL=CLOSE&CTRL=START"));
-            fl.Controls.Add(HoldBtn("Reset", "Iris reset", 0, "CMD=IRIS&CTRL=RESET&CTRL=START"));
-            btnCenter = OpBtn(AsmIcon.None, "Click center", "Klik gambar = pusatkan kamera ke titik itu", null, 92);
+            // Zoom / Focus
+            put(HoldBtn("Wide -", "Zoom out (tahan)", -1, null), 8, 4, 76, 50);
+            btnCenter = OpBtn(AsmIcon.None, "Center", "Klik gambar = pusatkan kamera ke titik itu", null, 76);
             btnCenter.Toggle = true;
-            fl.Controls.Add(btnCenter);
-            fl.SetFlowBreak(btnCenter, true);
+            put(btnCenter, 88, 4, 76, 50);
+            put(HoldBtn("Tele +", "Zoom in (tahan)", 1, null), 168, 4, 76, 50);
+            cap("Zoom", 8, 56, 236);
+            put(HoldBtn("Auto", "Auto focus", 0, "CMD=FOCUS&CTRL=AUTO&CTRL=START"), 8, 80, 76, 50);
+            put(HoldBtn("Near", "Focus dekat", 0, "CMD=FOCUS&CTRL=NEAR&CTRL=START"), 88, 80, 76, 50);
+            put(HoldBtn("Far", "Focus jauh", 0, "CMD=FOCUS&CTRL=FAR&CTRL=START"), 168, 80, 76, 50);
+            cap("Focus", 8, 132, 236);
 
-            fl.Controls.Add(OpLab("Preset"));
+            // Brightness + kecepatan
+            put(HoldBtn("-", "Iris tutup", 0, "CMD=IRIS&CTRL=CLOSE&CTRL=START"), 262, 4, 76, 50);
+            put(HoldBtn("Reset", "Iris reset", 0, "CMD=IRIS&CTRL=RESET&CTRL=START"), 342, 4, 76, 50);
+            put(HoldBtn("+", "Iris buka", 0, "CMD=IRIS&CTRL=OPEN&CTRL=START"), 422, 4, 76, 50);
+            cap("Brightness", 262, 56, 236);
+            var l1 = new Label(); l1.Text = "Speed"; l1.ForeColor = Asm.Muted; l1.Tag = "nostyle"; l1.SetBounds(Asm.S(262), Asm.S(80), Asm.S(70), Asm.S(20)); cp.Controls.Add(l1);
+            trkSpeed = new TrackBar();
+            trkSpeed.Minimum = 1; trkSpeed.Maximum = 16; trkSpeed.Value = 8; trkSpeed.TickStyle = TickStyle.None;
+            trkSpeed.SetBounds(Asm.S(336), Asm.S(76), Asm.S(162), Asm.S(28)); cp.Controls.Add(trkSpeed);
+            var l2 = new Label(); l2.Text = "Zoom spd"; l2.ForeColor = Asm.Muted; l2.Tag = "nostyle"; l2.SetBounds(Asm.S(262), Asm.S(112), Asm.S(70), Asm.S(20)); cp.Controls.Add(l2);
+            trkZoom = new TrackBar();
+            trkZoom.Minimum = 1; trkZoom.Maximum = 16; trkZoom.Value = 8; trkZoom.TickStyle = TickStyle.None;
+            trkZoom.SetBounds(Asm.S(336), Asm.S(106), Asm.S(162), Asm.S(28)); cp.Controls.Add(trkZoom);
+
+            // pad PTZ
+            pad.Dock = DockStyle.None;
+            pad.SetBounds(Asm.S(516), Asm.S(4), Asm.S(144), Asm.S(144));
+            cp.Controls.Add(pad);
+
+            // Preset
             numPreset = new NumericUpDown();
-            numPreset.Minimum = 1; numPreset.Maximum = 256; numPreset.Value = 1; numPreset.Width = Asm.S(56);
-            numPreset.Margin = new Padding(2, 6, 2, 0);
-            fl.Controls.Add(numPreset);
-            fl.Controls.Add(OpBtn(AsmIcon.None, "Go", "Panggil preset", delegate { SendCtl("CMD=PRESET&NO=" + (int)numPreset.Value); }, 44));
-            fl.Controls.Add(OpBtn(AsmIcon.None, "Set", "Simpan posisi saat ini ke preset", delegate
+            numPreset.Minimum = 1; numPreset.Maximum = 256; numPreset.Value = 1;
+            numPreset.BackColor = Asm.Panel; numPreset.ForeColor = Asm.Text;
+            numPreset.SetBounds(Asm.S(682), Asm.S(2), Asm.S(168), Asm.S(26)); cp.Controls.Add(numPreset);
+            put(OpBtn(AsmIcon.None, "Go", "Panggil preset", delegate { SendCtl("CMD=PRESET&NO=" + (int)numPreset.Value); }, 80), 682, 30, 82, 32);
+            put(OpBtn(AsmIcon.None, "Program", "Simpan posisi saat ini ke preset", delegate
             {
                 if (MessageBox.Show("Simpan posisi kamera saat ini ke preset " + (int)numPreset.Value + "?", "Preset", MessageBoxButtons.YesNo) == DialogResult.Yes)
                     SendCtl("CMD=PRESETPRG&NO=" + (int)numPreset.Value);
-            }, 44));
-            fl.Controls.Add(OpLab("AUX"));
+            }, 80), 768, 30, 82, 32);
+            cap("Preset", 682, 63, 168);
+
+            // AUX
             cmbAux = new ComboBox();
             cmbAux.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbAux.Items.AddRange(new object[] { "AUX1", "AUX2", "AUX3", "AUX4", "AUX5", "AUX6", "AUX7", "AUX8" });
             cmbAux.SelectedIndex = 0;
-            cmbAux.Width = Asm.S(70);
-            cmbAux.Margin = new Padding(2, 6, 2, 0);
-            fl.Controls.Add(cmbAux);
-            fl.Controls.Add(OpBtn(AsmIcon.None, "On", "AUX open", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=OPEN"); }, 40));
-            fl.Controls.Add(OpBtn(AsmIcon.None, "Off", "AUX close", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=CLOSE"); }, 40));
-            fl.SetFlowBreak(fl.Controls[fl.Controls.Count - 1], true);
-
-            fl.Controls.Add(OpLab("Kecepatan"));
-            trkSpeed = new TrackBar();
-            trkSpeed.Minimum = 1; trkSpeed.Maximum = 16; trkSpeed.Value = 8; trkSpeed.Width = Asm.S(120); trkSpeed.TickStyle = TickStyle.None;
-            fl.Controls.Add(trkSpeed);
-            fl.Controls.Add(OpLab("Zoom spd"));
-            trkZoom = new TrackBar();
-            trkZoom.Minimum = 1; trkZoom.Maximum = 16; trkZoom.Value = 8; trkZoom.Width = Asm.S(120); trkZoom.TickStyle = TickStyle.None;
-            fl.Controls.Add(trkZoom);
-
-            numPreset.BackColor = Asm.Panel; numPreset.ForeColor = Asm.Text;
             cmbAux.BackColor = Asm.Panel; cmbAux.ForeColor = Asm.Text; cmbAux.FlatStyle = FlatStyle.Flat;
-            tCam.Controls.Add(fl);
-            tCam.Controls.Add(pad);
+            cmbAux.SetBounds(Asm.S(682), Asm.S(88), Asm.S(168), Asm.S(26)); cp.Controls.Add(cmbAux);
+            put(OpBtn(AsmIcon.None, "Open", "AUX open", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=OPEN"); }, 80), 682, 116, 82, 32);
+            put(OpBtn(AsmIcon.None, "Close", "AUX close", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=CLOSE"); }, 80), 768, 116, 82, 32);
+            cap("AUX", 682, 149, 168);
+            tCam.Controls.Add(cp);
 
             // ---- HDD ----
             var h = new FlowLayoutPanel();

@@ -258,6 +258,7 @@ namespace IproNvrTool
         public bool Highlight;           // tampil aksen (mis. mode aktif)
         public bool Borderless;
         public Color? IconColor;
+        public int GridN;               // >0: gambar pola layar n x n (kotak kecil) sebagai ikon
         bool isChecked;
 
         public AsmButton()
@@ -313,7 +314,19 @@ namespace IproNvrTool
             }
             Color fg = !Enabled ? Color.FromArgb(84, 92, 106) : (IconColor.HasValue ? IconColor.Value : Asm.Text);
             int pad = Asm.S(5);
-            if (Icon != AsmIcon.None && string.IsNullOrEmpty(Label))
+            if (GridN > 0)
+            {
+                int box = Math.Min(Width, Height) - pad * 3;
+                int gap = GridN > 3 ? 1 : Math.Max(1, Asm.S(2));
+                int cell = Math.Max(2, (box - gap * (GridN - 1)) / GridN);
+                int tot = cell * GridN + gap * (GridN - 1);
+                int ox = (Width - tot) / 2, oy = (Height - tot) / 2;
+                using (var br = new SolidBrush(fg))
+                    for (int r = 0; r < GridN; r++)
+                        for (int c = 0; c < GridN; c++)
+                            g.FillRectangle(br, ox + c * (cell + gap), oy + r * (cell + gap), cell, cell);
+            }
+            else if (Icon != AsmIcon.None && string.IsNullOrEmpty(Label))
             {
                 int sz = Math.Min(Width, Height) - pad * 2;
                 AsmIcons.Draw(g, Icon, new Rectangle((Width - sz) / 2, (Height - sz) / 2, sz, sz), fg);
