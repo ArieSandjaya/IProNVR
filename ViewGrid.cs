@@ -1043,6 +1043,24 @@ namespace IproNvrTool
             c.Dock = DockStyle.Fill;
             Controls.Add(c);
             KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) Close(); };
+            // tombol keluar untuk mouse (tanpa perlu keyboard)
+            var x = new Button();
+            x.Text = "\u2715  Keluar layar penuh";
+            x.FlatStyle = FlatStyle.Flat;
+            x.FlatAppearance.BorderColor = Color.FromArgb(120, 120, 120);
+            x.BackColor = Color.FromArgb(40, 40, 40);
+            x.ForeColor = Color.White;
+            x.Tag = "nostyle";
+            x.Font = new Font("Segoe UI", 9f);
+            x.Size = new Size(160, 28);
+            x.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            x.Location = new Point(Screen.PrimaryScreen.Bounds.Width - 170, 6);
+            x.Cursor = Cursors.Hand;
+            x.TabStop = false;
+            x.Click += delegate { Close(); };
+            Controls.Add(x);
+            x.BringToFront();
+            Resize += delegate { x.Location = new Point(ClientSize.Width - x.Width - 10, 6); x.BringToFront(); };
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
