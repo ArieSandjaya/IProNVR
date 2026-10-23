@@ -1013,20 +1013,6 @@ namespace IproNvrTool
                 menu.Items.Add(fe);
                 Asm.StyleMenu(menu);
             }
-            ToolStripMenuItem im = new ToolStripMenuItem("Judul area");
-            string[] inames = { "Lengkap (NVR, kamera, fps)", "Nama kamera saja", "Sembunyikan" };
-            for (int k = 0; k < 3; k++)
-            {
-                int mk = k;
-                ToolStripMenuItem sub = Asm.Sub(im, inames[k], delegate
-                {
-                    AppSettings.Current.CamInfoSet = true; AppSettings.Current.CamInfoMode = mk;
-                    try { AppSettings.Current.Save(); } catch { }
-                    ViewCell.RaiseInfoMode();
-                });
-                sub.Checked = AppSettings.Current.InfoMode == k;
-            }
-            menu.Items.Add(im);
             it = Asm.Item(menu, "No image display", delegate { Unassign(cell.Index); });
             it.Enabled = has;
             if (AllowRegisterLayout)
