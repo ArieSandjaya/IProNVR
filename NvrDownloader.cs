@@ -126,7 +126,7 @@ namespace IproNvrTool
                 {
                     var mr = new MultipartReader(stream);
                     MultipartPart p;
-                    while (!job.Cancel && (p = mr.ReadPart()) != null)
+                    while (!job.Cancel && (p = mr.ReadPartHeaders()) != null)
                     {
                         string temp = FileNameOf(p.H("X-Temp-Filename"));
                         string prev = FileNameOf(p.H("X-Prev-Filename"));
@@ -142,12 +142,14 @@ namespace IproNvrTool
                             curPath = Path.Combine(folder, temp);
                             cur = new FileStream(curPath, FileMode.Create, FileAccess.Write);
                         }
-                        if (cur != null && p.Body.Length > 0)
+                        // isi dialirkan langsung ke file (tidak ditampung di memori: rekaman 5 menit bisa puluhan MB)
+                        long got = mr.CopyBody(p, cur != null ? (Stream)cur : Stream.Null, delegate(int n)
                         {
-                            cur.Write(p.Body, 0, p.Body.Length);
-                            job.Bytes += p.Body.Length;
+                            if (cur == null) return;
+                            job.Bytes += n;
                             if (status != null) status("Mengunduh... " + (job.Bytes / 1024) + " KB");
-                        }
+                        });
+                        if (got < 0) break;   // koneksi terputus: file sementara disimpan oleh blok finally
                         if (prev.Length > 0 && temp.Length == 0) Finish(ref cur, ref curPath, prev, folder, job);
                     }
                 }

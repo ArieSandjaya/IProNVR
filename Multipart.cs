@@ -81,8 +81,10 @@ namespace IproNvrTool
             }
         }
 
-        /// <summary>Return null jika stream habis.</summary>
-        public MultipartPart ReadPart()
+        string _boundary;   // mis. "--myboundary" (diambil dari baris boundary pertama)
+
+        /// <summary>Baca boundary + header saja (isi belum dibaca). Return null jika stream habis.</summary>
+        public MultipartPart ReadHeader()
         {
             string line;
             if (!_boundaryConsumed)
@@ -92,6 +94,7 @@ namespace IproNvrTool
                     line = ReadLine();
                     if (line == null) return null;
                 } while (!line.StartsWith("--"));
+                if (_boundary == null) _boundary = line.Trim();
             }
             _boundaryConsumed = false;
 
@@ -108,7 +111,116 @@ namespace IproNvrTool
                 int i = line.IndexOf(':');
                 if (i > 0) part.Headers[line.Substring(0, i).Trim()] = line.Substring(i + 1).Trim();
             }
+            return part;
+        }
 
+        /// <summary>Baris pembatas (mis. "--myboundary") yang dilihat pertama kali.</summary>
+        string _boundaryLine;
+
+        /// <summary>Baca pembatas + header satu bagian saja (isi belum dibaca; pakai CopyBody). Return null jika stream habis.</summary>
+        public MultipartPart ReadPartHeaders()
+        {
+            string line;
+            if (!_boundaryConsumed)
+            {
+                do
+                {
+                    line = ReadLine();
+                    if (line == null) return null;
+                } while (!line.StartsWith("--"));
+                if (_boundaryLine == null) _boundaryLine = line.TrimEnd();
+            }
+            _boundaryConsumed = false;
+
+            var part = new MultipartPart();
+            while (true)
+            {
+                line = ReadLine();
+                if (line == null) return null;
+                if (line.Length == 0)
+                {
+                    if (part.Headers.Count == 0) continue; // baris kosong ekstra sebelum header
+                    break;
+                }
+                int i = line.IndexOf(':');
+                if (i > 0) part.Headers[line.Substring(0, i).Trim()] = line.Substring(i + 1).Trim();
+            }
+            return part;
+        }
+
+        /// <summary>Alirkan isi bagian ke dest tanpa menampung semuanya di memori (download rekaman bisa ratusan MB).
+        /// Dengan Content-Length: tepat sekian byte. Tanpa Content-Length: sampai pembatas berikutnya (CRLF + baris pembatas).
+        /// onBytes dipanggil per potongan. Return jumlah byte, atau -1 bila stream putus.</summary>
+        public long CopyBody(MultipartPart part, Stream dest, Action<int> onBytes)
+        {
+            var buf = new byte[64 * 1024];
+            long total = 0;
+            int len;
+            if (int.TryParse(part.H("Content-Length"), out len) && len >= 0)
+            {
+                long left = len;
+                while (left > 0)
+                {
+                    int n = _s.Read(buf, 0, (int)Math.Min(buf.Length, left));
+                    if (n <= 0) return -1;
+                    dest.Write(buf, 0, n);
+                    left -= n; total += n;
+                    if (onBytes != null) onBytes(n);
+                }
+                return total;
+            }
+            byte[] delim = Encoding.ASCII.GetBytes("\r\n" + (_boundaryLine ?? "--"));
+            int m = 0;                 // jumlah byte awal pembatas yang sudah cocok
+            int fill = 0;
+            Action flush = delegate
+            {
+                if (fill > 0) { dest.Write(buf, 0, fill); total += fill; if (onBytes != null) onBytes(fill); fill = 0; }
+            };
+            while (true)
+            {
+                int b = _s.ReadByte();
+                if (b < 0) { flush(); return -1; }
+                // cocokkan dengan pembatas; bila gagal, byte yang sempat cocok adalah data biasa
+                while (true)
+                {
+                    if (b == delim[m]) { m++; break; }
+                    if (m == 0) { buf[fill++] = (byte)b; break; }
+                    // gagal: tulis byte pertama yang tadi cocok lalu cari ulang awal pembatas di sisa byte
+                    buf[fill++] = delim[0];
+                    int rest = m - 1;
+                    var pend = new byte[rest];
+                    Buffer.BlockCopy(delim, 1, pend, 0, rest);
+                    m = 0;
+                    foreach (byte pb in pend)
+                    {
+                        while (true)
+                        {
+                            if (pb == delim[m]) { m++; break; }
+                            if (m == 0) { buf[fill++] = pb; break; }
+                            buf[fill++] = delim[0];
+                            // pembatas hanya punya satu CR di awal: sisa dianggap data
+                            m = 0;
+                        }
+                        if (fill >= buf.Length - 8) flush();
+                    }
+                    continue;
+                }
+                if (fill >= buf.Length - 8) flush();
+                if (m == delim.Length)
+                {
+                    flush();
+                    ReadLine();    // sisa baris pembatas ("" atau "--" penutup)
+                    _boundaryConsumed = true;
+                    return total;
+                }
+            }
+        }
+
+        /// <summary>Return null jika stream habis. Seluruh isi bagian ditampung di memori (untuk data kecil: live / playback).</summary>
+        public MultipartPart ReadPart()
+        {
+            MultipartPart part = ReadPartHeaders();
+            if (part == null) return null;
             int len;
             if (int.TryParse(part.H("Content-Length"), out len) && len >= 0)
             {
