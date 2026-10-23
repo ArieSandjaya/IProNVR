@@ -112,6 +112,8 @@ namespace IproNvrTool
         Point ptzLast;
         public event Action<ViewCell> FishReload;
         public bool SoftFish { get { FisheyeRec r = Fish; return r != null && r.Enabled && !r.CamStream && FMode != FishMode.Off; } }
+        /// <summary>Ada pemrosesan gambar: dewarp di aplikasi, atau susun ulang stream 2x2 dari kamera (mode panorama ganda).</summary>
+        public bool FishFilter { get { FisheyeRec r = Fish; return r != null && r.Enabled && FMode != FishMode.Off && (!r.CamStream || FMode == FishMode.Dual); } }
         public bool PtzActive { get { return SoftFish && FMode == FishMode.Ptz; } }
         public byte[] RawJpeg { get { return Tile != null && Tile.LastJpeg != null ? Tile.LastJpeg : LastJpeg; } }
 
@@ -215,7 +217,7 @@ namespace IproNvrTool
                 r.Channel = Channel;
             }
             r.Enabled = m != FishMode.Off;
-            if (m != FishMode.Off) { r.Mode = (int)m; r.CamStream = false; }
+            if (m != FishMode.Off) { r.Mode = (int)m; if (m != FishMode.Dual) r.CamStream = false; }   // panorama ganda boleh dipakai pada stream 2x2 dari kamera
             try { Fisheye.Save(r); } catch (Exception ex) { Log.Write("Fisheye simpan: " + ex.Message); }
             RequestFishReload();
         }
@@ -225,7 +227,7 @@ namespace IproNvrTool
         {
             FisheyeRec r = Fish;
             FishMode m = FMode;
-            if (r == null || !r.Enabled || r.CamStream || m == FishMode.Off) return null;
+            if (r == null || !r.Enabled || m == FishMode.Off || (r.CamStream && m != FishMode.Dual)) return null;
             Bitmap b = img as Bitmap;
             if (b == null) return null;
             return Fisheye.Render(b, r, m, fYaw, fPitch, fHfov, outW, outH);
@@ -576,7 +578,7 @@ namespace IproNvrTool
             Image img;
             try { img = Ui.DecodeImage(jpg); } // salinan mandiri: Bitmap dari MemoryStream yang ditutup bisa gagal digambar
             catch { return; }
-            if (SoftFish)
+            if (FishFilter)
             {
                 Image d = null;
                 try { d = FilterFrame(img); } catch { }
@@ -988,12 +990,12 @@ namespace IproNvrTool
             if (has)
             {
                 ToolStripMenuItem fe = new ToolStripMenuItem("Fisheye");
-                string[] names = { "Off (gambar bulat)", "Panorama", "Quad (4 sudut)", "PTZ virtual (geser mouse, roda = zoom)" };
-                for (int k = 0; k < 4; k++)
+                string[] names = { "Off (gambar bulat)", "Panorama", "Quad (4 sudut)", "PTZ virtual (geser mouse, roda = zoom)", "Panorama ganda (atas diputar 180\u00B0)" };
+                for (int k = 0; k < 5; k++)
                 {
                     FishMode fm = (FishMode)k;
                     ToolStripMenuItem sub = Asm.Sub(fe, names[k], delegate { cell.SetFishMode(fm); });
-                    sub.Checked = cell.FMode == fm && !(cell.Fish != null && cell.Fish.CamStream);
+                    sub.Checked = cell.FMode == fm && (fm == FishMode.Dual || !(cell.Fish != null && cell.Fish.CamStream));
                 }
                 fe.DropDownItems.Add(new ToolStripSeparator());
                 Asm.Sub(fe, "Kalibrasi lensa & sumber stream...", delegate

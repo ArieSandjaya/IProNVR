@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace IproNvrTool
 {
-    public enum FishMode { Off = 0, Panorama = 1, Quad = 2, Ptz = 3 }
+    public enum FishMode { Off = 0, Panorama = 1, Quad = 2, Ptz = 3, Dual = 4 }   // Dual: 2 baris panorama (2 tile atas diputar 180 derajat lalu digabung, 2 tile bawah digabung)
 
     /// <summary>Pengaturan lensa fisheye per kamera. Sumber: dewarp di aplikasi (cara 1) atau stream dewarp dari kamera lewat RTSP (cara 2).</summary>
     public class FisheyeRec
@@ -24,7 +24,7 @@ namespace IproNvrTool
         public string CamUrl = "";
 
         public FisheyeRec Clone() { return (FisheyeRec)MemberwiseClone(); }
-        public FishMode FMode { get { return (FishMode)Math.Max(0, Math.Min(3, Mode)); } }
+        public FishMode FMode { get { return (FishMode)Math.Max(0, Math.Min(4, Mode)); } }
     }
 
     /// <summary>Penyimpanan (cache) pengaturan fisheye + mesin dewarp perangkat lunak (proyeksi equidistant).</summary>
@@ -230,6 +230,26 @@ namespace IproNvrTool
             return l;
         }
 
+        // ---------------- panorama ganda ----------------
+
+        /// <summary>Susun gambar 2x2: baris atas (2 tile) diputar 180 derajat lalu jadi satu strip panorama, baris bawah (2 tile) jadi satu strip panorama.
+        /// Hasil: dua strip bertumpuk berukuran ow x oh.</summary>
+        public static Bitmap Stack(Bitmap src, int ow, int oh)
+        {
+            int sw = src.Width, sh = src.Height, th = sh / 2;
+            var dst = new Bitmap(ow, oh, PixelFormat.Format32bppArgb);
+            using (Bitmap top = src.Clone(new Rectangle(0, 0, sw, th), PixelFormat.Format32bppArgb))
+            using (Graphics g = Graphics.FromImage(dst))
+            {
+                top.RotateFlip(RotateFlipType.Rotate180FlipNone);
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+                g.DrawImage(top, new Rectangle(0, 0, ow, oh / 2), 0, 0, top.Width, top.Height, GraphicsUnit.Pixel);
+                g.DrawImage(src, new Rectangle(0, oh / 2, ow, oh - oh / 2), 0, th, sw, sh - th, GraphicsUnit.Pixel);
+            }
+            return dst;
+        }
+
         // ---------------- render ----------------
 
         /// <summary>Dewarp satu frame. src = gambar bulat mentah; hasil Bitmap baru berukuran ow x oh.</summary>
@@ -239,6 +259,12 @@ namespace IproNvrTool
         {
             ow = Math.Max(16, ow & ~1);
             oh = Math.Max(16, oh & ~1);
+            if (mode == FishMode.Dual)
+            {
+                // stream kamera sudah terbagi 4 (2x2): langsung susun ulang; gambar bulat mentah: dewarp Quad dulu
+                if (r.CamStream) return Stack(src, ow, oh);
+                using (Bitmap q = Render(src, r, FishMode.Quad, yawDeg, pitchDeg, hfovDeg, ow, oh)) return Stack(q, ow, oh);
+            }
             int sw = src.Width, sh = src.Height;
             Lut lut = GetLut(sw, sh, ow, oh, r, mode, yawDeg, pitchDeg, hfovDeg);
 

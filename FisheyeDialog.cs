@@ -62,7 +62,7 @@ namespace IproNvrTool
             cmbMount.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbMount.Items.AddRange(new object[] { "Langit-langit (menghadap bawah)", "Dinding", "Meja / lantai (menghadap atas)" });
             cmbMode.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbMode.Items.AddRange(new object[] { "Panorama", "Quad (4 sudut)", "PTZ virtual" });
+            cmbMode.Items.AddRange(new object[] { "Panorama", "Quad (4 sudut)", "PTZ virtual", "Panorama ganda (atas diputar 180\u00B0)" });
             SetupNum(numFov, 90, 360, 1, 0);
             SetupNum(numCx, 0, 1, 0.005m, 3);
             SetupNum(numCy, 0, 1, 0.005m, 3);
@@ -106,7 +106,7 @@ namespace IproNvrTool
             Controls.AddRange(new Control[] { picRaw, picOut, rbApp, rbCam, txtUrl, lblHint, save, cancel, del });
 
             cmbMount.SelectedIndex = Math.Max(0, Math.Min(2, rec.Mount));
-            cmbMode.SelectedIndex = Math.Max(0, Math.Min(2, (rec.Mode == 0 ? 1 : rec.Mode) - 1));
+            cmbMode.SelectedIndex = Math.Max(0, Math.Min(3, (rec.Mode == 0 ? 1 : rec.Mode) - 1));
             numFov.Value = Clamp(numFov, (decimal)rec.Fov);
             numCx.Value = Clamp(numCx, (decimal)rec.Cx);
             numCy.Value = Clamp(numCy, (decimal)rec.Cy);
