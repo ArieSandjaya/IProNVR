@@ -112,6 +112,11 @@ namespace IproNvrTool
             var open = new HashSet<string>();
             foreach (TreeNode n in tv.Nodes) if (n.IsExpanded) open.Add(n.Text);
             bool any = false;
+            string selKey = null;
+            CamRef selRef = tv.SelectedNode == null ? null : tv.SelectedNode.Tag as CamRef;
+            if (selRef != null) selKey = selRef.NvrId + ":" + selRef.Channel;
+            TreeNode topNode = tv.TopNode;
+            string topText = topNode == null ? null : topNode.Text;
             tv.BeginUpdate();
             try
             {
@@ -153,6 +158,17 @@ namespace IproNvrTool
             }
             if (filter.Length > 0) tv.ExpandAll();
             else foreach (TreeNode n in tv.Nodes) if (open.Count == 0 || open.Contains(n.Text)) n.Expand();
+            // pulihkan pilihan & posisi gulir agar daftar tidak "melompat" tiap pembaruan status
+            if (selKey != null)
+            {
+                foreach (TreeNode n in tv.Nodes) foreach (TreeNode c in n.Nodes)
+                {
+                    CamRef cr = c.Tag as CamRef;
+                    if (cr != null && (cr.NvrId + ":" + cr.Channel) == selKey) { tv.SelectedNode = c; break; }
+                }
+            }
+            if (topText != null)
+                foreach (TreeNode n in tv.Nodes) if (n.Text == topText) { try { tv.TopNode = n; } catch { } break; }
             }
             finally { tv.EndUpdate(); }
             return any;

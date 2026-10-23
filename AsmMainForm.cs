@@ -139,6 +139,7 @@ namespace IproNvrTool
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Asm.Bg;
             KeyPreview = true;
+            UiSmooth.Attach(this);
 
             titleBar.Dock = DockStyle.Top;
             titleBar.Height = Asm.S(40);
