@@ -7,6 +7,7 @@
     <AssemblyName>IproNvrServer</AssemblyName>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Nullable>disable</Nullable>
+    <ApplicationIcon>6296844.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +20,10 @@
     <!-- kode deteksi RTSP dipakai bersama dengan aplikasi client -->
     <Compile Include="..\..\RtspDiscovery.cs" Link="Shared\RtspDiscovery.cs" />
     <Compile Include="..\..\StreamProbe.cs" Link="Shared\StreamProbe.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="6296844.ico" />
   </ItemGroup>
 
   <ItemGroup>
