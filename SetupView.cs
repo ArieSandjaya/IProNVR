@@ -249,7 +249,10 @@ namespace IproNvrTool
                 delegate(string v) { s.AsmMagnification = int.Parse(v); }, "Berlaku setelah aplikasi dibuka ulang.");
             p.Combo("Format tanggal", new string[] { "yyyy/MM/dd", "dd/MM/yyyy", "MM/dd/yyyy" }, s.DateFormat, delegate(string v) { s.DateFormat = v; }, null);
             p.Check("Jam 24 jam", s.Time24h, delegate(bool v) { s.Time24h = v; }, null);
-            p.Check("Tampilkan nama kamera di area gambar", s.ShowCamNames, delegate(bool v) { s.ShowCamNames = v; }, null);
+            p.Combo("Judul di area gambar", new string[] { "Lengkap (NVR, kamera, fps)", "Nama kamera saja", "Sembunyikan" },
+                new string[] { "Lengkap (NVR, kamera, fps)", "Nama kamera saja", "Sembunyikan" }[Math.Max(0, Math.Min(2, s.InfoMode))],
+                delegate(string v) { s.CamInfoSet = true; s.CamInfoMode = v.StartsWith("Nama") ? 1 : (v.StartsWith("Sembunyi") ? 2 : 0); ViewCell.RaiseInfoMode(); },
+                "Bisa juga diubah dari menu klik kanan area gambar.");
             p.Check("Tombol buka/tutup function panel", s.PanelHandle, delegate(bool v) { s.PanelHandle = v; }, null);
             p.Check("Keterangan item setup (tooltip)", s.SetupTips, delegate(bool v) { s.SetupTips = v; }, null);
             p.Check("Tab boleh dipisah jadi jendela (klik kanan tab)", s.SeparateTab, delegate(bool v) { s.SeparateTab = v; }, null);

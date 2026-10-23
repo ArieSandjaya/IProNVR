@@ -134,6 +134,7 @@ namespace IproNvrTool
 
         public ViewCell()
         {
+            InfoModeChanged += OnInfoMode;
             BackColor = Asm.Bg;
             Padding = new Padding(2);
             AllowDrop = true;
@@ -366,10 +367,16 @@ namespace IproNvrTool
             return Dir.Title(NvrId, Channel);
         }
 
+        public static event Action InfoModeChanged;
+        public static void RaiseInfoMode() { if (InfoModeChanged != null) InfoModeChanged(); }
+        void OnInfoMode() { try { if (IsHandleCreated && !IsDisposed) BeginInvoke((Action)SetName); } catch { } }
+
         void SetName()
         {
-            lblName.Text = " " + TitleText() + (StatusText.Length > 0 ? "  -  " + StatusText : "");
-            lblName.Visible = AppSettings.Current.ShowCamNames && HasCamera;
+            int mode = AppSettings.Current.InfoMode;
+            if (mode == 1) lblName.Text = " " + Dir.CamName(NvrId, Channel);
+            else lblName.Text = " " + TitleText() + (StatusText.Length > 0 ? "  -  " + StatusText : "");
+            lblName.Visible = mode != 2 && HasCamera;
             RefreshRec();
         }
 
@@ -611,6 +618,7 @@ namespace IproNvrTool
         {
             if (disposing)
             {
+                InfoModeChanged -= OnInfoMode;
                 StopLive();
                 if (Pic != null && Pic.Image != null) { Image im = Pic.Image; Pic.Image = null; im.Dispose(); }
                 if (lblMsg != null && lblMsg.Font != null) { try { lblMsg.Font.Dispose(); } catch { } }
@@ -1005,6 +1013,20 @@ namespace IproNvrTool
                 menu.Items.Add(fe);
                 Asm.StyleMenu(menu);
             }
+            ToolStripMenuItem im = new ToolStripMenuItem("Judul area");
+            string[] inames = { "Lengkap (NVR, kamera, fps)", "Nama kamera saja", "Sembunyikan" };
+            for (int k = 0; k < 3; k++)
+            {
+                int mk = k;
+                ToolStripMenuItem sub = Asm.Sub(im, inames[k], delegate
+                {
+                    AppSettings.Current.CamInfoSet = true; AppSettings.Current.CamInfoMode = mk;
+                    try { AppSettings.Current.Save(); } catch { }
+                    ViewCell.RaiseInfoMode();
+                });
+                sub.Checked = AppSettings.Current.InfoMode == k;
+            }
+            menu.Items.Add(im);
             it = Asm.Item(menu, "No image display", delegate { Unassign(cell.Index); });
             it.Enabled = has;
             if (AllowRegisterLayout)

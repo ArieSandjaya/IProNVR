@@ -75,7 +75,10 @@ namespace IproNvrTool
         public int EventPollSec = 30;           // 0 = mati
         public bool ErrLogPoll = true;
         public int LogKeepDays = 14;
-        public bool ShowCamNames = true;        // judul kamera di area gambar
+        public bool ShowCamNames = true;        // (lama) judul kamera di area gambar
+        public int CamInfoMode = 0;             // judul area: 0 = lengkap (NVR, kamera, fps), 1 = nama kamera saja, 2 = sembunyikan
+        public bool CamInfoSet = false;         // CamInfoMode sudah diatur (bila belum, ikuti ShowCamNames lama)
+        public int InfoMode { get { return CamInfoSet ? CamInfoMode : (ShowCamNames ? 0 : 2); } }
 
         [XmlIgnore]
         public string Password
