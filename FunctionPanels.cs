@@ -419,8 +419,27 @@ namespace IproNvrTool
             btnCancel.Click += delegate { if (job != null) job.Abort(); };
             row.Controls.Add(btnGo);
             row.Controls.Add(btnCancel);
+            // lokasi simpan
+            var fp = new Panel(); fp.Dock = DockStyle.Top; fp.Height = Asm.S(28); fp.Tag = "nostyle";
+            var bb = new Button(); bb.Text = "..."; bb.Dock = DockStyle.Right; bb.Width = Asm.S(34); bb.Tag = "nostyle";
+            bb.Click += delegate
+            {
+                using (var d = new FolderBrowserDialog())
+                {
+                    d.Description = "Pilih folder penyimpanan hasil download";
+                    d.SelectedPath = txtFolder.Text;
+                    if (d.ShowDialog(FindForm()) == DialogResult.OK) { txtFolder.Text = d.SelectedPath; SaveFolder(); }
+                }
+            };
+            txtFolder.Dock = DockStyle.Fill;
+            txtFolder.Text = AppSettings.Current.ResolveDownloadFolder().Length > 0 && string.IsNullOrWhiteSpace(AppSettings.Current.QdFolder)
+                ? AppSettings.Current.ResolveDownloadFolder() : AppSettings.Current.QdFolder;
+            txtFolder.Leave += delegate { SaveFolder(); };
+            fp.Controls.Add(txtFolder); fp.Controls.Add(bb);
+            var lf = Lab("Simpan di:");
             Controls.Add(lblStatus);
             Controls.Add(row);
+            Controls.Add(fp); Controls.Add(lf);
             Controls.Add(cmbKind); Controls.Add(lk);
             Controls.Add(dtE); Controls.Add(le);
             Controls.Add(dtS); Controls.Add(ls);
@@ -444,6 +463,14 @@ namespace IproNvrTool
         {
             CamRef r = CameraSource == null ? null : CameraSource();
             lblCam.Text = r == null ? "Kamera: (pilih area gambar)" : "Kamera: " + Dir.Title(r.NvrId, r.Channel);
+        }
+
+        readonly TextBox txtFolder = new TextBox();
+
+        void SaveFolder()
+        {
+            AppSettings.Current.QdFolder = txtFolder.Text.Trim();
+            try { AppSettings.Current.Save(); } catch { }
         }
 
         string KindCode(int i)
@@ -488,6 +515,7 @@ namespace IproNvrTool
             if (job != null && !btnGo.Enabled) return;
             NvrRecord nvr = Dir.Nvr(r.NvrId);
             if (nvr == null) return;
+            SaveFolder();
             string folder = AppSettings.Current.QdFolder;
             if (string.IsNullOrWhiteSpace(folder)) folder = AppSettings.Current.ResolveDownloadFolder();
             var j = new DownloadJob();

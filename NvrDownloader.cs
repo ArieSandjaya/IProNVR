@@ -40,12 +40,18 @@ namespace IproNvrTool
             return Path.GetFileName(name);
         }
 
-        static void Finish(ref FileStream cur, ref string curPath, string finalName, string folder, DownloadJob job)
+        /// <summary>Ekstensi file hasil sesuai format yang dipilih.</summary>
+        public static string ExtOf(string kind)
+        {
+            return kind != null && kind.StartsWith("MP4", StringComparison.OrdinalIgnoreCase) ? ".mp4" : ".n3r";
+        }
+
+        static void Finish(ref FileStream cur, ref string curPath, string finalName, string folder, DownloadJob job, string kind)
         {
             if (cur == null) return;
             cur.Dispose();
             cur = null;
-            string dest = Path.Combine(folder, finalName);
+            string dest = Path.Combine(folder, Path.ChangeExtension(finalName, ExtOf(kind)));
             if (File.Exists(dest)) File.Delete(dest);
             File.Move(curPath, dest);
             job.Files++;
@@ -119,6 +125,7 @@ namespace IproNvrTool
             job.Req.ReadWriteTimeout = 120000; // NVR berhenti kirim data: jangan menggantung selamanya
             FileStream cur = null;
             string curPath = null;
+            long lastGot = 0;
             try
             {
                 using (WebResponse resp = job.Req.GetResponse())
@@ -136,7 +143,7 @@ namespace IproNvrTool
                         if (stt == "2") { job.Result = "Codec tidak kompatibel (MP4 tidak bisa untuk JPEG). Pilih N3R."; return false; }
                         if (stt == "3") { job.Result = "NVR sibuk (terlalu banyak proses bersamaan). Coba lagi nanti."; return false; }
 
-                        if (prev.Length > 0 && temp.Length > 0) Finish(ref cur, ref curPath, prev, folder, job);
+                        if (prev.Length > 0 && temp.Length > 0) Finish(ref cur, ref curPath, prev, folder, job, kind);
                         if (temp.Length > 0 && cur == null)
                         {
                             curPath = Path.Combine(folder, temp);
@@ -150,8 +157,12 @@ namespace IproNvrTool
                             if (status != null) status("Mengunduh... " + (job.Bytes / 1024) + " KB");
                         });
                         if (got < 0) break;   // koneksi terputus: file sementara disimpan oleh blok finally
-                        if (prev.Length > 0 && temp.Length == 0) Finish(ref cur, ref curPath, prev, folder, job);
+                        if (prev.Length > 0 && temp.Length == 0) Finish(ref cur, ref curPath, prev, folder, job, kind);
+                        lastGot = got;
                     }
+                    // stream selesai normal tapi file terakhir belum diberi nama akhir oleh NVR: namai sekarang (jangan tertinggal .tmp)
+                    if (cur != null && !job.Cancel && lastGot >= 0)
+                        Finish(ref cur, ref curPath, Path.GetFileName(curPath), folder, job, kind);
                 }
             }
             catch (Exception ex)
