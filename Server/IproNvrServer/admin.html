@@ -197,7 +197,7 @@ function listPage(r){
     if(admin){var dn=$('<button class="btn i">Deteksi RTSP (NVR terpilih)</button>');dn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}askDisc(+flt.nvr,[])};tools.appendChild(dn);
       var fn=$('<button class="btn p">Deteksi kamera dari NVR</button>');fn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}fetchCams(+flt.nvr)};tools.appendChild(fn);
       var tp=$('<button class="btn">⇩ Template Excel</button>');tp.onclick=dlTemplate;tools.appendChild(tp);
-      var up=$('<button class="btn s">⇧ Upload Excel (IP)</button>');up.onclick=upIp;tools.appendChild(up);
+      var up=$('<button class="btn s">⇧ Upload Excel (kamera)</button>');up.onclick=upIp;tools.appendChild(up);
       var gen=$('<button class="btn w">Buat kanal</button>');gen.onclick=genChannels;tools.appendChild(gen)}
   }
   if(admin){var add=$('<button class="btn p">＋ Tambah</button>');add.onclick=function(){edit(r,null)};tools.appendChild(add)}
@@ -219,7 +219,7 @@ function listPage(r){
 function btn(t,c,f){var b=document.createElement('button');b.className='btn sm '+c;b.textContent=t;b.style.marginLeft='4px';b.onclick=f;return b}
 
 
-/* ---------- impor IP kamera dari Excel: Nama NVR, Channel, IP Address ---------- */
+/* ---------- impor kamera dari Excel: Nama NVR, Channel, IP, Nama Kamera, Username, Password ---------- */
 function dlTemplate(){
   fetch('/api/ip-template',{headers:{Authorization:'Bearer '+tok}}).then(function(r){if(!r.ok)throw new Error('Gagal mengunduh template.');return r.blob()}).then(function(b){
     var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='ip-kamera.xlsx';document.body.appendChild(a);a.click();a.remove()}).catch(function(e){say(e.message,true)})}
@@ -233,12 +233,12 @@ function upIp(){
       var body={file:b64(rd.result),name:file.name,dry:true};
       say('Memeriksa file '+file.name+'…');
       api('POST','/api/import-ip',body).then(function(r){
-        var sk=r.skipped||[],t='File: '+file.name+'\n\nKamera diperbarui IP-nya: '+r.updated+'\nKamera baru dibuat: '+r.created+'\nSudah sama: '+r.unchanged+'\nBaris dilewati: '+sk.length;
+        var sk=r.skipped||[],t='File: '+file.name+'\n\nKamera diperbarui (IP / nama / login): '+r.updated+'\nKamera baru dibuat: '+r.created+'\nSudah sama: '+r.unchanged+'\nBaris dilewati: '+sk.length;
         if(sk.length)t+='\n\n'+sk.slice(0,12).map(function(x){return 'Baris '+x.row+': '+x.reason}).join('\n')+(sk.length>12?'\n… dan '+(sk.length-12)+' lainnya':'');
         if(!r.updated&&!r.created){say('Tidak ada perubahan. '+(sk.length?'Baris dilewati: '+sk.length+' (contoh: baris '+sk[0].row+' - '+sk[0].reason+')':'Semua IP sudah sama.'),!!sk.length);return}
         if(!confirm(t+'\n\nSimpan perubahan ini?')){say('Dibatalkan.');return}
         body.dry=false;
-        return api('POST','/api/import-ip',body).then(function(r2){msg={t:'Impor selesai: '+r2.updated+' IP diperbarui, '+r2.created+' kamera dibuat, '+(r2.skipped||[]).length+' baris dilewati.'};return reload()})
+        return api('POST','/api/import-ip',body).then(function(r2){msg={t:'Impor selesai: '+r2.updated+' kamera diperbarui, '+r2.created+' kamera dibuat, '+(r2.skipped||[]).length+' baris dilewati.'};return reload()})
       }).catch(function(e){say(e.message,true)})};
     rd.readAsArrayBuffer(file)};
   f.click()}
