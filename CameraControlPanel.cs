@@ -9,9 +9,9 @@ namespace IproNvrTool
     public class CameraControlPanel : Panel
     {
         readonly Func<ViewCell> selected;
-        readonly AsmTabControl tabs = new AsmTabControl();
-        readonly TabPage tCam = new TabPage("Camera");
-        readonly TabPage tPb = new TabPage("Playback");
+        readonly VTabs tabs = new VTabs();
+        readonly Panel tCam = new Panel();
+        readonly Panel tPb = new Panel();
         PtzPad pad;
         AsmButton btnCenter;
         TrackBar trkSpeed, trkZoom;
@@ -35,10 +35,11 @@ namespace IproNvrTool
             BackColor = Asm.Panel;
             Height = Asm.S(214);
             tabs.Dock = DockStyle.Fill;
+            tCam.Tag = "nostyle"; tPb.Tag = "nostyle";
             tCam.BackColor = Asm.Bg;
             tPb.BackColor = Asm.Panel2;
-            tabs.TabPages.Add(tCam);
-            tabs.TabPages.Add(tPb);
+            tabs.AddPage("Camera", tCam);
+            tabs.AddPage("Playback", tPb);
             Controls.Add(tabs);
             holdTimer.Interval = 350;
             holdTimer.Tick += delegate

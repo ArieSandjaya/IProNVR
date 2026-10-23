@@ -981,6 +981,97 @@ namespace IproNvrTool
         }
     }
 
+    /// <summary>Tab vertikal di sisi kiri (teks diputar 90 derajat) seperti panel Camera/HDD di ASM300.</summary>
+    public class VTabs : Panel
+    {
+        readonly List<string> titles = new List<string>();
+        readonly List<Panel> pages = new List<Panel>();
+        readonly Strip strip;
+        int sel;
+        public event Action SelectedChanged;
+
+        class Strip : Control
+        {
+            public VTabs Owner;
+            public Strip()
+            {
+                SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
+                Tag = "nostyle";
+            }
+            Rectangle Rect(int i) { int h = Asm.S(92); return new Rectangle(0, i * (h + 2), Width, h); }
+            protected override void OnMouseDown(MouseEventArgs e)
+            {
+                for (int i = 0; i < Owner.titles.Count; i++) if (Rect(i).Contains(e.Location)) { Owner.SelectedIndex = i; break; }
+                base.OnMouseDown(e);
+            }
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(Asm.Bg);
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                for (int i = 0; i < Owner.titles.Count; i++)
+                {
+                    Rectangle r = Rect(i);
+                    bool on = i == Owner.sel;
+                    using (var b = new SolidBrush(on ? Color.FromArgb(34, 46, 68) : Color.FromArgb(20, 25, 35))) g.FillRectangle(b, r);
+                    using (var p = new Pen(on ? Asm.Accent : Asm.Border)) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
+                    if (on) using (var b = new SolidBrush(Asm.Accent)) g.FillRectangle(b, r.X, r.Y, Asm.S(3), r.Height);
+                    var st = g.Save();
+                    g.TranslateTransform(r.X + r.Width / 2f, r.Y + r.Height / 2f);
+                    g.RotateTransform(-90);
+                    using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                    using (var br = new SolidBrush(on ? Asm.Text : Asm.Muted))
+                        g.DrawString(Owner.titles[i], Asm.F(10f, on), br, 0, 0, sf);
+                    g.Restore(st);
+                }
+            }
+        }
+
+        public VTabs()
+        {
+            Tag = "nostyle";
+            BackColor = Asm.Bg;
+            strip = new Strip { Owner = this, Width = Asm.S(34) };
+            Controls.Add(strip);
+        }
+
+        public List<Panel> Pages { get { return pages; } }
+
+        public void AddPage(string title, Panel page)
+        {
+            titles.Add(title);
+            pages.Add(page);
+            page.Dock = DockStyle.None;
+            page.Visible = pages.Count - 1 == sel;
+            Controls.Add(page);
+            PerformLayout();
+            strip.Invalidate();
+        }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            int sw = strip.Width;
+            strip.SetBounds(0, 0, sw, Height);
+            foreach (Panel p in pages) p.SetBounds(sw, 0, Math.Max(0, Width - sw), Height);
+        }
+
+        public int SelectedIndex
+        {
+            get { return sel; }
+            set
+            {
+                if (value < 0 || value >= pages.Count || value == sel) return;
+                sel = value;
+                for (int i = 0; i < pages.Count; i++) pages[i].Visible = i == sel;
+                strip.Invalidate();
+                if (SelectedChanged != null) SelectedChanged();
+            }
+        }
+
+        public string TitleOf(int i) { return titles[i]; }
+    }
+
     /// <summary>TabControl gelap (ala ASM300) untuk halaman setup/pencarian.</summary>
     public class AsmTabControl : TabControl
     {

@@ -44,7 +44,7 @@ namespace IproNvrTool
         FlowLayoutPanel shortcutHost;
 
         // operation panel
-        AsmTabControl opTabs;
+        VTabs opTabs;
         PtzPad pad;
         AsmButton btnCenter;
         TrackBar trkSpeed, trkZoom;
@@ -140,6 +140,10 @@ namespace IproNvrTool
             center.Controls.Add(hBottom);
             center.Controls.Add(opPanel);
             center.Controls.Add(statusBar);
+            var info = new InfoStrip(delegate { return Grid.Selected; });
+            info.Dock = DockStyle.Top;
+            center.Controls.Add(info);
+            Grid.SelectionChanged += delegate { info.Invalidate(); };
             center.Controls.Add(toolbar);
 
             Controls.Add(center);
@@ -467,14 +471,14 @@ namespace IproNvrTool
 
         void BuildOperationPanel()
         {
-            opTabs = new AsmTabControl();
+            opTabs = new VTabs();
             opTabs.Dock = DockStyle.Fill;
-            var tCam = new TabPage("Camera");
-            var tHdd = new TabPage("HDD");
+            var tCam = new Panel(); tCam.Tag = "nostyle";
+            var tHdd = new Panel(); tHdd.Tag = "nostyle";
             tCam.BackColor = Asm.Bg;
             tHdd.BackColor = Asm.Panel2;
-            opTabs.TabPages.Add(tCam);
-            opTabs.TabPages.Add(tHdd);
+            opTabs.AddPage("Camera", tCam);
+            opTabs.AddPage("HDD", tHdd);
             opPanel.Controls.Add(opTabs);
 
             // ---- Camera ----
@@ -636,15 +640,8 @@ namespace IproNvrTool
         {
             ViewCell c = Grid.Selected;
             bool cam = c != null && c.HasCamera && !c.Playback && AsmApp.Can(Perm.Camera);
-            foreach (TabPage tp in opTabs.TabPages)
-            {
-                if (tp.Text != "Camera") continue;
-                foreach (Control k in tp.Controls) k.Enabled = cam;
-            }
-            if (opTabs.TabPages.Count > 1)
-            {
-                foreach (Control k in opTabs.TabPages[1].Controls) k.Enabled = AsmApp.Can(Perm.Playback);
-            }
+            foreach (Control k in opTabs.Pages[0].Controls) k.Enabled = cam;
+            foreach (Control k in opTabs.Pages[1].Controls) k.Enabled = AsmApp.Can(Perm.Playback);
         }
 
         // =============== PTZ ===============
