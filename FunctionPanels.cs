@@ -135,19 +135,21 @@ namespace IproNvrTool
                     if (fn.Nodes.Count > 0 || filter.Length == 0) tv.Nodes.Add(fn);
                 }
             }
-            else
+            // NVR (semua) -> kamera. Bila sudah ada folder, hanya kamera yang belum masuk folder manapun yang ditampilkan di sini,
+            // sehingga kamera dari NVR ke-2, ke-3, dst tidak hilang.
+            var inFolder = new HashSet<string>();
+            foreach (FolderRec f in folders) foreach (CamRef r in f.Cams) inFolder.Add(r.NvrId + ":" + r.Channel);
+            foreach (NvrRecord nvr in Dir.Nvrs)
             {
-                foreach (NvrRecord nvr in Dir.Nvrs)
+                var nn = new TreeNode(nvr.Name);
+                foreach (CameraRecord c in Dir.Registered(nvr.Id))
                 {
-                    var nn = new TreeNode(nvr.Name);
-                    foreach (CameraRecord c in Dir.Registered(nvr.Id))
-                    {
-                        if (!Match(nvr.Id, c.Channel)) continue;
-                        nn.Nodes.Add(CamNode(nvr.Id, c.Channel));
-                        any = true;
-                    }
-                    if (nn.Nodes.Count > 0 || filter.Length == 0) tv.Nodes.Add(nn);
+                    if (inFolder.Contains(nvr.Id + ":" + c.Channel)) continue;
+                    if (!Match(nvr.Id, c.Channel)) continue;
+                    nn.Nodes.Add(CamNode(nvr.Id, c.Channel));
+                    any = true;
                 }
+                if (nn.Nodes.Count > 0 || (filter.Length == 0 && folders.Count == 0)) tv.Nodes.Add(nn);
             }
             if (filter.Length > 0) tv.ExpandAll();
             else foreach (TreeNode n in tv.Nodes) if (open.Count == 0 || open.Contains(n.Text)) n.Expand();
