@@ -21,6 +21,7 @@ Buka `Server/IproNvrServer/IproNvrServer.csproj` di Visual Studio (net48) lalu B
 - Pengaturan: `server.json` di samping exe (`Port` 8470, `DataDir`, `TokenDays` 30)
 - Pendaftaran NVR: setelah NVR baru disimpan, server otomatis tes login dan membaca kamera yang terdaftar di NVR (kanal, status normal/error, jumlah kanal). Ulangi dengan tombol "Deteksi kamera".
 - Menu Sequence disembunyikan di halaman admin (data dan API tetap ada).
+- Isi IP kamera dari Excel: tab Kamera, tombol "Template Excel" (berisi NVR/kanal yang ada) lalu isi kolom IP Address dan "Upload Excel (IP)". Kolom: Nama NVR, Channel, IP Address (.xlsx atau .csv). Ada pratinjau sebelum disimpan; kamera yang belum ada dibuat.
 - Group: menu Group memakai editor visual seperti aplikasi client (pilih pola layar, klik/seret kamera ke area).
 - Halaman admin web: `http://SERVER:8470/`
 

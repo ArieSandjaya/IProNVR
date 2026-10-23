@@ -30,6 +30,120 @@ namespace IproNvrServer
         readonly Dictionary<string, int[]> fails = new Dictionary<string, int[]>();   // ip -> [jumlah gagal, tick terakhir]
         readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
+        // ---------- impor / templat Excel: Nama NVR, Channel, IP Address ----------
+
+        byte[] BuildIpTemplate()
+        {
+            var rows = new List<string[]>();
+            rows.Add(new[] { "Nama NVR", "Channel", "IP Address" });
+            var nvrs = new Dictionary<long, string>();
+            foreach (Row n in store.List(Schema.ByRoute("nvrs"))) nvrs[Convert.ToInt64(n["id"])] = Convert.ToString(n["name"]);
+            foreach (Row c in store.List(Schema.ByRoute("cameras")))
+            {
+                string nn;
+                if (!nvrs.TryGetValue(Convert.ToInt64(c["nvr_id"]), out nn)) continue;
+                rows.Add(new[] { nn, Convert.ToString(c["channel"]), Convert.ToString(c["ip_address"]) });
+            }
+            if (rows.Count == 1)
+            {
+                string sample = nvrs.Count > 0 ? new List<string>(nvrs.Values)[0] : "NVR Lobby";
+                rows.Add(new[] { sample, "1", "192.168.1.101" });
+                rows.Add(new[] { sample, "2", "192.168.1.102" });
+            }
+            return ExcelIo.Write("IP Kamera", rows, new[] { 28, 10, 22 }, new[] { 1 });
+        }
+
+        static bool IsInt(string s, out int v)
+        {
+            double d;
+            v = 0;
+            if (!double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out d)) return false;
+            if (d != Math.Floor(d) || d < 1 || d > 256) return false;
+            v = (int)d;
+            return true;
+        }
+
+        /// <summary>Body: file (base64 .xlsx / .csv), name (nama file), dry (true = hanya cek, belum disimpan).
+        /// Kolom: Nama NVR, Channel, IP Address. Kamera yang belum ada dibuat; IP kosong dilewati.</summary>
+        object ImportIps(Dictionary<string, object> body, string by, out string error)
+        {
+            error = null;
+            object o;
+            string b64 = body.TryGetValue("file", out o) && o != null ? Convert.ToString(o) : "";
+            string fname = body.TryGetValue("name", out o) && o != null ? Convert.ToString(o) : "";
+            bool dry = body.TryGetValue("dry", out o) && o != null && (o is bool ? (bool)o : Convert.ToString(o) == "true");
+            if (b64.Length == 0) { error = "File kosong."; return null; }
+            List<string[]> rows;
+            try { rows = ExcelIo.Read(Convert.FromBase64String(b64), fname); }
+            catch (Exception ex) { error = "File tidak bisa dibaca (harus .xlsx atau .csv): " + ex.Message; return null; }
+            if (rows.Count == 0) { error = "File tidak berisi data."; return null; }
+
+            int cN = 0, cC = 1, cI = 2, first = 0;
+            int tmp;
+            string[] h0 = rows[0];
+            if (h0.Length < 2 || !IsInt(h0[1], out tmp))
+            {
+                first = 1;   // baris pertama = judul kolom
+                for (int i = 0; i < h0.Length; i++)
+                {
+                    string t = h0[i].ToLowerInvariant();
+                    if (t.Contains("nvr")) cN = i;
+                    else if (t.Contains("channel") || t.Contains("kanal") || t == "ch") cC = i;
+                    else if (t.Contains("ip") || t.Contains("alamat")) cI = i;
+                }
+            }
+            var nvrByName = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (Row n in store.List(Schema.ByRoute("nvrs")))
+            {
+                string nm = (Convert.ToString(n["name"]) ?? "").Trim();
+                if (!nvrByName.ContainsKey(nm)) nvrByName[nm] = Convert.ToInt64(n["id"]);
+            }
+            var cams = new Dictionary<string, Row>();
+            foreach (Row c in store.List(Schema.ByRoute("cameras"))) cams[Convert.ToInt64(c["nvr_id"]) + ":" + Convert.ToInt64(c["channel"])] = c;
+
+            int updated = 0, created = 0, same = 0;
+            var skipped = new List<object>();
+            var seen = new Dictionary<string, string>();
+            var work = new List<KeyValuePair<string, object>>();
+            var re = new System.Text.RegularExpressions.Regex(@"^[A-Za-z0-9._\-]+$");
+            for (int r = first; r < rows.Count; r++)
+            {
+                string[] row = rows[r];
+                string nn = cN < row.Length ? row[cN].Trim() : "";
+                string cs = cC < row.Length ? row[cC].Trim() : "";
+                string ip = cI < row.Length ? row[cI].Trim() : "";
+                int line = r + 1;
+                Action<string> skip = delegate(string why) { skipped.Add(new Dictionary<string, object> { { "row", line }, { "reason", why } }); };
+                long nid; int ch;
+                if (nn.Length == 0 && cs.Length == 0 && ip.Length == 0) continue;
+                if (!nvrByName.TryGetValue(nn, out nid)) { skip("NVR \"" + nn + "\" tidak ditemukan (nama harus sama dengan di menu NVR)"); continue; }
+                if (!IsInt(cs, out ch)) { skip("Channel \"" + cs + "\" tidak valid (angka 1-256)"); continue; }
+                if (ip.Length == 0) { skip("IP kosong"); continue; }
+                if (!re.IsMatch(ip)) { skip("IP \"" + ip + "\" tidak valid (tanpa spasi / http://)"); continue; }
+                string key = nid + ":" + ch;
+                string prev;
+                if (seen.TryGetValue(key, out prev) && prev != ip) { skip("Baris ganda untuk kanal ini (dipakai baris terakhir)"); }
+                seen[key] = ip;
+                work.RemoveAll(delegate(KeyValuePair<string, object> kv) { return kv.Key == key; });
+                work.Add(new KeyValuePair<string, object>(key, new object[] { nid, ch, ip }));
+            }
+            foreach (KeyValuePair<string, object> kv in work)
+            {
+                object[] a = (object[])kv.Value;
+                long nid = (long)a[0]; int ch = (int)a[1]; string ip = (string)a[2];
+                Row cur;
+                bool exists = cams.TryGetValue(kv.Key, out cur);
+                if (exists && Convert.ToString(cur["ip_address"]) == ip) { same++; continue; }
+                if (exists) updated++; else created++;
+                if (dry) continue;
+                var b = new Dictionary<string, object> { { "nvr_id", (double)nid }, { "channel", (double)ch }, { "ip_address", ip } };
+                if (!exists) b["name"] = "CH" + ch;
+                store.Upsert(Schema.ByRoute("cameras"), b);
+            }
+            if (!dry) Log.Write("Impor IP dari Excel oleh " + by + ": diperbarui " + updated + ", dibuat " + created + ", sama " + same + ", dilewati " + skipped.Count);
+            return new Dictionary<string, object> { { "dry", dry }, { "updated", updated }, { "created", created }, { "unchanged", same }, { "skipped", skipped }, { "rows", rows.Count - first } };
+        }
+
         /// <summary>Baca daftar kamera yang terdaftar di NVR (as_getinfo.cgi?FILE=2) dan buat kamera yang belum ada di server.</summary>
         object FetchNvrCameras(Dictionary<string, object> body, string by, out string error)
         {
@@ -392,6 +506,27 @@ namespace IproNvrServer
                     Preview pp;
                     lock (previews) { previews.TryGetValue(seg.Length > 1 ? seg[1] : "", out pp); }
                     Json(rs, 200, new Dictionary<string, object> { { "error", pp == null ? "Pratinjau kedaluwarsa." : pp.Error } });
+                    return;
+                }
+                if (head == "ip-template" && rq.HttpMethod == "GET")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    byte[] xb = BuildIpTemplate();
+                    rs.StatusCode = 200;
+                    rs.ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    rs.Headers["Content-Disposition"] = "attachment; filename=\"ip-kamera.xlsx\"";
+                    rs.Headers["Cache-Control"] = "no-store";
+                    rs.ContentLength64 = xb.Length;
+                    rs.OutputStream.Write(xb, 0, xb.Length);
+                    return;
+                }
+                if (head == "import-ip" && rq.HttpMethod == "POST")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    string ie;
+                    object ir = ImportIps(ReadBody(rq), s.User["name"] + "", out ie);
+                    if (ir == null) { Err(rs, 400, ie); return; }
+                    Json(rs, 200, ir);
                     return;
                 }
                 if (head == "nvr-cameras" && rq.HttpMethod == "POST")
