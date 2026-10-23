@@ -556,7 +556,98 @@ namespace IproNvrTool
         }
     }
 
-    /// <summary>Panel fungsi ala ASM300: kolom pencarian, bar yang bisa dibuka (hanya satu terbuka), isi panel di tengah.</summary>
+    /// <summary>Kolom pencarian berbentuk pil: ikon kaca pembesar, teks bantuan "Search", tombol hapus.</summary>
+    public class PillSearch : Control
+    {
+        public readonly TextBox Box = new TextBox();
+        public PillSearch()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+            Tag = "nostyle";
+            Height = Asm.S(40);
+            Box.BorderStyle = BorderStyle.None;
+            Box.BackColor = Color.FromArgb(18, 22, 31);
+            Box.ForeColor = Asm.Text;
+            Box.Font = Asm.F(10f, false);
+            Box.MaxLength = 16;
+            Box.Tag = "nostyle";
+            Box.TextChanged += delegate { Invalidate(); };
+            Box.GotFocus += delegate { Invalidate(); };
+            Box.LostFocus += delegate { if (Box.Text.Length == 0) Box.Visible = false; Invalidate(); };
+            Box.Visible = false;       // saat kosong & tidak fokus: tampilkan teks bantuan "Search" (digambar di bawah)
+            Controls.Add(Box);
+        }
+
+        Rectangle ClearRect { get { int s = Asm.S(26); return new Rectangle(Width - s - Asm.S(12), (Height - s) / 2, s, s); } }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            int x = Asm.S(46), r = Asm.S(46);
+            Box.Left = x;
+            Box.Width = Math.Max(20, Width - x - r);
+            Box.Top = (Height - Box.Height) / 2;
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                if (Box.Text.Length > 0 && ClearRect.Contains(e.Location)) Box.Text = "";
+                Box.Visible = true;
+                Box.Focus();
+            }
+            base.OnMouseUp(e);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            Cursor = Box.Text.Length > 0 && ClearRect.Contains(e.Location) ? Cursors.Hand : Cursors.Default;
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(Asm.Panel);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle r = new Rectangle(Asm.S(4), Asm.S(3), Width - Asm.S(9), Height - Asm.S(7));
+            using (var gp = AsmUi.RoundRect(r, r.Height / 2))
+            {
+                using (var b = new SolidBrush(Color.FromArgb(18, 22, 31))) g.FillPath(b, gp);
+                using (var p = new Pen(Box.Focused ? Asm.Accent : Color.FromArgb(52, 62, 82), 1.5f)) g.DrawPath(p, gp);
+            }
+            int s = Asm.S(22);
+            AsmIcons.Draw(g, AsmIcon.Search, new Rectangle(Asm.S(14), (Height - s) / 2, s, s), Asm.Text);
+            if (!Box.Visible)
+                TextRenderer.DrawText(g, "Search", Asm.F(10.5f, true), new Rectangle(Box.Left, 0, Box.Width, Height), Color.FromArgb(120, 130, 150),
+                    TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
+            if (Box.Text.Length > 0)
+                AsmIcons.Draw(g, AsmIcon.Close, new Rectangle(Width - Asm.S(34), (Height - Asm.S(16)) / 2, Asm.S(16), Asm.S(16)), Asm.Text);
+        }
+
+        public override string Text { get { return Box.Text; } set { Box.Text = value; if (value.Length > 0) Box.Visible = true; } }
+    }
+
+    public static class AsmUi
+    {
+        public static GraphicsPath RoundRect(Rectangle r, int radius)
+        {
+            var p = new GraphicsPath();
+            int d = Math.Max(1, radius * 2);
+            if (d > r.Height) d = r.Height;
+            if (d > r.Width) d = r.Width;
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    /// <summary>Panel fungsi ala ASM300: kolom pencarian, bar yang bisa dibuka (hanya satu terbuka).
+    /// Bar grup atas ditumpuk dari atas dengan isi di area tengah; bar grup bawah ditumpuk dari bawah dengan isi tepat di bawah bar-nya.</summary>
     public class FunctionPanel : Panel
     {
         class Section
@@ -566,6 +657,7 @@ namespace IproNvrTool
             public Control Content;
             public AccordionBar Bar;
             public bool Top;
+            public int Height;
         }
 
         class AccordionBar : Control
@@ -578,7 +670,7 @@ namespace IproNvrTool
             public AccordionBar()
             {
                 SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
-                Height = Asm.S(26);
+                Height = Asm.S(34);
                 Cursor = Cursors.Hand;
                 Tag = "nostyle";
             }
@@ -589,21 +681,35 @@ namespace IproNvrTool
             protected override void OnPaint(PaintEventArgs e)
             {
                 Graphics g = e.Graphics;
-                using (var b = new SolidBrush(Open ? Asm.BarOpen : (hot ? Asm.BarHot : Asm.Bar))) g.FillRectangle(b, ClientRectangle);
-                using (var p = new Pen(Asm.Bg)) g.DrawLine(p, 0, Height - 1, Width, Height - 1);
+                g.Clear(Asm.Panel);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle r = new Rectangle(0, Asm.S(2), Width - 1, Height - Asm.S(4));
+                Color c1 = Open ? Color.FromArgb(70, 88, 118) : (hot ? Color.FromArgb(62, 76, 100) : Color.FromArgb(54, 66, 88));
+                Color c2 = Open ? Color.FromArgb(52, 66, 92) : (hot ? Color.FromArgb(46, 58, 80) : Color.FromArgb(40, 50, 70));
+                using (var gp = AsmUi.RoundRect(r, Asm.S(3)))
+                using (var br = new LinearGradientBrush(r, c1, c2, 90f))
+                    g.FillPath(br, gp);
                 int s = Asm.S(14);
-                AsmIcons.Draw(g, Open ? AsmIcon.ChevronUp : AsmIcon.ChevronDown, new Rectangle(Asm.S(6), (Height - s) / 2, s, s), Asm.Text);
-                TextRenderer.DrawText(g, Title, Asm.F(9f, true), new Rectangle(Asm.S(26), 0, Width - Asm.S(30), Height),
-                    Match ? Asm.Warn : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                AsmIcons.Draw(g, Open ? AsmIcon.ChevronUp : AsmIcon.ChevronDown, new Rectangle(Asm.S(10), (Height - s) / 2, s, s), Color.FromArgb(200, 210, 226));
+                TextRenderer.DrawText(g, Title, Asm.F(10f, true), new Rectangle(Asm.S(34), 0, Width - Asm.S(38), Height),
+                    Match ? Asm.Warn : Color.FromArgb(205, 214, 230), TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+            }
+        }
+
+        /// <summary>Area penampung yang menata bar & isi secara manual (tidak bergantung pada urutan Dock).</summary>
+        class Host : Panel
+        {
+            public FunctionPanel Owner;
+            protected override void OnLayout(LayoutEventArgs e)
+            {
+                base.OnLayout(e);
+                if (Owner != null) Owner.DoLayout(this);
             }
         }
 
         readonly List<Section> sections = new List<Section>();
-        readonly Panel top = new Panel();
-        readonly Panel bottom = new Panel();
-        readonly Panel body = new Panel();
-        readonly Panel searchRow = new Panel();
-        readonly TextBox txtSearch = new TextBox();
+        readonly Host host = new Host();
+        readonly PillSearch searchRow = new PillSearch();
         string openKey = "";
         bool suppressSearch;
 
@@ -617,41 +723,53 @@ namespace IproNvrTool
             Width = Asm.S(270);
 
             searchRow.Dock = DockStyle.Top;
-            searchRow.Height = Asm.S(32);
-            searchRow.BackColor = Asm.Panel;
-            searchRow.Padding = new Padding(Asm.S(4));
-            searchRow.Tag = "nostyle";
-            txtSearch.Dock = DockStyle.Fill;
-            txtSearch.BorderStyle = BorderStyle.FixedSingle;
-            txtSearch.BackColor = Asm.Panel2;
-            txtSearch.ForeColor = Asm.Text;
-            txtSearch.MaxLength = 16;
-            txtSearch.Font = Asm.F(9f, false);
-            txtSearch.TextChanged += delegate
+            searchRow.Box.TextChanged += delegate
             {
-                if (!suppressSearch && SearchTextChanged != null) SearchTextChanged(txtSearch.Text.Trim());
+                if (!suppressSearch && SearchTextChanged != null) SearchTextChanged(searchRow.Box.Text.Trim());
             };
-            var clear = new AsmButton(AsmIcon.Close, "Hapus pencarian", delegate { txtSearch.Text = ""; });
-            clear.Dock = DockStyle.Right;
-            clear.Width = Asm.S(26);
-            clear.Borderless = true;
-            searchRow.Controls.Add(txtSearch);
-            searchRow.Controls.Add(clear);
 
-            top.Dock = DockStyle.Top;
-            top.Height = 0;
-            top.Tag = "nostyle";
-            bottom.Dock = DockStyle.Bottom;
-            bottom.Height = 0;
-            bottom.Tag = "nostyle";
-            body.Dock = DockStyle.Fill;
-            body.BackColor = Asm.Panel;
-            body.Tag = "nostyle";
+            host.Owner = this;
+            host.Dock = DockStyle.Fill;
+            host.BackColor = Asm.Panel;
+            host.Tag = "nostyle";
 
-            Controls.Add(body);
-            Controls.Add(bottom);
-            Controls.Add(top);
+            Controls.Add(host);
             Controls.Add(searchRow);
+        }
+
+        void DoLayout(Host h)
+        {
+            int w = h.ClientSize.Width, H = h.ClientSize.Height;
+            int y = 0;
+            int barH = Asm.S(34);
+            // grup atas: bar ditumpuk dari atas
+            foreach (Section s in sections)
+            {
+                if (!s.Top) continue;
+                s.Bar.SetBounds(0, y, w, barH);
+                y += barH;
+            }
+            // grup bawah: dari bawah ke atas; isi yang terbuka tepat di bawah bar-nya
+            var bot = sections.FindAll(delegate(Section s) { return !s.Top; });
+            int nbars = bot.Count;
+            int openH = 0;
+            Section op = bot.Find(delegate(Section s) { return s.Key == openKey; });
+            if (op != null) openH = Math.Max(Asm.S(120), Math.Min(op.Height, H - y - nbars * barH - Asm.S(40)));
+            int by = H - nbars * barH - openH;
+            foreach (Section s in bot)
+            {
+                s.Bar.SetBounds(0, by, w, barH);
+                by += barH;
+                if (s == op) { s.Content.SetBounds(0, by, w, openH); by += openH; }
+            }
+            // isi grup atas yang terbuka mengisi sisa tengah
+            int mid = by - 0;
+            foreach (Section s in sections)
+            {
+                if (!s.Top || s.Key != openKey) continue;
+                int top = y, bottom = H - nbars * barH - openH;
+                s.Content.SetBounds(0, top, w, Math.Max(0, bottom - top));
+            }
         }
 
         public string OpenKey { get { return openKey; } }
@@ -665,7 +783,7 @@ namespace IproNvrTool
         public void ClearSearch()
         {
             suppressSearch = true;
-            txtSearch.Text = "";
+            searchRow.Box.Text = "";
             suppressSearch = false;
             foreach (Section s in sections) s.Bar.Match = false;
             Invalidate(true);
@@ -673,28 +791,27 @@ namespace IproNvrTool
 
         public void AddSection(string key, string title, Control content, bool atTop)
         {
+            AddSection(key, title, content, atTop, 300);
+        }
+
+        public void AddSection(string key, string title, Control content, bool atTop, int heightPx)
+        {
             var s = new Section();
             s.Key = key;
             s.Title = title;
             s.Content = content;
             s.Top = atTop;
+            s.Height = Asm.S(heightPx);
             s.Bar = new AccordionBar();
             s.Bar.Title = title;
-            s.Bar.Dock = DockStyle.Top;
             string k = key;
             s.Bar.Click += delegate { Toggle(k); };
-            content.Dock = DockStyle.Fill;
+            content.Dock = DockStyle.None;
             content.Visible = false;
-            body.Controls.Add(content);
             sections.Add(s);
-            // Panel.AutoSize + Dock.Top: urutan tampil = kebalikan urutan Add, jadi sisipkan di indeks 0
-            // urutan docking WinForms: indeks tertinggi dipasang lebih dulu (paling luar).
-            // Grup atas: bar pertama harus paling atas -> sisipkan tiap bar baru di indeks 0.
-            // Grup bawah: bar terakhir harus paling bawah -> cukup ditambahkan di akhir.
-            Panel host = atTop ? top : bottom;
+            host.Controls.Add(content);
             host.Controls.Add(s.Bar);
-            if (atTop) host.Controls.SetChildIndex(s.Bar, 0);
-            host.Height = host.Controls.Count * s.Bar.Height;
+            host.PerformLayout();
         }
 
         Section Find(string key)
@@ -725,6 +842,7 @@ namespace IproNvrTool
                 s.Bar.Invalidate();
                 s.Content.Visible = o;
             }
+            host.PerformLayout();
             if (SectionOpened != null && key.Length > 0) SectionOpened(key);
         }
 

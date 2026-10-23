@@ -342,8 +342,13 @@ namespace IproNvrTool
     /// <summary>Quick playback: pilih tanggal/jam lalu putar kamera terpilih di Operation window.</summary>
     public class QuickPlaybackPanel : Panel
     {
-        readonly DateTimePicker dtp = new DateTimePicker();
+        readonly DarkCalendar cal = new DarkCalendar();
+        readonly ComboBox cmbH = new ComboBox();
+        readonly ComboBox cmbM = new ComboBox();
+        readonly Label lblColon = new Label();
         readonly Label lblCam = new Label();
+        readonly AsmButton btnDate = new AsmButton();
+        readonly AsmButton btnLast = new AsmButton();
         public Func<CamRef> CameraSource;
         public event Action<CamRef, DateTime> PlayRequested;
 
@@ -352,48 +357,70 @@ namespace IproNvrTool
             Tag = "nostyle";
             BackColor = Asm.Panel;
             Padding = new Padding(Asm.S(8));
-            lblCam.Dock = DockStyle.Top;
-            lblCam.Height = Asm.S(40);
-            lblCam.ForeColor = Asm.Text;
-            lblCam.Tag = "nostyle";
-            lblCam.Text = "Kamera: (pilih area gambar)";
-            var l2 = new Label();
-            l2.Text = "Tanggal & jam mulai:";
-            l2.ForeColor = Asm.Muted;
-            l2.Dock = DockStyle.Top;
-            l2.Height = Asm.S(22);
-            l2.Tag = "nostyle";
-            dtp.Dock = DockStyle.Top;
-            dtp.Format = DateTimePickerFormat.Custom;
-            dtp.CustomFormat = "yyyy/MM/dd  HH:mm:ss";
-            dtp.Value = DateTime.Now.AddMinutes(-10);
-            var row = new FlowLayoutPanel();
-            row.Dock = DockStyle.Top;
-            row.Height = Asm.S(40);
-            row.Tag = "nostyle";
-            row.Padding = new Padding(0, Asm.S(6), 0, 0);
-            var play = new AsmButton(); play.Icon = AsmIcon.Play; play.Label = "Putar"; play.Width = Asm.S(90);
-            play.Click += delegate
+            bool h24 = AppSettings.Current.Time24h;
+            for (int h = 0; h < 24; h++)
+                cmbH.Items.Add(h24 ? h.ToString("00") : (h < 12 ? "AM" : "PM") + (h % 12 == 0 ? 12 : h % 12));
+            for (int m = 0; m < 60; m++) cmbM.Items.Add(m.ToString("00"));
+            foreach (ComboBox c in new[] { cmbH, cmbM })
             {
-                CamRef r = CameraSource == null ? null : CameraSource();
-                if (r == null) { MessageBox.Show("Pilih dulu area gambar yang berisi kamera.", "Quick playback"); return; }
-                if (PlayRequested != null) PlayRequested(r, dtp.Value);
-            };
-            var m5 = new AsmButton(); m5.Label = "-5 mnt"; m5.Width = Asm.S(66); m5.Click += delegate { dtp.Value = DateTime.Now.AddMinutes(-5); };
-            var m60 = new AsmButton(); m60.Label = "-1 jam"; m60.Width = Asm.S(66); m60.Click += delegate { dtp.Value = DateTime.Now.AddHours(-1); };
-            row.Controls.Add(play);
-            row.Controls.Add(m5);
-            row.Controls.Add(m60);
-            Controls.Add(row);
-            Controls.Add(dtp);
-            Controls.Add(l2);
-            Controls.Add(lblCam);
+                c.DropDownStyle = ComboBoxStyle.DropDownList;
+                c.FlatStyle = FlatStyle.Flat;
+                c.BackColor = Color.FromArgb(18, 22, 31);
+                c.ForeColor = Asm.Text;
+                c.Font = Asm.F(10f, false);
+                c.MaxDropDownItems = 12;
+                c.Tag = "nostyle";
+            }
+            DateTime t = DateTime.Now;
+            cal.Value = t.Date;
+            cmbH.SelectedIndex = t.Hour;
+            cmbM.SelectedIndex = t.Minute;
+            lblColon.Text = ":"; lblColon.ForeColor = Asm.Text; lblColon.Font = Asm.F(11f, true);
+            lblColon.TextAlign = ContentAlignment.MiddleCenter; lblColon.Tag = "nostyle";
+            lblCam.ForeColor = Asm.Muted; lblCam.Tag = "nostyle"; lblCam.TextAlign = ContentAlignment.MiddleCenter;
+            lblCam.Text = "Camera: (select an image area)";
+            lblCam.AutoEllipsis = true;
+
+            btnDate.Label = "Go to date"; btnLast.Label = "Go to last";
+            btnDate.Click += delegate { Go(Selected()); };
+            btnLast.Click += delegate { Go(DateTime.Now.AddMinutes(-5)); };
+
+            Controls.Add(cal); Controls.Add(cmbH); Controls.Add(cmbM); Controls.Add(lblColon);
+            Controls.Add(lblCam); Controls.Add(btnDate); Controls.Add(btnLast);
+        }
+
+        DateTime Selected()
+        {
+            return cal.Value.Date.AddHours(Math.Max(0, cmbH.SelectedIndex)).AddMinutes(Math.Max(0, cmbM.SelectedIndex));
+        }
+
+        void Go(DateTime at)
+        {
+            CamRef r = CameraSource == null ? null : CameraSource();
+            if (r == null) { MessageBox.Show("Select an image area that contains a camera first.", "Quick playback"); return; }
+            if (PlayRequested != null) PlayRequested(r, at);
+        }
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            int pad = Asm.S(10), w = ClientSize.Width - pad * 2, y = pad;
+            cal.SetBounds(pad, y, w, Asm.S(236)); y += cal.Height + Asm.S(12);
+            int ch = Asm.S(28), gap = Asm.S(22);
+            cmbH.SetBounds(pad, y, (w - gap) / 2, ch);
+            lblColon.SetBounds(pad + (w - gap) / 2, y, gap, ch);
+            cmbM.SetBounds(pad + (w - gap) / 2 + gap, y, (w - gap) / 2, ch);
+            y += ch + Asm.S(10);
+            lblCam.SetBounds(pad, y, w, Asm.S(22)); y += Asm.S(30);
+            int bw = (w - Asm.S(12)) / 2, bh = Asm.S(34);
+            btnDate.SetBounds(pad, y, bw, bh);
+            btnLast.SetBounds(pad + bw + Asm.S(12), y, bw, bh);
         }
 
         public void RefreshCamera()
         {
             CamRef r = CameraSource == null ? null : CameraSource();
-            lblCam.Text = r == null ? "Kamera: (pilih area gambar)" : "Kamera: " + Dir.Title(r.NvrId, r.Channel);
+            lblCam.Text = r == null ? "Camera: (select an image area)" : "Camera: " + Dir.Title(r.NvrId, r.Channel);
         }
     }
 

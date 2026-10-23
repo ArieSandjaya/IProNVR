@@ -178,8 +178,8 @@ namespace IproNvrTool
             fp.AddSection("dev", "Device", devTree, true);
             fp.AddSection("grp", "Group", grpPanel, true);
             fp.AddSection("seq", "Sequence", seqPanel, true);
-            fp.AddSection("qpb", "Quick playback", qpPanel, false);
-            fp.AddSection("dl", "Download", dlPanel, false);
+            fp.AddSection("qpb", "Quick playback", qpPanel, false, 380);
+            fp.AddSection("dl", "Download", dlPanel, false, 330);
             fp.AddSection("alm", "Alarm log", almLog, false);
             fp.AddSection("derr", "Device error log", devLog, false);
             fp.AddSection("nerr", "Network error log", netLog, false);

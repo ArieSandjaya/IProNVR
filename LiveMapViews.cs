@@ -159,8 +159,8 @@ namespace IproNvrTool
             dlp.CameraSource = qpp.CameraSource;
             fp.AddSection("seq", "Sequence", seqp, true);
             fp.AddSection("dev", "Device", dev, true);
-            fp.AddSection("qpb", "Quick playback", qpp, false);
-            fp.AddSection("dl", "Download", dlp, false);
+            fp.AddSection("qpb", "Quick playback", qpp, false, 380);
+            fp.AddSection("dl", "Download", dlp, false, 330);
             fp.Width = Asm.S(230);
             fp.Open("grp");
             fp.SearchTextChanged += delegate(string t)
