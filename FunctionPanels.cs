@@ -426,7 +426,7 @@ namespace IproNvrTool
             {
                 using (var d = new FolderBrowserDialog())
                 {
-                    d.Description = "Pilih folder penyimpanan hasil download";
+                    d.Description = "Select folder to save downloads";
                     d.SelectedPath = txtFolder.Text;
                     if (d.ShowDialog(FindForm()) == DialogResult.OK) { txtFolder.Text = d.SelectedPath; SaveFolder(); }
                 }
@@ -436,7 +436,7 @@ namespace IproNvrTool
                 ? AppSettings.Current.ResolveDownloadFolder() : AppSettings.Current.QdFolder;
             txtFolder.Leave += delegate { SaveFolder(); };
             fp.Controls.Add(txtFolder); fp.Controls.Add(bb);
-            var lf = Lab("Simpan di:");
+            var lf = Lab("Save to:");
             Controls.Add(lblStatus);
             Controls.Add(row);
             Controls.Add(fp); Controls.Add(lf);

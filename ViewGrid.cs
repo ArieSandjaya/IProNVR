@@ -1053,7 +1053,7 @@ namespace IproNvrTool
             KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) Close(); };
             // tombol keluar untuk mouse (tanpa perlu keyboard)
             var x = new Button();
-            x.Text = "\u2715  Keluar layar penuh";
+            x.Text = "\u2715  Exit full screen";
             x.FlatStyle = FlatStyle.Flat;
             x.FlatAppearance.BorderColor = Color.FromArgb(120, 120, 120);
             x.BackColor = Color.FromArgb(40, 40, 40);

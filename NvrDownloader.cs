@@ -120,7 +120,7 @@ namespace IproNvrTool
 
         static bool Chunk(NvrSession sess, string st, string en, string kind, int cam, string folder, DownloadJob job, Action<string> status)
         {
-            if (status != null) status("Meminta data...");
+            if (status != null) status("Requesting data...");
             job.Req = sess.Request("httpdl.cgi", "STARTTIME=" + st + "&ENDTIME=" + en + "&KIND=" + kind + "&CAM=" + cam + "&PC=AS60", 60000);
             job.Req.ReadWriteTimeout = 120000; // NVR berhenti kirim data: jangan menggantung selamanya
             FileStream cur = null;
@@ -154,7 +154,7 @@ namespace IproNvrTool
                         {
                             if (cur == null) return;
                             job.Bytes += n;
-                            if (status != null) status("Mengunduh... " + (job.Bytes / 1024) + " KB");
+                            if (status != null) status("Downloading... " + (job.Bytes / 1024) + " KB");
                         });
                         if (got < 0) break;   // koneksi terputus: file sementara disimpan oleh blok finally
                         if (prev.Length > 0 && temp.Length == 0) Finish(ref cur, ref curPath, prev, folder, job, kind);
