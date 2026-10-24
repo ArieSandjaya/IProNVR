@@ -56,6 +56,7 @@ namespace IproNvrTool
         public bool ConfirmBeforeLive = false;  // konfirmasi sebelum membuka Live/Map window
         public bool AutoDecodeWidth = true;     // lebar dekode otomatis menurut jumlah area
         public string LayoutShortcuts = "1,4,9,16,25"; // 5 ikon pola layar di toolbar
+        public bool LiveAllRtsp = true;         // live semua lewat RTSP kamera (cadangan: stream NVR)
         public bool UseSubstreamMulti = true;   // multi-screen memakai substream (urutan StreamPlan)
         public int LiveWindowsOnStart = 0;      // jumlah Live window yang dibuka saat start (0-4)
         public bool MapOnStart = false;

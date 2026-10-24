@@ -34,6 +34,44 @@ namespace IproNvrTool
     ///   3. stream utama NVR sebagai cadangan terakhir, supaya kotak tidak kosong.</summary>
     public static class StreamPlan
     {
+        /// <summary>URL RTSP kamera untuk live (template/URL tersimpan, kredensial kamera). main=true: stream utama.</summary>
+        public static string CameraRtspUrl(NvrRecord nvr, CameraRecord cam, bool main)
+        {
+            if (cam == null) return "";
+            string cu, cp;
+            Rtsp.Creds(nvr, cam, out cu, out cp);
+            string url = (cam.RtspUrl ?? "").Trim();
+            if (url.Contains("{")) url = Rtsp.Build(url, cu, cp, cam.IpAddress);
+            if (url.Length == 0) url = Rtsp.Build(nvr.RtspTemplate, cu, cp, cam.IpAddress);
+            if (url.Length > 0 && main)
+            {
+                // substream -> stream utama: Dahua/i-PRO subtype=1 -> 0, Hikvision .../Channels/102 -> 101
+                url = System.Text.RegularExpressions.Regex.Replace(url, @"subtype=1", "subtype=0", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                url = System.Text.RegularExpressions.Regex.Replace(url, @"(/Streaming/Channels/\d{1,2}0)2(?!\d)", "${1}1", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+            return url;
+        }
+
+        /// <summary>Live semua lewat RTSP langsung ke kamera. sub=true: substream (multi-area), false: stream utama (1 area / layar penuh).
+        /// Bila URL RTSP tidak bisa disusun, stream NVR dipakai sebagai cadangan agar kotak tidak kosong.</summary>
+        public static List<StreamSource> ForLive(NvrRecord nvr, CameraRecord cam, bool sub)
+        {
+            var list = new List<StreamSource>();
+            string url = CameraRtspUrl(nvr, cam, !sub);
+            if (url.Length > 0)
+            {
+                var s = new StreamSource();
+                s.Rtsp = true;
+                s.Url = url;
+                s.Label = sub ? "RTSP sub" : "RTSP utama";
+                list.Add(s);
+            }
+            var fb = new StreamSource();
+            fb.Label = "NVR (cadangan)";
+            list.Add(fb);
+            return list;
+        }
+
         public static List<StreamSource> ForMultiview(NvrRecord nvr, CameraRecord cam)
         {
             var list = new List<StreamSource>();
