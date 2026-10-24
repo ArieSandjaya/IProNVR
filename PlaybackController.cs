@@ -97,6 +97,7 @@ namespace IproNvrTool
                 {
                     NvrRecord nvr = Dir.Nvr(kv.Key);
                     if (nvr == null) continue;
+                    if ((NvrDrivers.For(nvr).Capabilities & NvrCaps.Playback) == 0) continue;   // merek ini belum punya playback
                     e = new PlaybackEngine(nvr);
                     long nid = kv.Key;
                     e.Frame += delegate(int ch, byte[] jpg) { OnFrame(nid, ch, jpg); };

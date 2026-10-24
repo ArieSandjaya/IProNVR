@@ -459,7 +459,7 @@ namespace IproNvrTool
             StopGate.Get(nvr.Id, channel, out gate, out gateTick);
             Tile = new LiveTile(channel, sess, LiveFormats.FromStored(AppSettings.Current.LiveFormat), decodeWidth);
             Tile.Caption = TitleText();
-            if (AppSettings.Current.LiveAllRtsp) Tile.Sources = StreamPlan.ForLive(nvr, Dir.Cam(nvr.Id, channel), useSub);
+            if (AppSettings.Current.LiveAllRtsp || NvrDrivers.For(nvr).BrandId != "ipro") Tile.Sources = StreamPlan.ForLive(nvr, Dir.Cam(nvr.Id, channel), useSub);
             else if (useSub) Tile.Sources = StreamPlan.ForMultiview(nvr, Dir.Cam(nvr.Id, channel));
             if (Fish != null && Fish.Enabled && Fish.CamStream) Tile.Sources = CamStreamSources(nvr, channel);
             Tile.FrameFilter = FilterFrame;

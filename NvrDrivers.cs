@@ -52,6 +52,8 @@ namespace IproNvrTool
         static NvrDrivers()
         {
             Register(new IproDriver());
+            Register(new HikvisionDriver());
+            Register(new DahuaDriver());
         }
 
         public static void Register(INvrDriver d) { all[d.BrandId] = d; }

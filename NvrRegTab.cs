@@ -18,6 +18,7 @@ namespace IproNvrTool
 
         TextBox txtName, txtHost, txtUser, txtPass, txtModel, txtLocation, txtNotes, txtInfo;
         TextBox txtCamUser, txtCamPass, txtRtspTpl, txtSubParam;
+        ComboBox cmbBrand;
         NumericUpDown numPort, numMaxCh;
         CheckBox chkHttps, chkSkipTest;
         DataGridView gridNvr, gridCam;
@@ -202,6 +203,12 @@ namespace IproNvrTool
             txtPass.UseSystemPasswordChar = true;
             numMaxCh = Ui.Num(1, 256, 16, 60);
             txtModel = Ui.Txt("", 100);
+            cmbBrand = new ComboBox();
+            cmbBrand.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbBrand.Width = 150;
+            foreach (INvrDriver d in NvrDrivers.All) cmbBrand.Items.Add(new BrandItem(d));
+            cmbBrand.SelectedIndex = 0;
+            cmbBrand.SelectedIndexChanged += delegate { OnBrandChanged(); };
             txtLocation = Ui.Txt("", 130);
             txtNotes = Ui.Txt("", 180);
             chkSkipTest = new CheckBox();
@@ -222,6 +229,8 @@ namespace IproNvrTool
             f.Controls.Add(txtPass);
             f.Controls.Add(Ui.Lbl("Jumlah kanal"));
             f.Controls.Add(numMaxCh);
+            f.Controls.Add(Ui.Lbl("Brand"));
+            f.Controls.Add(cmbBrand);
             f.Controls.Add(Ui.Lbl("Model"));
             f.Controls.Add(txtModel);
             f.Controls.Add(Ui.Lbl("Lokasi"));
@@ -353,6 +362,7 @@ namespace IproNvrTool
                 txtPass.Text = "";
                 numMaxCh.Value = 16;
                 txtModel.Text = "";
+                SelectBrand("ipro");
                 txtLocation.Text = "";
                 txtNotes.Text = "";
                 txtCamUser.Text = "";
@@ -370,6 +380,7 @@ namespace IproNvrTool
             txtPass.Text = "";
             numMaxCh.Value = Math.Max(numMaxCh.Minimum, Math.Min(numMaxCh.Maximum, n.MaxChannels));
             txtModel.Text = n.Model;
+            SelectBrand(n.Brand);
             txtLocation.Text = n.Location;
             txtNotes.Text = n.Notes;
             txtCamUser.Text = n.CamUser;
@@ -492,6 +503,7 @@ namespace IproNvrTool
             n.PasswordEnc = txtPass.Text.Length > 0 ? Secret.Protect(txtPass.Text) : (isNew ? "" : current.PasswordEnc);
             n.MaxChannels = (int)numMaxCh.Value;
             n.Model = txtModel.Text.Trim();
+            n.Brand = SelectedBrand();
             n.Location = txtLocation.Text.Trim();
             n.Notes = txtNotes.Text.Trim();
             n.CamUser = txtCamUser.Text.Trim();
@@ -850,6 +862,49 @@ namespace IproNvrTool
         }
 
         // ===================== aksi kamera =====================
+
+        class BrandItem
+        {
+            public INvrDriver Driver;
+            public BrandItem(INvrDriver d) { Driver = d; }
+            public override string ToString() { return Driver.BrandName; }
+        }
+
+        string SelectedBrand()
+        {
+            BrandItem b = cmbBrand.SelectedItem as BrandItem;
+            return b == null ? "ipro" : b.Driver.BrandId;
+        }
+
+        bool settingBrand;
+
+        void SelectBrand(string id)
+        {
+            settingBrand = true;
+            try
+            {
+                for (int i = 0; i < cmbBrand.Items.Count; i++)
+                    if (string.Equals(((BrandItem)cmbBrand.Items[i]).Driver.BrandId, id ?? "ipro", StringComparison.OrdinalIgnoreCase)) { cmbBrand.SelectedIndex = i; return; }
+                cmbBrand.SelectedIndex = 0;
+            }
+            finally { settingBrand = false; }
+        }
+
+        /// <summary>Ganti merek: template RTSP kamera ikut default merek itu (hanya bila masih berisi default merek lain).</summary>
+        void OnBrandChanged()
+        {
+            if (settingBrand) return;
+            string cur = txtRtspTpl.Text.Trim();
+            bool isDefault = cur.Length == 0;
+            foreach (INvrDriver d in NvrDrivers.All)
+            {
+                var h = d as HttpBrandDriver;
+                if (cur == Rtsp.DefaultTemplate || (h != null && cur == h.DefaultCamTemplate)) isDefault = true;
+            }
+            BrandItem b = cmbBrand.SelectedItem as BrandItem;
+            var hb = b == null ? null : b.Driver as HttpBrandDriver;
+            if (isDefault) txtRtspTpl.Text = hb != null ? hb.DefaultCamTemplate : Rtsp.DefaultTemplate;
+        }
 
         void OnCamDoubleClick(object sender, DataGridViewCellEventArgs e)
         {

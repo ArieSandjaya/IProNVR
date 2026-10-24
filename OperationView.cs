@@ -893,6 +893,11 @@ namespace IproNvrTool
                 {
                     NvrRecord nvr = Dir.Nvr(kv.Key);
                     if (nvr == null) continue;
+                    if ((NvrDrivers.For(nvr).Capabilities & NvrCaps.Playback) == 0)
+                    {
+                        Log.Write("Playback belum didukung untuk merek " + NvrDrivers.For(nvr).BrandName + " (" + nvr.Name + ")");
+                        continue;
+                    }
                     e = new PlaybackEngine(nvr);
                     long nid = kv.Key;
                     e.Frame += delegate(int ch, byte[] jpg) { OnPlaybackFrame(nid, ch, jpg); };

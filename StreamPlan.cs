@@ -63,6 +63,21 @@ namespace IproNvrTool
         public static List<StreamSource> ForLive(NvrRecord nvr, CameraRecord cam, bool sub)
         {
             var list = new List<StreamSource>();
+            INvrDriver drv = NvrDrivers.For(nvr);
+            if (drv.BrandId != "ipro")
+            {
+                // merek lain: RTSP lewat NVR itu sendiri (satu login, tidak perlu IP/URL tiap kamera)
+                NvrStreamSource ns = drv.LiveSource(nvr, cam != null ? cam.Channel : 1, sub);
+                if (ns.Kind == NvrStreamKind.Rtsp && ns.RtspUrl.Length > 0)
+                {
+                    var rs = new StreamSource();
+                    rs.Rtsp = true;
+                    rs.Url = ns.RtspUrl;
+                    rs.Label = drv.BrandName + (sub ? " sub" : " utama");
+                    list.Add(rs);
+                    return list;
+                }
+            }
             string url = CameraRtspUrl(nvr, cam, !sub);
             if (url.Length > 0)
             {
