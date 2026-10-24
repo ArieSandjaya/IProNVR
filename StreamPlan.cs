@@ -40,6 +40,12 @@ namespace IproNvrTool
             if (cam == null) return "";
             string cu, cp;
             Rtsp.Creds(nvr, cam, out cu, out cp);
+            if (main && !string.IsNullOrWhiteSpace(cam.RtspMainUrl))
+            {
+                // URL stream utama hasil deteksi (sudah diuji dengan ffmpeg)
+                string mu = cam.RtspMainUrl.Trim();
+                return mu.Contains("{") ? Rtsp.Build(mu, cu, cp, cam.IpAddress) : mu;
+            }
             string url = (cam.RtspUrl ?? "").Trim();
             if (url.Contains("{")) url = Rtsp.Build(url, cu, cp, cam.IpAddress);
             if (url.Length == 0) url = Rtsp.Build(nvr.RtspTemplate, cu, cp, cam.IpAddress);

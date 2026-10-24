@@ -102,6 +102,7 @@ namespace IproNvrTool
         public string ScannedAt = "";
         public string ScanDetail = "";      // hasil deteksi stream (opsional)
         public string RtspUrl = "";         // URL RTSP substream khusus kamera ini (kosong = pakai template NVR + IP kamera)
+        public string RtspMainUrl = "";     // URL RTSP stream utama hasil deteksi (kosong = turunkan dari substream)
         public string CamUser = "";         // login khusus kamera ini (kosong = pakai login kamera di data NVR)
         public string CamPassEnc = "";
         public string CamPassword { get { return Secret.Unprotect(CamPassEnc); } }
@@ -213,6 +214,7 @@ CREATE TABLE IF NOT EXISTS camera (
     scanned_at     TEXT    NOT NULL DEFAULT '',
     scan_detail    TEXT    NOT NULL DEFAULT '',
     rtsp_url       TEXT    NOT NULL DEFAULT '',
+    rtsp_main_url  TEXT    NOT NULL DEFAULT '',
     UNIQUE (nvr_id, channel)
 );
 
@@ -416,6 +418,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                     EnsureColumn(c, "nvr", "substream_param", "TEXT NOT NULL DEFAULT ''");
                     EnsureColumn(c, "nvr", "brand", "TEXT NOT NULL DEFAULT 'ipro'");
                     EnsureColumn(c, "camera", "rtsp_url", "TEXT NOT NULL DEFAULT ''");
+                    EnsureColumn(c, "camera", "rtsp_main_url", "TEXT NOT NULL DEFAULT ''");
                     EnsureColumn(c, "camera", "cam_user", "TEXT NOT NULL DEFAULT ''");        // login khusus kamera (mode server)
                     EnsureColumn(c, "camera", "cam_pass_enc", "TEXT NOT NULL DEFAULT ''");
                     using (var cmd = new SQLiteCommand(AsmSql.Schema, c))
@@ -741,6 +744,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                         k.ScannedAt = S(r, "scanned_at");
                         k.ScanDetail = S(r, "scan_detail");
                         k.RtspUrl = S(r, "rtsp_url");
+                        k.RtspMainUrl = S(r, "rtsp_main_url");
                         k.CamUser = S(r, "cam_user");
                         k.CamPassEnc = S(r, "cam_pass_enc");
                         list.Add(k);
@@ -924,7 +928,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
             RaiseChanged();
         }
 
-        public class RtspRow { public long Id; public string RtspUrl; public string Detail; }
+        public class RtspRow { public long Id; public string RtspUrl; public string RtspMainUrl; public string Detail; }
 
         /// <summary>Simpan hasil deteksi RTSP: URL substream (templat {user}{pass}{ip}, kosong = pakai templat NVR) dan teks detail. RtspUrl null = jangan ubah.</summary>
         public static void SetRtspResults(List<RtspRow> rows)
@@ -936,11 +940,11 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                 foreach (RtspRow r in rows)
                 {
                     string sql = r.RtspUrl == null ? "UPDATE camera SET scan_detail = @d WHERE id = @id"
-                                                   : "UPDATE camera SET scan_detail = @d, rtsp_url = @u WHERE id = @id";
+                                                   : "UPDATE camera SET scan_detail = @d, rtsp_url = @u, rtsp_main_url = @m WHERE id = @id";
                     using (var cmd = new SQLiteCommand(sql, c, tx))
                     {
                         P(cmd, "@d", r.Detail ?? "");
-                        if (r.RtspUrl != null) P(cmd, "@u", r.RtspUrl);
+                        if (r.RtspUrl != null) { P(cmd, "@u", r.RtspUrl); P(cmd, "@m", r.RtspMainUrl ?? ""); }
                         P(cmd, "@id", r.Id);
                         cmd.ExecuteNonQuery();
                     }

@@ -821,6 +821,7 @@ namespace IproNvrTool
                             string viaTpl = Rtsp.Build(tpl, cu, cp, k.IpAddress);
                             string built = Rtsp.Build(r.SubTemplate, cu, cp, k.IpAddress);
                             row.RtspUrl = (viaTpl.Length > 0 && viaTpl == built) ? "" : r.SubTemplate;
+                            row.RtspMainUrl = r.MainTemplate ?? "";      // main yang lolos uji ffmpeg; kosong = turunkan dari sub
                         }
                         lock (gate)
                         {
