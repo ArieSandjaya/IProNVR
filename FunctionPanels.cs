@@ -575,7 +575,7 @@ namespace IproNvrTool
             {
                 try
                 {
-                    NvrDownloader.Run(nvr, ch, a, b, kind, folder, j, delegate(string t) { Ui.Post(this, delegate { lblStatus.Text = t; }); });
+                    NvrDrivers.For(nvr).Download(nvr, ch, a, b, kind, folder, j, delegate(string t) { Ui.Post(this, delegate { lblStatus.Text = t; }); });
                 }
                 catch (Exception ex)
                 {

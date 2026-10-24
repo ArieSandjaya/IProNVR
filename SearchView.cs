@@ -192,7 +192,7 @@ namespace IproNvrTool
                     {
                         DateTime t = start.AddSeconds((double)step * i);
                         byte[] jpg = null;
-                        try { jpg = PlaybackEngine.CaptureStill(nvr, r.Channel, t.ToUniversalTime(), 480); }
+                        try { jpg = NvrDrivers.For(nvr).Snapshot(nvr, r.Channel, t.ToUniversalTime(), 480); }
                         catch (Exception ex) { Log.Write("Thumbnail: " + ex.Message); }
                         int idx = i;
                         Ui.Post(this, delegate { AddThumb(r, nvr, t, jpg); lblStatus.Text = "Selesai " + (idx + 1) + " / " + count; });

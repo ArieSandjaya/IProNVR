@@ -51,6 +51,7 @@ namespace IproNvrTool
         public string LastScanAt = "";
         public string LastScanSummary = "";
         public string CamInfoRaw = "";      // respons mentah as_getinfo.cgi?FILE=2 terakhir
+        public string Brand = "ipro";      // merek/driver NVR: ipro | hikvision | dahua (lihat NvrDrivers)
         public string CamUser = "";         // user kamera untuk RTSP langsung (Multiview)
         public string CamPassEnc = "";      // password kamera, terenkripsi DPAPI
         public string RtspTemplate = Rtsp.DefaultTemplate; // URL RTSP substream; {user} {pass} {ip}
@@ -191,6 +192,7 @@ CREATE TABLE IF NOT EXISTS nvr (
     cam_pass_enc      TEXT    NOT NULL DEFAULT '',
     rtsp_template     TEXT    NOT NULL DEFAULT 'rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1',
     substream_param   TEXT    NOT NULL DEFAULT '',
+    brand             TEXT    NOT NULL DEFAULT 'ipro',
     UNIQUE (host, port)
 );
 
@@ -267,16 +269,16 @@ ORDER BY n.name COLLATE NOCASE, n.id";
 
         public const string InsertNvr = @"
 INSERT INTO nvr (name, host, port, use_https, username, password_enc, max_channels, model, location, notes,
-                 cam_user, cam_pass_enc, rtsp_template, substream_param,
+                 cam_user, cam_pass_enc, rtsp_template, substream_param, brand,
                  status, last_error, registered_at, last_checked_at)
 VALUES (@name, @host, @port, @https, @user, @pass, @maxch, @model, @loc, @notes,
-        @camuser, @campass, @rtsp, @substream,
+        @camuser, @campass, @rtsp, @substream, @brand,
         @status, @err, @reg, @checked)";
 
         public const string UpdateNvr = @"
 UPDATE nvr SET name = @name, host = @host, port = @port, use_https = @https, username = @user,
                password_enc = @pass, max_channels = @maxch, model = @model, location = @loc, notes = @notes,
-               cam_user = @camuser, cam_pass_enc = @campass, rtsp_template = @rtsp, substream_param = @substream
+               cam_user = @camuser, cam_pass_enc = @campass, rtsp_template = @rtsp, substream_param = @substream, brand = @brand
 WHERE id = @id";
 
         public const string SetNvrStatus = @"
@@ -412,6 +414,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                     EnsureColumn(c, "nvr", "cam_pass_enc", "TEXT NOT NULL DEFAULT ''");
                     EnsureColumn(c, "nvr", "rtsp_template", "TEXT NOT NULL DEFAULT '" + Rtsp.DefaultTemplate + "'");
                     EnsureColumn(c, "nvr", "substream_param", "TEXT NOT NULL DEFAULT ''");
+                    EnsureColumn(c, "nvr", "brand", "TEXT NOT NULL DEFAULT 'ipro'");
                     EnsureColumn(c, "camera", "rtsp_url", "TEXT NOT NULL DEFAULT ''");
                     EnsureColumn(c, "camera", "cam_user", "TEXT NOT NULL DEFAULT ''");        // login khusus kamera (mode server)
                     EnsureColumn(c, "camera", "cam_pass_enc", "TEXT NOT NULL DEFAULT ''");
@@ -536,6 +539,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                     n.CamPassEnc = S(r, "cam_pass_enc");
                     n.RtspTemplate = S(r, "rtsp_template");
                     n.SubstreamParam = S(r, "substream_param");
+                    n.Brand = S(r, "brand"); if (n.Brand.Length == 0) n.Brand = "ipro";
                     n.CameraTotal = I(r, "cam_total");
                     n.CameraOk = I(r, "cam_ok");
                     n.CameraErr = I(r, "cam_err");
@@ -561,6 +565,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
             P(cmd, "@campass", n.CamPassEnc ?? "");
             P(cmd, "@rtsp", n.RtspTemplate ?? "");
             P(cmd, "@substream", n.SubstreamParam ?? "");
+            P(cmd, "@brand", string.IsNullOrEmpty(n.Brand) ? "ipro" : n.Brand);
         }
 
         public static long InsertNvr(NvrRecord n, List<DiskRecord> disks, List<CamStatus> cams, string camRaw)

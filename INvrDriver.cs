@@ -7,21 +7,36 @@ namespace IproNvrTool
     [Flags]
     public enum NvrCaps { None = 0, Live = 1, Playback = 2, Search = 4, Download = 8, Ptz = 16, Hdd = 32, Snapshot = 64, Events = 128 }
 
-    public class NvrChannelInfo { public int Channel; public string Name = ""; public string Address = ""; public bool Online = true; }
-    public class NvrRecSegment { public int Channel; public DateTime StartUtc, EndUtc; public string Type = ""; public string Token = ""; }
+    /// <summary>Cara video diambil: lewat sesi NVR sendiri (i-PRO push.cgi / hdrctl.cgi) atau URL RTSP standar.</summary>
+    public enum NvrStreamKind { NvrSession, Rtsp }
 
-    /// <summary>Antarmuka umum untuk satu merek NVR. Implementasi i-PRO, Hikvision, Dahua, dan ONVIF generik.
-    /// Belum dipasang ke UI: tahap berikutnya memindahkan kode i-PRO ke driver dan menambah driver lain.</summary>
+    public class NvrStreamSource
+    {
+        public NvrStreamKind Kind;
+        public string RtspUrl = "";     // terisi bila Kind = Rtsp
+    }
+
+    /// <summary>Antarmuka umum satu merek NVR. Satu instance = satu NVR (NvrRecord).
+    /// Implementasi: IproDriver (CGI i-PRO), nanti HikvisionDriver, DahuaDriver, OnvifDriver.
+    /// Metode yang tidak didukung merek tersebut melempar NotSupportedException (cek Capabilities dahulu).</summary>
     public interface INvrDriver
     {
-        string Brand { get; }
+        string BrandId { get; }
+        string BrandName { get; }
         NvrCaps Capabilities { get; }
-        void Login(string host, int port, string user, string pass);
-        List<NvrChannelInfo> ListChannels();
-        string LiveRtspUrl(int channel, bool subStream);
-        string PlaybackRtspUrl(int channel, DateTime startUtc, DateTime endUtc);
-        List<NvrRecSegment> Search(int channel, DateTime fromUtc, DateTime toUtc);
-        void Download(NvrRecSegment seg, string destFile, Action<long> onBytes);
-        byte[] Snapshot(int channel);
+
+        /// <summary>Tes login + ambil HDD dan daftar kamera (dipakai registrasi NVR).</summary>
+        RegistrationResult Test(NvrEndpoint ep);
+        CameraListResult ListCameras(NvrEndpoint ep);
+        List<DiskRecord> ListDisks(NvrEndpoint ep);
+
+        NvrStreamSource LiveSource(NvrRecord nvr, int channel, bool subStream);
+        NvrStreamSource PlaybackSource(NvrRecord nvr, int channel, DateTime startUtc, DateTime endUtc);
+
+        /// <summary>kind: MP4, MP4VO, N3, N3VO (nama jenis data di UI). Waktu masukan = waktu lokal PC.</summary>
+        void Download(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
+            string folder, DownloadJob job, Action<string> status);
+
+        byte[] Snapshot(NvrRecord nvr, int channel, DateTime utc, int width);
     }
 }

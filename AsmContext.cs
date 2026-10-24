@@ -422,7 +422,7 @@ namespace IproNvrTool
             CameraListResult res;
             try
             {
-                res = NvrScanner.FetchCameraList(ep);
+                res = NvrDrivers.For(n).ListCameras(ep);
                 if (down.Remove(n.Id))
                 {
                     var ok = new LogEntry();
@@ -474,7 +474,7 @@ namespace IproNvrTool
             try
             {
                 bool rec = false;
-                foreach (DiskRecord d in NvrScanner.FetchDisks(ep)) if (d.Recording) rec = true;
+                foreach (DiskRecord d in NvrDrivers.For(n).ListDisks(ep)) if (d.Recording) rec = true;
                 Dir.SetNvrRecording(n.Id, rec);
             }
             catch (Exception ex) { Log.Write("Monitor " + n.Name + ": info HDD tidak terbaca: " + ex.Message); }

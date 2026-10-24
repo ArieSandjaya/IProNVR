@@ -509,7 +509,7 @@ namespace IproNvrTool
 
             SetBusy(true, "Tes login ke " + host + "...");
             NvrEndpoint ep = n.ToEndpoint();
-            Task.Run(() => NvrScanner.TestNvr(ep)).ContinueWith(t => Ui.Post(this, delegate
+            Task.Run(() => NvrDrivers.For(n).Test(ep)).ContinueWith(t => Ui.Post(this, delegate
             {
                 SetBusy(false, "");
                 RegistrationResult res = t.Result;
@@ -567,7 +567,7 @@ namespace IproNvrTool
             NvrRecord n = current;
             SetBusy(true, "Tes login ke " + n.Host + "...");
             NvrEndpoint ep = n.ToEndpoint();
-            Task.Run(() => NvrScanner.TestNvr(ep)).ContinueWith(t => Ui.Post(this, delegate
+            Task.Run(() => NvrDrivers.For(n).Test(ep)).ContinueWith(t => Ui.Post(this, delegate
             {
                 SetBusy(false, "");
                 RegistrationResult res = t.Result;
@@ -643,7 +643,7 @@ namespace IproNvrTool
                     string summary = "";
                     try
                     {
-                        CameraListResult cl = NvrScanner.FetchCameraList(n.ToEndpoint());
+                        CameraListResult cl = NvrDrivers.For(n).ListCameras(n.ToEndpoint());
                         if (cl.Items.Count == 0)
                         {
                             Db.SetNvrStatus(n.Id, "OK", "", null);
