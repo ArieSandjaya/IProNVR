@@ -571,50 +571,69 @@ namespace IproNvrTool
             cap("AUX", 682, 149, 168);
             tCam.Controls.Add(cp);
 
-            // ---- HDD ----
-            var h = new FlowLayoutPanel();
+            // ---- HDD (kendali playback, tata letak ala ASM300) ----
+            var h = new Panel();
             h.Dock = DockStyle.Fill;
-            h.Padding = new Padding(Asm.S(6), Asm.S(6), 0, 0);
             h.Tag = "nostyle";
-            h.BackColor = Asm.Panel2;
-            h.Controls.Add(OpLab("Waktu"));
+            h.BackColor = Asm.Bg;
+            Func<AsmIcon, string, string, int, int, Action, AsmButton> pb = delegate(AsmIcon ic, string label, string tip, int col, int row, Action act)
+            {
+                var b = new AsmButton();
+                b.Icon = ic;
+                b.SetBounds(Asm.S(8 + col * 100), Asm.S(row == 0 ? 2 : 76), Asm.S(80), Asm.S(52));
+                b.Click += delegate { act(); };
+                tips.SetToolTip(b, tip);
+                h.Controls.Add(b);
+                var l = new Label();
+                l.Text = label; l.ForeColor = Asm.Label; l.Font = Asm.F(9f, false); l.Tag = "nostyle";
+                l.TextAlign = ContentAlignment.MiddleCenter;
+                l.SetBounds(b.Left - Asm.S(10), b.Bottom + Asm.S(1), Asm.S(100), Asm.S(18));
+                h.Controls.Add(l);
+                return b;
+            };
+            pb(AsmIcon.PrevChap, "PREV", "Mundur 5 menit", 0, 0, delegate { Each(delegate(PlaybackEngine e) { e.Skip(-300); }); });
+            pb(AsmIcon.FastRew, "REW", "Fast reverse", 1, 0, delegate { Each(delegate(PlaybackEngine e) { e.FastReverse(); }); });
+            pb(AsmIcon.Reverse, "REV PLAY", "Putar mundur", 2, 0, delegate { Each(delegate(PlaybackEngine e) { e.Reverse(); }); });
+            pb(AsmIcon.Play, "PLAY", "Putar maju", 3, 0, delegate { Each(delegate(PlaybackEngine e) { e.Play(); }); });
+            pb(AsmIcon.FastFwd, "FF", "Fast forward", 4, 0, delegate { Each(delegate(PlaybackEngine e) { e.FastForward(); }); });
+            pb(AsmIcon.NextChap, "NEXT", "Maju 5 menit", 5, 0, delegate { Each(delegate(PlaybackEngine e) { e.Skip(300); }); });
+            pb(AsmIcon.CurveBack, "REV SKIP", "Mundur sebesar SKIP TIME", 0, 1, delegate { SkipBy(-1); });
+            pb(AsmIcon.StepBack, "PREV IMAGE", "Frame sebelumnya", 1, 1, delegate { Each(delegate(PlaybackEngine e) { e.Step(false); }); });
+            pb(AsmIcon.Pause, "PAUSE", "Pause", 2, 1, delegate { Each(delegate(PlaybackEngine e) { e.Pause(); }); });
+            pb(AsmIcon.Stop, "STOP", "Stop", 3, 1, delegate { Each(delegate(PlaybackEngine e) { e.Stop(); }); });
+            pb(AsmIcon.StepFwd, "NEXT IMAGE", "Frame berikutnya", 4, 1, delegate { Each(delegate(PlaybackEngine e) { e.Step(true); }); });
+            pb(AsmIcon.CurveFwd, "SKIP", "Maju sebesar SKIP TIME", 5, 1, delegate { SkipBy(1); });
+
+            cmbSkip = new ComboBox();
+            cmbSkip.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbSkip.FlatStyle = FlatStyle.Flat;
+            cmbSkip.BackColor = Asm.Input; cmbSkip.ForeColor = Asm.Label;
+            cmbSkip.Items.AddRange(new object[] { "10s", "30s", "1m", "5m", "10m", "30m", "1h" });
+            cmbSkip.SelectedIndex = 1;
+            cmbSkip.SetBounds(Asm.S(620), Asm.S(84), Asm.S(104), Asm.S(26));
+            h.Controls.Add(cmbSkip);
+            var lsk = new Label(); lsk.Text = "SKIP TIME"; lsk.ForeColor = Asm.Label; lsk.Font = Asm.F(9f, false); lsk.Tag = "nostyle";
+            lsk.TextAlign = ContentAlignment.MiddleCenter; lsk.SetBounds(Asm.S(620), Asm.S(128), Asm.S(104), Asm.S(18)); h.Controls.Add(lsk);
+
+            var spd1 = new AsmButton(); spd1.Icon = AsmIcon.Plus; spd1.SetBounds(Asm.S(750), Asm.S(2), Asm.S(86), Asm.S(48));
+            spd1.Click += delegate { Each(delegate(PlaybackEngine e) { e.SpeedUp(); }); }; tips.SetToolTip(spd1, "Percepat putaran (0.25x - 8x)"); h.Controls.Add(spd1);
+            var sm = new AsmButton(); sm.Icon = AsmIcon.Minus; sm.SetBounds(Asm.S(750), Asm.S(56), Asm.S(86), Asm.S(48));
+            sm.Click += delegate { Each(delegate(PlaybackEngine e) { e.SpeedDown(); }); }; tips.SetToolTip(sm, "Perlambat putaran (0.25x - 8x)"); h.Controls.Add(sm);
+            var lsp = new Label(); lsp.Text = "Speed"; lsp.ForeColor = Asm.Label; lsp.Font = Asm.F(9f, false); lsp.Tag = "nostyle";
+            lsp.TextAlign = ContentAlignment.MiddleCenter; lsp.SetBounds(Asm.S(750), Asm.S(108), Asm.S(86), Asm.S(18)); h.Controls.Add(lsp);
+
             dtpGo = new DateTimePicker();
             dtpGo.Format = DateTimePickerFormat.Custom;
             dtpGo.CustomFormat = "yyyy/MM/dd  HH:mm:ss";
-            dtpGo.Width = Asm.S(170);
-            dtpGo.Margin = new Padding(2, 6, 2, 0);
+            dtpGo.SetBounds(Asm.S(870), Asm.S(8), Asm.S(190), Asm.S(26));
             dtpGo.Value = DateTime.Now.AddMinutes(-10);
             h.Controls.Add(dtpGo);
-            h.Controls.Add(OpBtn(AsmIcon.Play, "Go", "Putar dari waktu ini", delegate { PlayAtUtc(dtpGo.Value.ToUniversalTime()); }, 64));
-            var live = OpBtn(AsmIcon.Live, "Live", "Kembali ke live", delegate { ExitPlayback(); }, 70);
-            h.Controls.Add(live);
-            h.SetFlowBreak(live, true);
-
-            h.Controls.Add(OpBtn(AsmIcon.FastRew, "", "Fast reverse", delegate { Each(delegate(PlaybackEngine e) { e.FastReverse(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.PrevFrame, "", "Frame sebelumnya", delegate { Each(delegate(PlaybackEngine e) { e.Step(false); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Reverse, "", "Putar mundur", delegate { Each(delegate(PlaybackEngine e) { e.Reverse(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Pause, "", "Pause", delegate { Each(delegate(PlaybackEngine e) { e.Pause(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Play, "", "Putar maju", delegate { Each(delegate(PlaybackEngine e) { e.Play(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.NextFrame, "", "Frame berikutnya", delegate { Each(delegate(PlaybackEngine e) { e.Step(true); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Minus, "Lambat", "Perlambat putaran (0.25x - 8x)", delegate { Each(delegate(PlaybackEngine e) { e.SpeedDown(); }); }, 74));
-            h.Controls.Add(OpBtn(AsmIcon.Plus, "Cepat", "Percepat putaran (0.25x - 8x)", delegate { Each(delegate(PlaybackEngine e) { e.SpeedUp(); }); }, 70));
-            h.Controls.Add(OpBtn(AsmIcon.FastFwd, "", "Fast forward", delegate { Each(delegate(PlaybackEngine e) { e.FastForward(); }); }, 40));
-            var stp = OpBtn(AsmIcon.Stop, "", "Stop", delegate { Each(delegate(PlaybackEngine e) { e.Stop(); }); }, 40);
-            h.Controls.Add(stp);
-            h.SetFlowBreak(stp, true);
-
-            h.Controls.Add(OpLab("Skip"));
-            cmbSkip = new ComboBox();
-            cmbSkip.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSkip.Items.AddRange(new object[] { "10 detik", "30 detik", "1 menit", "5 menit", "10 menit", "30 menit", "1 jam" });
-            cmbSkip.SelectedIndex = 2;
-            cmbSkip.Width = Asm.S(90);
-            cmbSkip.Margin = new Padding(2, 6, 2, 0);
-            h.Controls.Add(cmbSkip);
-            h.Controls.Add(OpBtn(AsmIcon.SkipBack, "", "Mundur sebesar nilai skip", delegate { SkipBy(-1); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.SkipFwd, "", "Maju sebesar nilai skip", delegate { SkipBy(1); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Download, "Quick DL", "Quick download dari posisi ini", delegate { QuickDownload(SelectedRef()); }, 90));
-
+            var go = new AsmButton(); go.Icon = AsmIcon.Play; go.Label = "Go"; go.Font = Asm.F(10f, false);
+            go.SetBounds(Asm.S(870), Asm.S(40), Asm.S(92), Asm.S(34)); go.Click += delegate { PlayAtUtc(dtpGo.Value.ToUniversalTime()); }; h.Controls.Add(go);
+            var lv = new AsmButton(); lv.Icon = AsmIcon.Live; lv.Label = "Live"; lv.Font = Asm.F(10f, false);
+            lv.SetBounds(Asm.S(968), Asm.S(40), Asm.S(92), Asm.S(34)); lv.Click += delegate { ExitPlayback(); }; h.Controls.Add(lv);
+            var qd = new AsmButton(); qd.Icon = AsmIcon.Download; qd.Label = "Quick DL"; qd.Font = Asm.F(10f, false);
+            qd.SetBounds(Asm.S(870), Asm.S(80), Asm.S(190), Asm.S(34)); qd.Click += delegate { QuickDownload(SelectedRef()); }; h.Controls.Add(qd);
             tHdd.Controls.Add(h);
         }
 

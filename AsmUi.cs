@@ -143,7 +143,7 @@ namespace IproNvrTool
     {
         None, Menu, Live, Map, Setting, Search, Play, Reverse, Pause, Stop, FastFwd, FastRew, NextFrame, PrevFrame,
         SkipFwd, SkipBack, PrevRec, NextRec, Camera, Print, Full, Plus, Minus, Close, ChevronDown, ChevronUp, ChevronLeft,
-        ChevronRight, Folder, Download, Alarm, Mic, Speaker, Layout
+        ChevronRight, Folder, Download, Alarm, Mic, Speaker, Layout, PrevChap, NextChap, StepBack, StepFwd, CurveBack, CurveFwd
     }
 
     public static class AsmIcons
@@ -235,6 +235,36 @@ namespace IproNvrTool
                         Fill(new[] { P(.92f, .2f), P(.92f, .8f), P(.45f, .5f) });
                         g.FillRectangle(br, R(.28f, .2f, .1f, .6f)); g.FillRectangle(br, R(.1f, .2f, .1f, .6f));
                         break;
+                    case AsmIcon.PrevChap:
+                        g.FillRectangle(br, R(.06f, .22f, .1f, .56f));
+                        Fill(new[] { P(.5f, .22f), P(.5f, .78f), P(.18f, .5f) }); Fill(new[] { P(.86f, .22f), P(.86f, .78f), P(.54f, .5f) });
+                        break;
+                    case AsmIcon.NextChap:
+                        g.FillRectangle(br, R(.84f, .22f, .1f, .56f));
+                        Fill(new[] { P(.5f, .22f), P(.5f, .78f), P(.82f, .5f) }); Fill(new[] { P(.14f, .22f), P(.14f, .78f), P(.46f, .5f) });
+                        break;
+                    case AsmIcon.StepBack:
+                        Fill(new[] { P(.08f, .5f), P(.4f, .22f), P(.4f, .78f) });
+                        g.FillRectangle(br, R(.52f, .22f, .13f, .56f)); g.FillRectangle(br, R(.74f, .22f, .13f, .56f));
+                        break;
+                    case AsmIcon.StepFwd:
+                        Fill(new[] { P(.92f, .5f), P(.6f, .22f), P(.6f, .78f) });
+                        g.FillRectangle(br, R(.35f, .22f, .13f, .56f)); g.FillRectangle(br, R(.13f, .22f, .13f, .56f));
+                        break;
+                    case AsmIcon.CurveBack:
+                    case AsmIcon.CurveFwd:
+                    {
+                        bool fw = ic == AsmIcon.CurveFwd;
+                        using (var cp = new Pen(col, Math.Max(2f, s / 7f)))
+                        {
+                            cp.StartCap = LineCap.Round; cp.EndCap = LineCap.Round;
+                            g.DrawArc(cp, R(.16f, .24f, .68f, .68f), fw ? 200 : -20, fw ? 160 : -160);
+                        }
+                        // kepala panah di ujung busur
+                        if (fw) Fill(new[] { P(.92f, .52f), P(.66f, .50f), P(.80f, .78f) });
+                        else Fill(new[] { P(.08f, .52f), P(.34f, .50f), P(.20f, .78f) });
+                        break;
+                    }
                     case AsmIcon.Camera:
                         g.DrawRectangle(pen, x0 + .1f * s, y0 + .3f * s, .8f * s, .5f * s);
                         L(.34f, .2f, .66f, .2f); L(.34f, .2f, .3f, .3f); L(.66f, .2f, .7f, .3f);
