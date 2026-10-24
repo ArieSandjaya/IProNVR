@@ -6,6 +6,45 @@ using System.Windows.Forms;
 
 namespace IproNvrTool
 {
+    /// <summary>Tombol jendela (minimize / restore / close) bergaya ASM300, digambar sendiri.</summary>
+    public class WinButton : Control
+    {
+        public enum Kind { Min, Max, Restore, Close }
+        public Kind K;
+        bool hot;
+        public WinButton(Kind k)
+        {
+            K = k;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
+            Tag = "nostyle";
+            Size = new Size(Asm.S(46), Asm.S(40));
+            Cursor = Cursors.Hand;
+        }
+        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(hot ? (K == Kind.Close ? Color.FromArgb(196, 43, 28) : Color.FromArgb(40, 44, 54)) : Asm.Bg);
+            using (var p = new Pen(Asm.Text, Math.Max(1.5f, Asm.S(2) * 0.75f)))
+            {
+                int cx = Width / 2, cy = Height / 2, d = Asm.S(6);
+                switch (K)
+                {
+                    case Kind.Min: g.DrawLine(p, cx - d, cy + d / 2, cx + d, cy + d / 2); break;
+                    case Kind.Max: g.DrawRectangle(p, cx - d, cy - d, 2 * d, 2 * d); break;
+                    case Kind.Restore:
+                        g.DrawRectangle(p, cx - d, cy - d + Asm.S(3), 2 * d - Asm.S(3), 2 * d - Asm.S(3));
+                        g.DrawLines(p, new[] { new Point(cx - d + Asm.S(3), cy - d + Asm.S(3)), new Point(cx - d + Asm.S(3), cy - d), new Point(cx + d, cy - d), new Point(cx + d, cy + d - Asm.S(3)), new Point(cx + d - Asm.S(3), cy + d - Asm.S(3)) });
+                        break;
+                    case Kind.Close:
+                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                        g.DrawLine(p, cx - d, cy - d, cx + d, cy + d); g.DrawLine(p, cx - d, cy + d, cx + d, cy - d); break;
+                }
+            }
+        }
+    }
+
     public class LoginForm : Form
     {
         readonly TextBox txtName = new TextBox();
@@ -134,16 +173,18 @@ namespace IproNvrTool
         public AsmMainForm()
         {
             Text = "i-PRO NVR Tool - ASM300 style";
+            FormBorderStyle = FormBorderStyle.None;      // bilah judul digambar sendiri (topBar)
             Width = 1480;
             Height = 900;
             StartPosition = FormStartPosition.CenterScreen;
+            MaximizedBounds = Screen.FromPoint(Cursor.Position).WorkingArea;
             BackColor = Asm.Bg;
             KeyPreview = true;
             UiSmooth.Attach(this);
 
             titleBar.Dock = DockStyle.Top;
             titleBar.Height = Asm.S(40);
-            titleBar.BackColor = Asm.Bar;
+            titleBar.BackColor = Asm.Bg;
             titleBar.Tag = "nostyle";
             host.Dock = DockStyle.Fill;
             host.BackColor = Asm.Bg;
@@ -156,32 +197,64 @@ namespace IproNvrTool
             strip.TabClosed += delegate(string k) { CloseView(k); };
             strip.TabDetach += delegate(string k) { Detach(k); };
 
+            // ---- bilah paling atas: menu, ikon window, kolom seret, tombol jendela ----
+            var topBar = new Panel();
+            topBar.Dock = DockStyle.Top;
+            topBar.Height = Asm.S(46);
+            topBar.BackColor = Asm.Bg;
+            topBar.Tag = "nostyle";
+            this.topBar = topBar;
+
             var menuBtn = new AsmButton(AsmIcon.Menu, "Menu", null);
-            menuBtn.Dock = DockStyle.Right; menuBtn.Width = Asm.S(44); menuBtn.Borderless = true;
+            menuBtn.Borderless = true; menuBtn.Size = new Size(Asm.S(50), Asm.S(46)); menuBtn.Location = new Point(Asm.S(6), 0);
             menuBtn.Click += delegate { ShowMenu(menuBtn); };
+
+            var wClose = new WinButton(WinButton.Kind.Close); wClose.Dock = DockStyle.Right; wClose.Height = topBar.Height;
+            wClose.Click += delegate { Close(); };
+            wMax = new WinButton(WinButton.Kind.Max); wMax.Dock = DockStyle.Right;
+            wMax.Click += delegate { ToggleMaximize(); };
+            var wMin = new WinButton(WinButton.Kind.Min); wMin.Dock = DockStyle.Right;
+            wMin.Click += delegate { WindowState = FormWindowState.Minimized; };
+
             lblUser.Dock = DockStyle.Right;
             lblUser.Width = Asm.S(130);
             lblUser.ForeColor = Asm.Text;
             lblUser.TextAlign = ContentAlignment.MiddleRight;
             lblUser.Tag = "nostyle";
 
+            var drag = new Panel(); drag.Dock = DockStyle.Fill; drag.Tag = "nostyle"; drag.BackColor = Asm.Bg;
+            MouseEventHandler dragDown = delegate(object o, MouseEventArgs e)
+            {
+                if (e.Button != MouseButtons.Left) return;
+                if (e.Clicks == 2) { ToggleMaximize(); return; }
+                if (WindowState == FormWindowState.Maximized) return;
+                NativeMove(Handle);
+            };
+            drag.MouseDown += dragDown; lblUser.MouseDown += dragDown;
+
             var iconRow = new FlowLayoutPanel();
-            iconRow.Dock = DockStyle.Left;
-            iconRow.Width = Asm.S(4 * 44 + 14);
-            iconRow.Padding = new Padding(Asm.S(4), Asm.S(4), 0, 0);
+            iconRow.Location = new Point(Asm.S(86), 0);
+            iconRow.Size = new Size(Asm.S(4 * 50 + 10), Asm.S(46));
+            iconRow.Padding = new Padding(0, Asm.S(5), 0, 0);
             iconRow.Tag = "nostyle";
             iconRow.Controls.Add(Icon(AsmIcon.Live, "Live window", "live"));
             iconRow.Controls.Add(Icon(AsmIcon.Map, "Map window", "map"));
-            iconRow.Controls.Add(Icon(AsmIcon.Search, "Search window", "search"));
             iconRow.Controls.Add(Icon(AsmIcon.Setting, "Setup window", "setup"));
+            iconRow.Controls.Add(Icon(AsmIcon.Search, "Search window", "search"));
+
+            topBar.Controls.Add(drag);
+            topBar.Controls.Add(lblUser);
+            topBar.Controls.Add(wMin); topBar.Controls.Add(wMax); topBar.Controls.Add(wClose);
+            // urutan Dock kanan: yang ditambah terakhir paling kanan
+            drag.Controls.Add(menuBtn); drag.Controls.Add(iconRow);
+            menuBtn.BringToFront();
 
             titleBar.Controls.Add(strip);
-            titleBar.Controls.Add(lblUser);
-            titleBar.Controls.Add(menuBtn);
-            titleBar.Controls.Add(iconRow);
+            titleBar.Height = Asm.S(42);
+            Controls.Add(topBar);
 
             op = new OperationView();
-            AddView("operation", "Operation", op, false);
+            AddView("operation", "Operation window", op, false);
 
             AsmApp.ShowCamera = delegate(NvrRecord nvr, CameraRecord cam)
             {
@@ -218,7 +291,9 @@ namespace IproNvrTool
         AsmButton Icon(AsmIcon ic, string tip, string key)
         {
             var b = new AsmButton(ic, tip, delegate { OpenWindow(key); });
-            b.Size = new Size(Asm.S(38), Asm.S(32));
+            b.Size = new Size(Asm.S(46), Asm.S(36));
+            b.Borderless = true;
+            b.Margin = new Padding(0, 0, Asm.S(4), 0);
             return b;
         }
 
@@ -399,22 +474,63 @@ namespace IproNvrTool
             lo.Enabled = AsmApp.User != null;
             Asm.Item(m, "Exit", delegate { Close(); });
             Asm.StyleMenu(m);
-            m.Show(anchor, new Point(anchor.Width - m.Width, anchor.Height));
+            m.Show(anchor, new Point(0, anchor.Height));
+        }
+
+        Panel topBar;
+        WinButton wMax;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ReleaseCapture();
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+
+        static void NativeMove(IntPtr h)
+        {
+            try { ReleaseCapture(); SendMessage(h, 0xA1, (IntPtr)2, IntPtr.Zero); } catch { }   // WM_NCLBUTTONDOWN, HTCAPTION
+        }
+
+        void ToggleMaximize()
+        {
+            MaximizedBounds = Screen.FromControl(this).WorkingArea;
+            WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+            if (wMax != null) { wMax.K = WindowState == FormWindowState.Maximized ? WinButton.Kind.Restore : WinButton.Kind.Max; wMax.Invalidate(); }
+        }
+
+        /// <summary>Ubah ukuran jendela tanpa bingkai lewat tepi (WM_NCHITTEST).</summary>
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x84 && WindowState == FormWindowState.Normal && !fullScreen)   // WM_NCHITTEST
+            {
+                base.WndProc(ref m);
+                if ((int)m.Result == 1)    // HTCLIENT
+                {
+                    int lp = (int)(long)m.LParam;
+                    Point pt = PointToClient(new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF)));
+                    int e = Asm.S(6);
+                    bool l = pt.X < e, r = pt.X >= Width - e, t = pt.Y < e, b = pt.Y >= Height - e;
+                    if (t && l) m.Result = (IntPtr)13; else if (t && r) m.Result = (IntPtr)14;
+                    else if (b && l) m.Result = (IntPtr)16; else if (b && r) m.Result = (IntPtr)17;
+                    else if (l) m.Result = (IntPtr)10; else if (r) m.Result = (IntPtr)11;
+                    else if (t) m.Result = (IntPtr)12; else if (b) m.Result = (IntPtr)15;
+                }
+                return;
+            }
+            base.WndProc(ref m);
         }
 
         void ToggleFull()
         {
             if (!fullScreen)
             {
-                oldStyle = FormBorderStyle;
-                FormBorderStyle = FormBorderStyle.None;
+                MaximizedBounds = Screen.FromControl(this).Bounds;
+                topBar.Visible = false;
                 WindowState = FormWindowState.Normal;
                 WindowState = FormWindowState.Maximized;
                 fullScreen = true;
             }
             else
             {
-                FormBorderStyle = oldStyle;
+                topBar.Visible = true;
+                MaximizedBounds = Screen.FromControl(this).WorkingArea;
                 WindowState = FormWindowState.Normal;
                 fullScreen = false;
             }
