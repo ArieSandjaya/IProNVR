@@ -272,22 +272,13 @@ namespace IproNvrTool
 
         void ShowLayoutMenu(Control anchor)
         {
-            ContextMenuStrip m = Asm.Menu();
-            foreach (ScreenLayout l in ScreenLayout.All)
+            LayoutPicker.Show(anchor, AppSettings.Current.LiveMaxAreas, grid.Layout.Id, delegate(ScreenLayout lay)
             {
-                if (l.Count > AppSettings.Current.LiveMaxAreas) continue;
-                ScreenLayout lay = l;
-                ToolStripMenuItem it = Asm.Item(m, l.Id + "   (" + l.Count + " area)", delegate
-                {
-                    StopSeq();
-                    grid.SetLayout(lay);
-                    AppSettings.Current.LiveLayout = lay.Id;
-                    try { AppSettings.Current.Save(); } catch { }
-                });
-                it.Image = l.Preview(Asm.S(30), Asm.S(20));
-                it.Checked = lay.Id == grid.Layout.Id;
-            }
-            m.Show(anchor, new Point(0, anchor.Height));
+                StopSeq();
+                grid.SetLayout(lay);
+                AppSettings.Current.LiveLayout = lay.Id;
+                try { AppSettings.Current.Save(); } catch { }
+            });
         }
 
         /// <summary>Jalankan item awal dari pengaturan: "1=g:Nama;2=s:Nama".</summary>

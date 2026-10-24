@@ -277,26 +277,7 @@ namespace IproNvrTool
 
         void ShowLayoutMenu(Control anchor)
         {
-            ContextMenuStrip m = Asm.Menu();
-            int max = AppSettings.Current.OpMaxAreas;
-            foreach (ScreenLayout l in ScreenLayout.All)
-            {
-                if (l.Count > max) continue;
-                ScreenLayout lay = l;
-                ToolStripMenuItem it = Asm.Item(m, l.Id + "   (" + l.Count + " area)", delegate { SetLayout(lay.Id); });
-                it.Image = l.Preview(Asm.S(30), Asm.S(20));
-                it.Checked = lay.Id == Grid.Layout.Id;
-            }
-            m.Closed += delegate
-            {
-                // bebaskan menu + bitmap pratinjau (dilepas setelah klik selesai diproses)
-                Ui.Post(this, delegate
-                {
-                    foreach (ToolStripItem ti in m.Items) { if (ti.Image != null) { Image im = ti.Image; ti.Image = null; im.Dispose(); } }
-                    m.Dispose();
-                });
-            };
-            m.Show(anchor, new Point(0, anchor.Height));
+            LayoutPicker.Show(anchor, AppSettings.Current.OpMaxAreas, Grid.Layout.Id, delegate(ScreenLayout l) { SetLayout(l.Id); });
         }
 
         public void SetLayout(string id)

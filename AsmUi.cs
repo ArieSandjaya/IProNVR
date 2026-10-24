@@ -1256,4 +1256,71 @@ namespace IproNvrTool
             Invalidate();
         }
     }
+
+    /// <summary>Pemilih pola layar: jendela popup sendiri (bukan ContextMenuStrip) agar klik pilihan selalu tertangkap.</summary>
+    public static class LayoutPicker
+    {
+        public static void Show(Control anchor, int maxAreas, string currentId, Action<ScreenLayout> picked)
+        {
+            var items = new List<ScreenLayout>();
+            foreach (ScreenLayout l in ScreenLayout.All) if (l.Count <= maxAreas) items.Add(l);
+            int rowH = Asm.S(40), w = Asm.S(300);
+            var f = new Form();
+            f.FormBorderStyle = FormBorderStyle.None;
+            f.ShowInTaskbar = false;
+            f.StartPosition = FormStartPosition.Manual;
+            f.BackColor = Asm.Border;
+            f.Padding = new Padding(1);
+            var lb = new ListBox();
+            lb.Tag = "nostyle";
+            lb.Dock = DockStyle.Fill;
+            lb.BorderStyle = BorderStyle.None;
+            lb.BackColor = Asm.Panel;
+            lb.ForeColor = Asm.Text;
+            lb.DrawMode = DrawMode.OwnerDrawFixed;
+            lb.ItemHeight = rowH;
+            lb.IntegralHeight = false;
+            foreach (ScreenLayout l in items) lb.Items.Add(l);
+            int cur = items.FindIndex(delegate(ScreenLayout l) { return l.Id == currentId; });
+            var previews = new Dictionary<string, Bitmap>();
+            lb.DrawItem += delegate(object o, DrawItemEventArgs e)
+            {
+                if (e.Index < 0) return;
+                ScreenLayout l = items[e.Index];
+                bool hot = (e.State & DrawItemState.Selected) != 0;
+                using (var b = new SolidBrush(hot ? Asm.BarHot : Asm.Panel)) e.Graphics.FillRectangle(b, e.Bounds);
+                Bitmap bmp;
+                if (!previews.TryGetValue(l.Id, out bmp)) { bmp = l.Preview(Asm.S(40), Asm.S(26)); previews[l.Id] = bmp; }
+                e.Graphics.DrawImage(bmp, e.Bounds.X + Asm.S(10), e.Bounds.Y + (e.Bounds.Height - bmp.Height) / 2);
+                string t = l.Id + "   (" + l.Count + " area)" + (l.Id == currentId ? "   \u2713" : "");
+                TextRenderer.DrawText(e.Graphics, t, Asm.F(10f, false), new Rectangle(e.Bounds.X + Asm.S(60), e.Bounds.Y, e.Bounds.Width - Asm.S(60), e.Bounds.Height),
+                    Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix);
+            };
+            bool done = false;
+            lb.MouseMove += delegate(object o, MouseEventArgs e)
+            {
+                int i = lb.IndexFromPoint(e.Location);
+                if (i >= 0 && lb.SelectedIndex != i) lb.SelectedIndex = i;
+            };
+            lb.MouseUp += delegate(object o, MouseEventArgs e)
+            {
+                int i = lb.IndexFromPoint(e.Location);
+                if (e.Button != MouseButtons.Left || i < 0 || done) return;
+                done = true;
+                ScreenLayout l = items[i];
+                f.Close();
+                picked(l);
+            };
+            f.Deactivate += delegate { if (!done) { done = true; f.Close(); } };
+            f.FormClosed += delegate { foreach (Bitmap b in previews.Values) b.Dispose(); f.Dispose(); };
+            f.Controls.Add(lb);
+            Point pt = anchor.PointToScreen(new Point(0, anchor.Height));
+            Rectangle wa = Screen.FromControl(anchor).WorkingArea;
+            int h = Math.Min(items.Count * rowH + 2, wa.Bottom - pt.Y - 10);
+            if (h < rowH * 4) { h = Math.Min(items.Count * rowH + 2, wa.Height - 20); pt.Y = wa.Bottom - h - 5; }
+            f.Bounds = new Rectangle(Math.Min(pt.X, wa.Right - w), pt.Y, w, h);
+            f.Show(anchor.FindForm());
+            if (cur >= 0) { lb.SelectedIndex = cur; lb.TopIndex = Math.Max(0, cur - 3); }
+        }
+    }
 }
