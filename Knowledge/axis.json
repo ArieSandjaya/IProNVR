@@ -1,0 +1,32 @@
+{
+  "brand": "Axis",
+  "protocol": "VAPIX (HTTP, param.cgi teks key=value, sebagian XML) + RTSP",
+  "auth": "HTTP Digest (Basic bila diaktifkan)",
+  "port": { "http": 80, "rtsp": 554 },
+  "timeFormat": "ISO 8601 UTC: 2026-01-01T00:00:00Z",
+  "channelNumbering": "Parameter camera=1..N pada URL; parameter konfigurasi root.Image.I0 = kanal 1. Tidak ada substream tetap: sub = parameter resolution kecil.",
+  "capabilities": {
+    "deviceInfo": "GET /axis-cgi/param.cgi?action=list&group=Brand",
+    "channels": "GET /axis-cgi/param.cgi?action=list&group=Image  (root.Image.I<n>.Enabled=yes)",
+    "live": "rtsp://USER:PASS@IP:554/axis-media/media.amp?camera=1&videocodec=h264[&resolution=640x360]",
+    "search": "GET /axis-cgi/record/list.cgi?recordingid=all&startTime=...&stopTime=...",
+    "download": "GET /axis-cgi/record/export/exportrecording.cgi?schemaversion=1&recordingid=ID&diskid=SD_DISK&exportformat=matroska",
+    "snapshot": "GET /axis-cgi/jpg/image.cgi?camera=1&resolution=640x360",
+    "hdd": "GET /axis-cgi/disks/list.cgi?diskid=all  (atribut totalsize/freesize dalam KB)",
+    "ptz": "GET /axis-cgi/com/ptz.cgi?camera=1&continuouspantiltmove=30,0",
+    "events": "RTSP metadata atau WebSocket event (belum dipetakan)"
+  },
+  "endpoints": [
+    { "name": "brand", "method": "GET", "path": "/axis-cgi/param.cgi?action=list&group=Brand", "returns": "root.Brand.Brand=AXIS ...", "status": "unverified" },
+    { "name": "imageSources", "method": "GET", "path": "/axis-cgi/param.cgi?action=list&group=Image", "returns": "root.Image.I0.Enabled=yes ...", "status": "unverified" },
+    { "name": "disks", "method": "GET", "path": "/axis-cgi/disks/list.cgi?diskid=all", "returns": "XML <disk diskid totalsize freesize status>", "status": "unverified" },
+    { "name": "recordList", "method": "GET", "path": "/axis-cgi/record/list.cgi?recordingid=all&startTime=...&stopTime=...", "returns": "XML <recording recordingid starttime stoptime diskid ...>", "status": "unverified" },
+    { "name": "recordExport", "method": "GET", "path": "/axis-cgi/record/export/exportrecording.cgi?schemaversion=1&recordingid=ID&diskid=SD_DISK&exportformat=matroska", "returns": "stream .mkv", "status": "unverified" },
+    { "name": "snapshot", "method": "GET", "path": "/axis-cgi/jpg/image.cgi?camera=1", "returns": "image/jpeg", "status": "unverified" }
+  ],
+  "knownQuirks": [
+    "Axis adalah kamera edge-recording; 'NVR' Axis (S-series) memakai AXIS Camera Station, bukan API VAPIX tunggal - driver ini ditujukan untuk kamera/encoder Axis berdiri sendiri.",
+    "Tanpa kartu SD / NAS tidak ada rekaman untuk diunduh.",
+    "Playback RTSP Axis butuh recordingid dari record/list.cgi: belum disambungkan."
+  ]
+}

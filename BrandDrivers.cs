@@ -427,11 +427,11 @@ namespace IproNvrTool
         }
 
         /// <summary>.dav -> .mp4 tanpa re-encode; file .dav dihapus bila berhasil, bila gagal dibiarkan.</summary>
-        static void ConvertToMp4(string ffmpeg, string dav)
+        internal static void ConvertToMp4(string ffmpeg, string dav)
         {
             try
             {
-                string mp4 = Path.ChangeExtension(dav, ".mp4");
+                string mp4 = Path.ChangeExtension(dav, ".mp4");  // sumber .dav / .mkv
                 var psi = new ProcessStartInfo(ffmpeg, "-y -hide_banner -loglevel error -i \"" + dav + "\" -c copy \"" + mp4 + "\"");
                 psi.UseShellExecute = false; psi.CreateNoWindow = true;
                 using (Process p = Process.Start(psi))
@@ -446,6 +446,134 @@ namespace IproNvrTool
         public override byte[] Snapshot(NvrRecord nvr, int channel, DateTime utc, int width)
         {
             return NvrSession.DownloadBytes(nvr.ToEndpoint(), "/cgi-bin/snapshot.cgi?channel=" + channel, 15000);
+        }
+    }
+
+    // =====================================================================================================
+    /// <summary>Axis (VAPIX). Axis tidak punya "substream" tetap: sub = resolusi kecil (640x360), main = resolusi asli kamera.
+    /// Rekaman diambil dari edge storage (kartu SD / NAS) kamera atau recorder Axis. Semua endpoint belum diuji.</summary>
+    public class AxisDriver : HttpBrandDriver
+    {
+        public override string BrandId { get { return "axis"; } }
+        public override string BrandName { get { return "Axis"; } }
+        public override string DefaultCamTemplate { get { return "rtsp://{user}:{pass}@{ip}:554/axis-media/media.amp?videocodec=h264&resolution=640x360"; } }
+
+        protected override string RtspPath(int ch, bool sub)
+        {
+            return "/axis-media/media.amp?camera=" + ch + "&videocodec=h264" + (sub ? "&resolution=640x360" : "");
+        }
+
+        protected override string PlaybackPath(int ch, DateTime s, DateTime e)
+        {
+            return "/axis-media/media.amp?camera=" + ch + "&videocodec=h264";   // playback RTSP butuh recordingid: belum didukung
+        }
+
+        public override RegistrationResult Test(NvrEndpoint ep)
+        {
+            var res = new RegistrationResult();
+            try
+            {
+                Get(ep, "/axis-cgi/param.cgi?action=list&group=Brand", 15000);
+                res.Ok = true;
+                try { res.Disks = ListDisks(ep); } catch (Exception ex) { Log.Write("Axis " + ep.Host + ": disk: " + ex.Message); }
+                try
+                {
+                    CameraListResult cl = ListCameras(ep);
+                    res.CamRaw = cl.Raw;
+                    if (cl.Items.Count == 0) res.CamError = "daftar kamera kosong";
+                    else res.Cameras = cl.Items;
+                }
+                catch (Exception ex) { res.CamError = ex.Message; }
+            }
+            catch (Exception ex) { res.Ok = false; res.Error = ex.Message; }
+            return res;
+        }
+
+        public override CameraListResult ListCameras(NvrEndpoint ep)
+        {
+            var res = new CameraListResult();
+            res.Raw = Get(ep, "/axis-cgi/param.cgi?action=list&group=Image", 15000);
+            var seen = new HashSet<int>();
+            // root.Image.I0.Enabled=yes -> kanal 1 (indeks mulai dari 0, URL mulai dari 1)
+            foreach (Match m in Regex.Matches(res.Raw, @"Image\.I(\d+)\.Enabled\s*=\s*(\w+)"))
+            {
+                int ch = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) + 1;
+                bool en = m.Groups[2].Value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+                if (seen.Add(ch)) { var c = new CamStatus(); c.Channel = ch; c.Status = en ? 1 : 0; res.Items.Add(c); }
+            }
+            if (res.Items.Count == 0) { var c = new CamStatus(); c.Channel = 1; c.Status = 1; res.Items.Add(c); }   // kamera tunggal
+            return res;
+        }
+
+        public override List<DiskRecord> ListDisks(NvrEndpoint ep)
+        {
+            var list = new List<DiskRecord>();
+            string text = Get(ep, "/axis-cgi/disks/list.cgi?diskid=all", 15000);
+            foreach (XmlNode n in Xml(text).SelectNodes("//*[local-name()='disk']"))
+            {
+                var d = new DiskRecord();
+                XmlAttributeCollection a = n.Attributes;
+                d.Disk = a["diskid"] != null ? a["diskid"].Value : "disk";
+                double tot, free;
+                // ukuran dalam KB
+                if (a["totalsize"] != null && double.TryParse(a["totalsize"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out tot)) d.CapacityGb = (int)(tot / 1048576.0);
+                if (a["freesize"] != null && double.TryParse(a["freesize"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out free)) d.RemainGb = (int)(free / 1048576.0);
+                d.Recording = a["status"] != null && a["status"].Value.Equals("OK", StringComparison.OrdinalIgnoreCase);
+                list.Add(d);
+            }
+            return list;
+        }
+
+        public override void Download(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
+            string folder, DownloadJob job, Action<string> status)
+        {
+            Directory.CreateDirectory(folder);
+            NvrEndpoint ep = nvr.ToEndpoint();
+            try
+            {
+                if (status != null) status("Searching recordings...");
+                string iso = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+                string list = Get(ep, "/axis-cgi/record/list.cgi?recordingid=all&startTime=" + Uri.EscapeDataString(startLocal.ToUniversalTime().ToString(iso, CultureInfo.InvariantCulture))
+                    + "&stopTime=" + Uri.EscapeDataString(endLocal.ToUniversalTime().ToString(iso, CultureInfo.InvariantCulture)), 30000);
+                var recs = new List<KeyValuePair<string, string>>();   // id, disk
+                foreach (XmlNode n in Xml(list).SelectNodes("//*[local-name()='recording']"))
+                {
+                    XmlAttributeCollection a = n.Attributes;
+                    if (a["recordingid"] == null) continue;
+                    // kamera multi-kanal: saring kanal bila atribut tersedia
+                    if (a["videosourcenumber"] != null || a["source"] != null)
+                    {
+                        string src = a["videosourcenumber"] != null ? a["videosourcenumber"].Value : a["source"].Value;
+                        int sn;
+                        if (int.TryParse(src, out sn) && sn != channel && sn != channel - 1) continue;
+                    }
+                    recs.Add(new KeyValuePair<string, string>(a["recordingid"].Value, a["diskid"] != null ? a["diskid"].Value : "SD_DISK"));
+                }
+                if (recs.Count == 0) { job.NoRecording = true; job.Result = "No recording in this range."; return; }
+                string ffmpeg = FfmpegPipe.FindExe();
+                bool wantMp4 = kind != null && kind.StartsWith("MP4", StringComparison.OrdinalIgnoreCase) && ffmpeg != null;
+                int i = 0;
+                foreach (KeyValuePair<string, string> r in recs)
+                {
+                    if (job.Cancel) break;
+                    i++;
+                    if (status != null) status("Downloading " + i + "/" + recs.Count + "...");
+                    string file = Path.Combine(folder, Safe(nvr.Name + "_CH" + channel + "_" + r.Key) + ".mkv");
+                    SaveStream(NvrSession.CreateRequest(ep, "/axis-cgi/record/export/exportrecording.cgi?schemaversion=1&recordingid=" + Uri.EscapeDataString(r.Key)
+                        + "&diskid=" + Uri.EscapeDataString(r.Value) + "&exportformat=matroska", 30000), file, job);
+                    job.Files++;
+                    if (wantMp4 && !job.Cancel) DahuaDriver.ConvertToMp4(ffmpeg, file);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!job.Cancel) job.Result = ex.Message;
+            }
+        }
+
+        public override byte[] Snapshot(NvrRecord nvr, int channel, DateTime utc, int width)
+        {
+            return NvrSession.DownloadBytes(nvr.ToEndpoint(), "/axis-cgi/jpg/image.cgi?camera=" + channel + (width > 0 ? "&resolution=" + width + "x" + (width * 9 / 16) : ""), 15000);
         }
     }
 }
