@@ -325,6 +325,14 @@ function edit(r,row){
   el.style.display='flex';
   function stopLive(){var im=el.querySelector('#pvbox img');if(im){im.src='';im.remove()}var b=el.querySelector('#pvbox'),ps=el.querySelector('#ps'),pv=el.querySelector('#pv');if(b)b.style.display='none';if(ps)ps.style.display='none';if(pv)pv.style.display=''}
   function close(){stopLive();el.style.display='none';el.innerHTML=''}
+  if(r=='nvrs'){
+    var TPL={ipro:'rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1',dahua:'rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1',hikvision:'rtsp://{user}:{pass}@{ip}:554/Streaming/Channels/102'};
+    var bsel=el.querySelector('[data-n=brand]'),tin=el.querySelector('[data-n=rtsp_template]');
+    if(bsel&&tin)bsel.onchange=function(){
+      var cur=tin.value.trim(),known=!cur||Object.keys(TPL).some(function(k){return TPL[k]==cur});
+      if(known)tin.value=TPL[bsel.value]||TPL.ipro;
+    };
+  }
   if(r=='cameras'){
     var pvb=el.querySelector('#pv'),psb=el.querySelector('#ps'),box=el.querySelector('#pvbox');
     psb.onclick=stopLive;
