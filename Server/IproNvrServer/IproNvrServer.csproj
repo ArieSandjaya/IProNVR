@@ -20,6 +20,7 @@
     <!-- kode deteksi RTSP dipakai bersama dengan aplikasi client -->
     <Compile Include="..\..\RtspDiscovery.cs" Link="Shared\RtspDiscovery.cs" />
     <Compile Include="..\..\StreamProbe.cs" Link="Shared\StreamProbe.cs" />
+    <Compile Include="..\..\BrandCgi.cs" Link="Shared\BrandCgi.cs" />
   </ItemGroup>
 
   <ItemGroup>

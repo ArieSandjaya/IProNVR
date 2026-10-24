@@ -25,6 +25,9 @@ Buka `Server/IproNvrServer/IproNvrServer.csproj` di Visual Studio (net48) lalu B
 - Group: menu Group memakai editor visual seperti aplikasi client (pilih pola layar, klik/seret kamera ke area).
 - Halaman admin web: `http://SERVER:8470/`
 
+## Merek NVR
+Kolom **Merek** pada data NVR (halaman admin): i-PRO (default), Hikvision, atau Dahua. Server memakai logika yang sama dengan aplikasi client (`BrandCgi.cs` dipakai bersama) untuk tes login dan membaca daftar kamera ("Deteksi kamera"); merek ikut disinkron ke client. Kamera memiliki URL RTSP substream dan stream utama (`rtsp_main_url`, diisi tombol Deteksi RTSP). Endpoint Hikvision/Dahua belum diuji ke perangkat nyata (lihat `Knowledge/`).
+
 ## Deteksi RTSP otomatis
 Di halaman admin: tab **NVR** tombol *Deteksi RTSP* (semua kamera NVR yang punya IP) atau tab **Kamera** tombol *Deteksi* (satu kamera). Syarat:
 - `ffmpeg.exe` ada di folder `IproNvrServer.exe`, di PATH, atau isi `FfmpegPath` di `server.json`

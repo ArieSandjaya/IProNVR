@@ -174,20 +174,32 @@ namespace IproNvrServer
             int port = Convert.ToInt32(nvr["port"]);
             bool https = Convert.ToInt32(nvr["use_https"]) != 0;
             string nu = Convert.ToString(nvr["username"]), np = Convert.ToString(nvr["password"]);
-            string text;
+            string brand = BrandCgi.Norm(Convert.ToString(nvr["brand"]));
+            SortedDictionary<int, int> cl;
+            string text = "";
             try
             {
-                // 1) tes login (UID), 2) daftar kamera yang terdaftar di NVR: sama dengan "Tes login" + "Ambil Daftar Kamera" di aplikasi client
-                string uid = NvrList.Login(host, port, https, nu, np);
-                NvrList.Logout(host, port, https, nu, np, uid);
-                text = NvrList.Download(host, port, https, nu, np, "/cgi-bin/as_getinfo.cgi?FILE=2", 20000);
+                if (brand == BrandCgi.Ipro)
+                {
+                    // 1) tes login (UID), 2) daftar kamera yang terdaftar di NVR: sama dengan "Tes login" + "Ambil Daftar Kamera" di aplikasi client
+                    string uid = NvrList.Login(host, port, https, nu, np);
+                    NvrList.Logout(host, port, https, nu, np, uid);
+                    text = NvrList.Download(host, port, https, nu, np, "/cgi-bin/as_getinfo.cgi?FILE=2", 20000);
+                    cl = NvrList.Parse(text);
+                }
+                else
+                {
+                    // Hikvision / Dahua: logika sama dengan driver di aplikasi client (BrandCgi dipakai bersama)
+                    Func<string, string> get = delegate(string path) { return NvrList.Download(host, port, https, nu, np, path, 20000); };
+                    BrandCgi.Login(brand, get);
+                    cl = BrandCgi.Cameras(brand, get, out text);
+                }
             }
             catch (Exception ex) { error = "Gagal menghubungi NVR " + host + ":" + port + " - " + NvrList.Explain(ex); return null; }
-            SortedDictionary<int, int> cl = NvrList.Parse(text);
             if (cl.Count == 0)
             {
                 string raw = (text ?? "").Replace("\r", " ").Replace("\n", " | ");
-                error = "NVR menjawab tetapi tidak ada baris CAM_CONNECT_nnCH. Cuplikan respons: " + (raw.Length > 200 ? raw.Substring(0, 200) : raw);
+                error = "NVR menjawab tetapi tidak ada daftar kamera. Cuplikan respons: " + (raw.Length > 200 ? raw.Substring(0, 200) : raw);
                 return null;
             }
             var have = new HashSet<long>();

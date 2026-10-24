@@ -265,16 +265,16 @@ namespace IproNvrTool
                     string tpl = Str(n, "rtsp_template");
                     if (tpl.Length == 0) tpl = Rtsp.DefaultTemplate;
                     Exec(c, tx, @"INSERT INTO nvr (id, name, host, port, use_https, username, password_enc, max_channels, model, location, notes,
-                                  cam_user, cam_pass_enc, rtsp_template, substream_param, registered_at)
-                                  VALUES (@id, @name, @host, @port, @https, @user, @pass, @maxch, @model, @loc, @notes, @cu, @cp, @tpl, @sub, @now)
+                                  cam_user, cam_pass_enc, rtsp_template, substream_param, brand, registered_at)
+                                  VALUES (@id, @name, @host, @port, @https, @user, @pass, @maxch, @model, @loc, @notes, @cu, @cp, @tpl, @sub, @brand, @now)
                                   ON CONFLICT (id) DO UPDATE SET name = excluded.name, host = excluded.host, port = excluded.port, use_https = excluded.use_https,
                                   username = excluded.username, password_enc = excluded.password_enc, max_channels = excluded.max_channels, model = excluded.model,
                                   location = excluded.location, notes = excluded.notes, cam_user = excluded.cam_user, cam_pass_enc = excluded.cam_pass_enc,
-                                  rtsp_template = excluded.rtsp_template, substream_param = excluded.substream_param",
+                                  rtsp_template = excluded.rtsp_template, substream_param = excluded.substream_param, brand = excluded.brand",
                         "@id", id, "@name", Str(n, "name"), "@host", host, "@port", port, "@https", Lng(n, "use_https") != 0 ? 1 : 0,
                         "@user", Str(n, "username"), "@pass", Secret.Protect(Str(n, "password")), "@maxch", (int)Math.Max(1, Lng(n, "max_channels")),
                         "@model", Str(n, "model"), "@loc", Str(n, "location"), "@notes", Str(n, "notes"),
-                        "@cu", Str(n, "cam_user"), "@cp", Secret.Protect(Str(n, "cam_pass")), "@tpl", tpl, "@sub", Str(n, "substream_param"), "@now", now);
+                        "@cu", Str(n, "cam_user"), "@cp", Secret.Protect(Str(n, "cam_pass")), "@tpl", tpl, "@sub", Str(n, "substream_param"), "@brand", BrandCgi.Norm(Str(n, "brand")), "@now", now);
                 }
 
                 // kamera: yang tidak ada di server dihapus, sisanya di-update (status/hasil scan lokal dipertahankan)
@@ -299,16 +299,16 @@ namespace IproNvrTool
                 {
                     long nid = Lng(k, "nvr_id");
                     if (!nvrIds.Contains(nid)) continue;
-                    Exec(c, tx, @"INSERT INTO camera (nvr_id, channel, name, ip_address, location, note, rtsp_url, codec, width, height, scan_detail, cam_user, cam_pass_enc)
-                                  VALUES (@n, @ch, @name, @ip, @loc, @note, @url, @codec, @w, @h, @det, @cu, @cp)
+                    Exec(c, tx, @"INSERT INTO camera (nvr_id, channel, name, ip_address, location, note, rtsp_url, rtsp_main_url, codec, width, height, scan_detail, cam_user, cam_pass_enc)
+                                  VALUES (@n, @ch, @name, @ip, @loc, @note, @url, @murl, @codec, @w, @h, @det, @cu, @cp)
                                   ON CONFLICT (nvr_id, channel) DO UPDATE SET name = excluded.name, ip_address = excluded.ip_address, location = excluded.location,
-                                  note = excluded.note, rtsp_url = excluded.rtsp_url, scan_detail = excluded.scan_detail,
+                                  note = excluded.note, rtsp_url = excluded.rtsp_url, rtsp_main_url = excluded.rtsp_main_url, scan_detail = excluded.scan_detail,
                                   cam_user = excluded.cam_user, cam_pass_enc = excluded.cam_pass_enc,
                                   codec = CASE WHEN excluded.codec <> '' THEN excluded.codec ELSE camera.codec END,
                                   width = CASE WHEN excluded.width > 0 THEN excluded.width ELSE camera.width END,
                                   height = CASE WHEN excluded.height > 0 THEN excluded.height ELSE camera.height END",
                         "@n", nid, "@ch", (int)Lng(k, "channel"), "@name", Str(k, "name"), "@ip", Str(k, "ip_address"), "@loc", Str(k, "location"),
-                        "@note", Str(k, "note"), "@url", Str(k, "rtsp_url"), "@codec", Str(k, "codec"),
+                        "@note", Str(k, "note"), "@url", Str(k, "rtsp_url"), "@murl", Str(k, "rtsp_main_url"), "@codec", Str(k, "codec"),
                         "@w", Lng(k, "width") > 0 ? (object)(int)Lng(k, "width") : null, "@h", Lng(k, "height") > 0 ? (object)(int)Lng(k, "height") : null,
                         "@det", Str(k, "scan_detail"), "@cu", Str(k, "cam_user"), "@cp", Secret.Protect(Str(k, "cam_pass")));
                 }

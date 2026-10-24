@@ -109,9 +109,9 @@ pre.log{margin:8px 0 0;max-height:240px;overflow:auto;font:12px ui-monospace,Con
 <script>
 var tok=sessionStorage.getItem('tok'),me=null,schema=[],data={},ver=0,page='home',job=null,poll=null,msg=null,flt={nvr:'',q:''};
 var META={
- nvrs:{t:'NVR',ic:'▣',lbl:{name:'Nama',host:'Host / IP',port:'Port',use_https:'HTTPS',username:'User NVR',password:'Password NVR',max_channels:'Jumlah kanal',model:'Model',location:'Lokasi',notes:'Catatan',cam_user:'User kamera (RTSP)',cam_pass:'Password kamera (RTSP)',rtsp_template:'Template RTSP substream',substream_param:'Parameter substream NVR'},
+ nvrs:{t:'NVR',ic:'▣',lbl:{name:'Nama',host:'Host / IP',port:'Port',use_https:'HTTPS',username:'User NVR',password:'Password NVR',max_channels:'Jumlah kanal',brand:'Merek',model:'Model',location:'Lokasi',notes:'Catatan',cam_user:'User kamera (RTSP)',cam_pass:'Password kamera (RTSP)',rtsp_template:'Template RTSP substream',substream_param:'Parameter substream NVR'},
   full:['rtsp_template','substream_param','notes'],hint:{rtsp_template:'Contoh: rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1'}},
- cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',cam_user:'User kamera (khusus)',cam_pass:'Password kamera (khusus)',rtsp_url:'URL RTSP substream',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi',reg_status:'Status di NVR (0 tidak terdaftar, 1 normal, 2 error koneksi)'},full:['rtsp_url','scan_detail','note'],hint:{cam_user:'Kosongkan bila sama dengan login kamera di data NVR.',rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
+ cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',cam_user:'User kamera (khusus)',cam_pass:'Password kamera (khusus)',rtsp_url:'URL RTSP substream',rtsp_main_url:'URL RTSP stream utama',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi',reg_status:'Status di NVR (0 tidak terdaftar, 1 normal, 2 error koneksi)'},full:['rtsp_url','scan_detail','note'],hint:{cam_user:'Kosongkan bila sama dengan login kamera di data NVR.',rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
  groups:{t:'Group',ic:'▦',lbl:{name:'Nama',layout:'Layout',slots:'Kamera per area',owner:'Pemilik',sort:'Urutan'},full:['slots'],hint:{slots:'Format: idNVR:kanal dipisah koma, area kosong dikosongkan. Contoh: 1:1,1:2,,1:5'}},
  sequences:{t:'Sequence',ic:'↻',lbl:{name:'Nama',steps:'Langkah',sort:'Urutan'},full:['steps'],hint:{steps:'Format: idGroup:detik dipisah koma. Contoh: 1:10,2:10,3:15'}},
  users:{t:'User',ic:'☺',lbl:{name:'Nama',level:'Level (0 = admin penuh, 1-5)',is_admin:'Admin',use_group:'Pakai group sendiri',password:'Password'},full:[]}
@@ -312,7 +312,8 @@ function edit(r,row){
   s.cols.forEach(function(c){
     var n=c.name,full=m.full.indexOf(n)>=0,lb=m.lbl[n]||n,val=v[n]==null?(isNew&&n=='port'?80:(isNew&&n=='max_channels'?16:(isNew&&n=='level'?5:(isNew&&n=='use_group'?1:'')))):v[n],inp;
     if(r=='cameras'&&['codec','width','height'].indexOf(n)>=0)return;
-    if(n=='nvr_id'){inp='<select data-n="nvr_id">'+(data.nvrs||[]).map(function(x){return '<option value="'+x.id+'"'+((v.nvr_id||flt.nvr)==x.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('')+'</select>'}
+    if(n=='brand'){var bv=val||'ipro';inp='<select data-n="brand" data-k="T">'+[['ipro','i-PRO (Panasonic)'],['hikvision','Hikvision'],['dahua','Dahua']].map(function(b){return '<option value="'+b[0]+'"'+(bv==b[0]?' selected':'')+'>'+b[1]+'</option>'}).join('')+'</select>'}
+    else if(n=='nvr_id'){inp='<select data-n="nvr_id">'+(data.nvrs||[]).map(function(x){return '<option value="'+x.id+'"'+((v.nvr_id||flt.nvr)==x.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('')+'</select>'}
     else if(BOOL[n]){inp='<select data-n="'+n+'" data-k="I"><option value="1"'+(val==1?' selected':'')+'>Ya</option><option value="0"'+(val==1?'':' selected')+'>Tidak</option></select>'}
     else if(full){inp='<textarea rows="3" data-n="'+n+'" data-k="T">'+esc(val)+'</textarea>'}
     else inp='<input data-n="'+n+'" data-k="'+c.kind+'" value="'+esc(val)+'"'+(c.secret?' type="password" autocomplete="new-password"':'')+(c.kind!='T'?' type="number"':'')+'>';

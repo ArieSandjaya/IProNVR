@@ -134,7 +134,7 @@ namespace IproNvrServer
                         bool had = !string.IsNullOrWhiteSpace(Convert.ToString(cam["rtsp_url"]));
                         if (r.SubTemplate != null)
                         {
-                            if (overwrite || !had) upd["rtsp_url"] = r.SubTemplate;
+                            if (overwrite || !had) { upd["rtsp_url"] = r.SubTemplate; upd["rtsp_main_url"] = r.MainTemplate ?? ""; }
                             upd["codec"] = r.Sub.Codec;
                             upd["width"] = r.Sub.Width;
                             upd["height"] = r.Sub.Height;
