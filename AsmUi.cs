@@ -18,7 +18,7 @@ namespace IproNvrTool
         public static readonly Color BarOpen = Color.FromArgb(48, 54, 67);
         public static readonly Color Border = Color.FromArgb(64, 74, 92);      // #404a5c
         public static readonly Color Text = Color.FromArgb(182, 188, 210);     // #b6bcd2 teks & ikon
-        public static readonly Color Muted = Color.FromArgb(88, 91, 103);      // #585b67 nonaktif
+        public static readonly Color Muted = Color.FromArgb(140, 146, 160);     // nonaktif / teks redup (cukup terang di latar gelap)
         public static readonly Color Accent = Color.FromArgb(104, 146, 191);   // #6892bf
         public static readonly Color TabBg = Color.FromArgb(30, 55, 77);       // #1e374d tab aktif
         public static readonly Color TabLine = Color.FromArgb(69, 97, 128);    // #456180
@@ -387,7 +387,7 @@ namespace IproNvrTool
         {
             Graphics g = e.Graphics;
             Color bg = Asm.Panel2;
-            if (!Enabled) bg = Color.FromArgb(24, 27, 34);
+            if (!Enabled) bg = Color.FromArgb(38, 41, 50);
             else if (down) bg = Asm.TabBg;
             else if (isChecked || Highlight) bg = Asm.TabBg;
             else if (hot) bg = Color.FromArgb(40, 46, 58);
@@ -398,7 +398,7 @@ namespace IproNvrTool
                 using (var p = new Pen(isChecked || Highlight ? Asm.Accent : Asm.BtnBorder))
                     g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
             }
-            Color fg = !Enabled ? Asm.Muted : (IconColor.HasValue ? IconColor.Value : Asm.Text);
+            Color fg = !Enabled ? Color.FromArgb(135, 141, 156) : (IconColor.HasValue ? IconColor.Value : Asm.Text);
             int pad = Asm.S(5);
             if (GridN > 0)
             {

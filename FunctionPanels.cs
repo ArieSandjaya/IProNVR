@@ -469,6 +469,7 @@ namespace IproNvrTool
             // lokasi simpan
             var fp = new Panel(); fp.Dock = DockStyle.Top; fp.Height = Asm.S(28); fp.Tag = "nostyle";
             var bb = new Button(); bb.Text = "..."; bb.Dock = DockStyle.Right; bb.Width = Asm.S(34); bb.Tag = "nostyle";
+            bb.FlatStyle = FlatStyle.Flat; bb.UseVisualStyleBackColor = false; bb.BackColor = Asm.Panel2; bb.ForeColor = Asm.Text; bb.FlatAppearance.BorderColor = Asm.BtnBorder;
             bb.Click += delegate
             {
                 using (var d = new FolderBrowserDialog())
