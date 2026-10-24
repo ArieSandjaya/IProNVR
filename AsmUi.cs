@@ -76,6 +76,9 @@ namespace IproNvrTool
             catch { }
         }
 
+        /// <summary>Faktor dasar: seluruh UI 25% lebih kecil dari ukuran piksel ASM300 mentah.</summary>
+        public const double Base = 0.75;
+
         public static Font F(float pt, bool bold)
         {
             if (famReg == null) InitFonts();
@@ -84,7 +87,7 @@ namespace IproNvrTool
             if (!fonts.TryGetValue(key, out f))
             {
                 bool semi = famBold != famReg;
-                f = new Font(bold ? famBold : famReg, pt * fontScale * AppSettings.Current.AsmMagnification / 100f,
+                f = new Font(bold ? famBold : famReg, (float)(pt * fontScale * Base * AppSettings.Current.AsmMagnification / 100.0),
                     bold && !semi ? FontStyle.Bold : FontStyle.Regular);
                 fonts[key] = f;
             }
@@ -94,7 +97,7 @@ namespace IproNvrTool
         /// <summary>Ukuran piksel mengikuti Display magnification.</summary>
         public static int S(int px)
         {
-            return (int)Math.Round(px * AppSettings.Current.AsmMagnification / 100.0);
+            return (int)Math.Round(px * Base * AppSettings.Current.AsmMagnification / 100.0);
         }
 
         public static ContextMenuStrip Menu()
