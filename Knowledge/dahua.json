@@ -1,0 +1,41 @@
+{
+  "brand": "Dahua",
+  "protocol": "HTTP CGI (respons teks key=value) + RTSP",
+  "auth": "HTTP Digest",
+  "port": { "http": 80, "rtsp": 554, "sdk": 37777 },
+  "timeFormat": "CGI: 'YYYY-MM-DD HH:mm:ss' (waktu lokal perangkat). RTSP playback: YYYY_MM_DD_HH_mm_ss",
+  "channelNumbering": "channel mulai dari 1 pada RTSP/CGI (kadang 0-based pada konfigurasi: cek per endpoint). subtype 0 = main, 1 = sub",
+  "capabilities": {
+    "deviceInfo": "GET /cgi-bin/magicBox.cgi?action=getSystemInfo",
+    "time": "GET /cgi-bin/global.cgi?action=getCurrentTime",
+    "channels": "GET /cgi-bin/configManager.cgi?action=getConfig&name=RemoteDevice  ;  nama: name=ChannelTitle",
+    "live": "rtsp://USER:PASS@IP:554/cam/realmonitor?channel=1&subtype=0",
+    "playback": "rtsp://USER:PASS@IP:554/cam/playback?channel=1&starttime=2026_01_01_00_00_00&endtime=2026_01_01_00_05_00",
+    "search": "mediaFileFind.cgi (factory.create -> findFile -> findNextFile -> close -> destroy)",
+    "download": "GET /cgi-bin/loadfile.cgi?action=startLoad&channel=1&startTime=...&endTime=...  atau  /cgi-bin/RPC_Loadfile/<FilePath>",
+    "snapshot": "GET /cgi-bin/snapshot.cgi?channel=1",
+    "ptz": "GET /cgi-bin/ptz.cgi?action=start&channel=1&code=Up&arg1=0&arg2=4&arg3=0  ... action=stop",
+    "hdd": "GET /cgi-bin/storageDevice.cgi?action=getDeviceAllInfo",
+    "events": "GET /cgi-bin/eventManager.cgi?action=attach&codes=[All]&heartbeat=5  (stream multipart)"
+  },
+  "endpoints": [
+    { "name": "systemInfo", "method": "GET", "path": "/cgi-bin/magicBox.cgi?action=getSystemInfo", "returns": "baris key=value (deviceType, serialNumber, ...)", "status": "unverified" },
+    { "name": "findFileCreate", "method": "GET", "path": "/cgi-bin/mediaFileFind.cgi?action=factory.create", "returns": "result=<objectId>", "status": "unverified" },
+    { "name": "findFile", "method": "GET",
+      "path": "/cgi-bin/mediaFileFind.cgi?action=findFile&object=<id>&condition.Channel=1&condition.StartTime=2026-01-01%2000:00:00&condition.EndTime=2026-01-01%2023:59:59&condition.Types[0]=dav",
+      "returns": "OK / Error", "status": "unverified" },
+    { "name": "findNextFile", "method": "GET", "path": "/cgi-bin/mediaFileFind.cgi?action=findNextFile&object=<id>&count=100",
+      "returns": "found=N, items[i].FilePath/StartTime/EndTime/Length/Channel", "notes": "Ulangi sampai found=0. Lalu action=close dan action=destroy.", "status": "unverified" },
+    { "name": "loadFile", "method": "GET", "path": "/cgi-bin/loadfile.cgi?action=startLoad&channel=1&startTime=2026-01-01%2000:00:00&endTime=2026-01-01%2000:05:00", "returns": "stream biner .dav", "notes": "Alternatif: /cgi-bin/RPC_Loadfile/<items[i].FilePath>.", "status": "unverified" },
+    { "name": "snapshot", "method": "GET", "path": "/cgi-bin/snapshot.cgi?channel=1", "returns": "image/jpeg", "status": "unverified" },
+    { "name": "ptzStart", "method": "GET", "path": "/cgi-bin/ptz.cgi?action=start&channel=1&code=Up&arg1=0&arg2=4&arg3=0", "notes": "Hentikan dengan action=stop dengan parameter yang sama.", "status": "unverified" },
+    { "name": "storageInfo", "method": "GET", "path": "/cgi-bin/storageDevice.cgi?action=getDeviceAllInfo", "returns": "key=value info.* (TotalBytes, UsedBytes, IsError)", "status": "unverified" },
+    { "name": "eventAttach", "method": "GET", "path": "/cgi-bin/eventManager.cgi?action=attach&codes=[All]&heartbeat=5", "returns": "multipart/x-mixed-replace; tiap part berisi Code=...;action=Start/Stop", "status": "unverified" }
+  ],
+  "knownQuirks": [
+    "Respons bukan XML/JSON melainkan teks 'tabel.key=value' - butuh parser baris.",
+    "File rekaman berformat .dav (proprietary); butuh konversi (ffmpeg) agar jadi .mp4.",
+    "Waktu search/download memakai jam lokal perangkat; selaraskan dengan global.cgi?action=getCurrentTime.",
+    "Beberapa firmware mewajibkan sesi Digest baru untuk setiap request streaming (loadfile)."
+  ]
+}

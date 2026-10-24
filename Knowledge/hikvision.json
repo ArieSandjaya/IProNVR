@@ -1,0 +1,42 @@
+{
+  "brand": "Hikvision",
+  "protocol": "ISAPI (HTTP + XML) + RTSP",
+  "auth": "HTTP Digest (sebagian firmware lama: Basic)",
+  "port": { "http": 80, "rtsp": 554, "sdk": 8000 },
+  "timeFormat": "ISO 8601 UTC pada pencarian/playback RTSP: 20260101T000000Z",
+  "channelNumbering": "Track/stream id = channel*100 + stream (101 = ch1 main, 102 = ch1 sub). Playback track = channel*100 + 1",
+  "capabilities": {
+    "deviceInfo": "GET /ISAPI/System/deviceInfo",
+    "time": "GET /ISAPI/System/time",
+    "channels": "GET /ISAPI/ContentMgmt/InputProxy/channels  (kamera IP di NVR) ; status: /ISAPI/ContentMgmt/InputProxy/channels/status",
+    "streamList": "GET /ISAPI/Streaming/channels",
+    "live": "rtsp://USER:PASS@IP:554/Streaming/Channels/101",
+    "playback": "rtsp://USER:PASS@IP:554/Streaming/tracks/101?starttime=20260101T000000Z&endtime=20260101T000500Z",
+    "search": "POST /ISAPI/ContentMgmt/search  (body CMSearchDescription)",
+    "download": "POST /ISAPI/ContentMgmt/download  (body downloadRequest/playbackURI)",
+    "snapshot": "GET /ISAPI/Streaming/channels/101/picture",
+    "ptz": "PUT /ISAPI/PTZCtrl/channels/1/continuous  (body PTZData pan/tilt/zoom -100..100)",
+    "hdd": "GET /ISAPI/ContentMgmt/Storage",
+    "events": "GET /ISAPI/Event/notification/alertStream  (stream multipart panjang)"
+  },
+  "endpoints": [
+    { "name": "deviceInfo", "method": "GET", "path": "/ISAPI/System/deviceInfo", "returns": "XML DeviceInfo (deviceName, model, serialNumber, firmwareVersion)", "status": "unverified" },
+    { "name": "inputProxyChannels", "method": "GET", "path": "/ISAPI/ContentMgmt/InputProxy/channels", "returns": "XML daftar InputProxyChannel (id, name, sourceInputPortDescriptor.ipAddress)", "status": "unverified" },
+    { "name": "search", "method": "POST", "path": "/ISAPI/ContentMgmt/search",
+      "body": "<CMSearchDescription><searchID>{GUID}</searchID><trackIDList><trackID>101</trackID></trackIDList><timeSpanList><timeSpan><startTime>2026-01-01T00:00:00Z</startTime><endTime>2026-01-01T23:59:59Z</endTime></timeSpan></timeSpanList><maxResults>100</maxResults><searchResultPostion>0</searchResultPostion><metadataList><metadataDescriptor>//recordType.meta.std-cgi.com</metadataDescriptor></metadataList></CMSearchDescription>",
+      "returns": "XML CMSearchResult: responseStatus, numOfMatches, matchList/searchMatchItem (timeSpan, mediaSegmentDescriptor/playbackURI)",
+      "notes": "Ulangi dengan searchResultPostion bertambah selama responseStatusStrg = MORE.", "status": "unverified" },
+    { "name": "download", "method": "POST", "path": "/ISAPI/ContentMgmt/download",
+      "body": "<downloadRequest version=\"1.0\" xmlns=\"http://www.isapi.org/ver20/XMLSchema\"><playbackURI>rtsp://IP/Streaming/tracks/101?starttime=20260101T000000Z&amp;endtime=20260101T000500Z&amp;name=...&amp;size=...</playbackURI></downloadRequest>",
+      "returns": "stream biner (PS/MP4 tergantung firmware)", "notes": "playbackURI diambil utuh dari hasil search.", "status": "unverified" },
+    { "name": "snapshot", "method": "GET", "path": "/ISAPI/Streaming/channels/101/picture", "returns": "image/jpeg", "status": "unverified" },
+    { "name": "ptzContinuous", "method": "PUT", "path": "/ISAPI/PTZCtrl/channels/1/continuous", "body": "<PTZData><pan>30</pan><tilt>0</tilt><zoom>0</zoom></PTZData>", "notes": "Kirim semua 0 untuk berhenti.", "status": "unverified" },
+    { "name": "storage", "method": "GET", "path": "/ISAPI/ContentMgmt/Storage", "returns": "XML hddList (status, capacity, freeSpace)", "status": "unverified" },
+    { "name": "alertStream", "method": "GET", "path": "/ISAPI/Event/notification/alertStream", "returns": "multipart/mixed, tiap part XML EventNotificationAlert", "status": "unverified" }
+  ],
+  "knownQuirks": [
+    "Format waktu playback RTSP harus UTC dengan akhiran Z; pencarian bisa memakai waktu lokal tergantung timezone perangkat - cek /ISAPI/System/time.",
+    "Beberapa NVR membatasi jumlah sesi RTSP bersamaan; sub-stream (…02) dianjurkan untuk video wall.",
+    "Akun default sering dikunci setelah beberapa kali gagal login (Digest)."
+  ]
+}
