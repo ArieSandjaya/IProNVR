@@ -17,7 +17,7 @@ namespace IproNvrTool
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
             Tag = "nostyle";
-            Height = Asm.S(240);
+            Height = Asm.S(237);
         }
 
         public DateTime Value
@@ -55,7 +55,7 @@ namespace IproNvrTool
             Rectangle head = new Rectangle(r.X, r.Y, r.Width, HeadH);
             using (var b = new SolidBrush(Asm.Label)) g.FillRectangle(b, head);
             Color ink = Color.FromArgb(48, 54, 67);
-            TextRenderer.DrawText(g, month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture), Asm.F(9.5f, true), head, ink,
+            TextRenderer.DrawText(g, month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture), Asm.F(11f, true), head, ink,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             int ah = Asm.S(8);
             using (var b = new SolidBrush(ink))
@@ -68,7 +68,7 @@ namespace IproNvrTool
             for (int c = 0; c < 7; c++)
             {
                 Rectangle cr = Cell(0, c);
-                TextRenderer.DrawText(g, wd[c], Asm.F(9f, true), new Rectangle(cr.X, r.Y + HeadH, cr.Width, WeekH), Color.FromArgb(205, 214, 230),
+                TextRenderer.DrawText(g, wd[c], Asm.F(10.5f, true), new Rectangle(cr.X, r.Y + HeadH, cr.Width, WeekH), Color.FromArgb(205, 214, 230),
                     TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             }
             DateTime d = FirstShown;
@@ -88,7 +88,7 @@ namespace IproNvrTool
                     using (var b = new SolidBrush(sel ? Color.FromArgb(23, 41, 58) : Color.FromArgb(44, 54, 74))) g.FillEllipse(b, circle);
                 }
                 if (today && !sel) fg = Asm.Accent;
-                TextRenderer.DrawText(g, d.Day.ToString(), Asm.F(9.5f, false), cr, fg,
+                TextRenderer.DrawText(g, d.Day.ToString(), Asm.F(11f, false), cr, fg,
                     TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             }
             using (var p = new Pen(Color.White, Asm.S(2))) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);

@@ -16,7 +16,7 @@ namespace IproNvrTool
             this.selected = selected;
             SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
             Tag = "nostyle";
-            Height = Asm.S(40);
+            Height = Asm.S(39);
             timer.Interval = 1000;
             timer.Tick += delegate { if (Visible) Invalidate(); };
             timer.Start();
@@ -41,47 +41,48 @@ namespace IproNvrTool
             g.SmoothingMode = SmoothingMode.AntiAlias;
             ViewCell c = selected == null ? null : selected();
             bool has = c != null && c.HasCamera;
-            int y = Asm.S(4), h = Height - Asm.S(8);
+            int y = 0, h = Height - Asm.S(2);
 
-            // nama kamera
-            Rectangle name = new Rectangle(Asm.S(6), y, Math.Max(Asm.S(120), Width * 36 / 100), h);
+            // nama kamera (lebar tetap 383 seperti ASM300)
+            Rectangle name = new Rectangle(Asm.S(2), y, Asm.S(383), h);
             Box(g, name);
             if (has)
-                TextRenderer.DrawText(g, Dir.Title(c.NvrId, c.Channel), Asm.F(10f, false), Rectangle.Inflate(name, -Asm.S(8), 0), Asm.Text,
+                TextRenderer.DrawText(g, Dir.Title(c.NvrId, c.Channel), Asm.F(12f, false), Rectangle.Inflate(name, -Asm.S(8), 0), Asm.Text,
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
 
             // ikon alarm / error
-            int sz = h;
-            Rectangle a1 = new Rectangle(name.Right + Asm.S(4), y, sz, h);
-            Rectangle a2 = new Rectangle(a1.Right + Asm.S(2), y, sz, h);
+            int sz = Asm.S(45);
+            Rectangle a1 = new Rectangle(name.Right + Asm.S(2), y, sz, h);
+            Rectangle a2 = new Rectangle(a1.Right, y, sz, h);
             foreach (Rectangle r in new[] { a1, a2 })
                 using (var b = new SolidBrush(Color.FromArgb(48, 54, 67))) g.FillRectangle(b, r);
-            AsmIcons.Draw(g, AsmIcon.Alarm, Rectangle.Inflate(a1, -Asm.S(6), -Asm.S(6)), Asm.Text);
+            AsmIcons.Draw(g, AsmIcon.Alarm, Rectangle.Inflate(a1, -Asm.S(9), -Asm.S(7)), Asm.Text);
             using (var b = new SolidBrush(Asm.Text))
             {
-                int d = h - Asm.S(12);
+                int d = h - Asm.S(14);
                 g.FillEllipse(b, a2.X + (a2.Width - d) / 2, a2.Y + (a2.Height - d) / 2, d, d);
             }
-            TextRenderer.DrawText(g, "!", Asm.F(10f, true), a2, Color.FromArgb(48, 54, 67),
+            TextRenderer.DrawText(g, "!", Asm.F(12f, true), a2, Color.FromArgb(48, 54, 67),
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
 
             // REC + jam
-            int midX = Width * 62 / 100;
-            Rectangle tbox = new Rectangle(midX - Asm.S(150), y, Asm.S(146), h);
-            Rectangle rec = new Rectangle(midX, y, Asm.S(46), h);
-            Rectangle right = new Rectangle(rec.Right + Asm.S(4), y, Math.Max(Asm.S(60), Width - rec.Right - Asm.S(10)), h);
+            Rectangle right = new Rectangle(Width - Asm.S(384), y, Asm.S(382), h);
+            Rectangle box2 = new Rectangle(right.X - Asm.S(128), y, Asm.S(124), h);
+            Rectangle rec = new Rectangle(box2.X - Asm.S(44), y, Asm.S(44), h);
+            Rectangle tbox = new Rectangle(rec.X - Asm.S(126), y, Asm.S(124), h);
+            Box(g, box2);
             Box(g, tbox); Box(g, right);
             string when = !has ? "" : c.Playback ? "PLAYBACK" : DateTime.Now.ToString(AppSettings.Current.DateFormat.Replace("yyyy", "yyyy") + " HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-            TextRenderer.DrawText(g, when, Asm.F(9.5f, false), tbox, has ? Asm.Text : Asm.Muted,
+            TextRenderer.DrawText(g, when, Asm.F(11f, false), tbox, has ? Asm.Text : Asm.Muted,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             bool recording = has && !c.Playback && Dir.IsRecording(c.NvrId, c.Channel);
-            TextRenderer.DrawText(g, "REC", Asm.F(8.5f, true), new Rectangle(rec.X, rec.Y, rec.Width, h / 2 + Asm.S(2)), Asm.Text,
+            TextRenderer.DrawText(g, "REC", Asm.F(10f, true), new Rectangle(rec.X, rec.Y, rec.Width, h / 2 + Asm.S(2)), Asm.Text,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             int d2 = Asm.S(11);
             using (var b = new SolidBrush(recording ? Color.FromArgb(230, 40, 40) : Color.FromArgb(67, 71, 85)))
                 g.FillEllipse(b, rec.X + (rec.Width - d2) / 2, rec.Y + h / 2 + Asm.S(3), d2, d2);
             if (has)
-                TextRenderer.DrawText(g, c.Playback ? "Playback" : "Live", Asm.F(9.5f, false), right, Asm.Muted,
+                TextRenderer.DrawText(g, c.Playback ? "Playback" : "Live", Asm.F(11f, false), right, Asm.Muted,
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
         }
     }

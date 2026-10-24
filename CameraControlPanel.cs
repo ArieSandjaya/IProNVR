@@ -33,7 +33,7 @@ namespace IproNvrTool
             this.selected = selected;
             Tag = "nostyle";
             BackColor = Asm.Panel;
-            Height = Asm.S(214);
+            Height = Asm.S(181);
             tabs.Dock = DockStyle.Fill;
             tCam.Tag = "nostyle"; tPb.Tag = "nostyle";
             tCam.BackColor = Asm.Bg;
@@ -111,9 +111,8 @@ namespace IproNvrTool
             cp.BackColor = Asm.Bg;
             Action<string, int, int, int> cap = delegate(string t, int x, int y, int w)
             {
-                var l = new Label();
-                l.Text = t; l.ForeColor = Asm.Text; l.Font = Asm.F(9.5f, false); l.Tag = "nostyle";
-                l.TextAlign = ContentAlignment.MiddleCenter;
+                var l = new CapLabel();
+                l.Caption = t;
                 l.SetBounds(Asm.S(x), Asm.S(y), Asm.S(w), Asm.S(18));
                 cp.Controls.Add(l);
             };
@@ -121,54 +120,54 @@ namespace IproNvrTool
             {
                 b.SetBounds(Asm.S(x), Asm.S(y), Asm.S(bw), Asm.S(bh));
                 b.Margin = new Padding(0);
-                b.Font = Asm.F(10f, false);
+                b.Font = Asm.F(11.5f, false);
                 cp.Controls.Add(b);
                 return b;
             };
 
             // Zoom / Focus
-            put(HoldBtn("Wide -", "Zoom out (tahan)", -1, null), 8, 4, 76, 50);
+            put(HoldBtn("Wide -", "Zoom out (tahan)", -1, null), 8, 11, 76, 56);
             btnCenter = OpBtn(AsmIcon.None, "Center", "Klik gambar = pusatkan kamera ke titik itu", null, 76);
             btnCenter.Toggle = true;
-            put(btnCenter, 88, 4, 76, 50);
-            put(HoldBtn("Tele +", "Zoom in (tahan)", 1, null), 168, 4, 76, 50);
-            cap("Zoom", 8, 56, 236);
-            put(HoldBtn("Auto", "Auto focus", 0, "CMD=FOCUS&CTRL=AUTO&CTRL=START"), 8, 80, 76, 50);
-            put(HoldBtn("Near", "Focus dekat", 0, "CMD=FOCUS&CTRL=NEAR&CTRL=START"), 88, 80, 76, 50);
-            put(HoldBtn("Far", "Focus jauh", 0, "CMD=FOCUS&CTRL=FAR&CTRL=START"), 168, 80, 76, 50);
-            cap("Focus", 8, 132, 236);
+            put(btnCenter, 88, 11, 76, 56);
+            put(HoldBtn("Tele +", "Zoom in (tahan)", 1, null), 168, 11, 76, 56);
+            cap("Zoom", 8, 69, 236);
+            put(HoldBtn("Auto", "Auto focus", 0, "CMD=FOCUS&CTRL=AUTO&CTRL=START"), 8, 104, 76, 56);
+            put(HoldBtn("Near", "Focus dekat", 0, "CMD=FOCUS&CTRL=NEAR&CTRL=START"), 88, 104, 76, 56);
+            put(HoldBtn("Far", "Focus jauh", 0, "CMD=FOCUS&CTRL=FAR&CTRL=START"), 168, 104, 76, 56);
+            cap("Focus", 8, 161, 236);
 
             // Brightness + kecepatan
-            put(HoldBtn("-", "Iris tutup", 0, "CMD=IRIS&CTRL=CLOSE&CTRL=START"), 262, 4, 76, 50);
-            put(HoldBtn("Reset", "Iris reset", 0, "CMD=IRIS&CTRL=RESET&CTRL=START"), 342, 4, 76, 50);
-            put(HoldBtn("+", "Iris buka", 0, "CMD=IRIS&CTRL=OPEN&CTRL=START"), 422, 4, 76, 50);
-            cap("Brightness", 262, 56, 236);
-            var l1 = new Label(); l1.Text = "Speed"; l1.ForeColor = Asm.Muted; l1.Tag = "nostyle"; l1.SetBounds(Asm.S(262), Asm.S(80), Asm.S(70), Asm.S(20)); cp.Controls.Add(l1);
+            put(HoldBtn("-", "Iris tutup", 0, "CMD=IRIS&CTRL=CLOSE&CTRL=START"), 262, 11, 76, 56);
+            put(HoldBtn("Reset", "Iris reset", 0, "CMD=IRIS&CTRL=RESET&CTRL=START"), 342, 11, 76, 56);
+            put(HoldBtn("+", "Iris buka", 0, "CMD=IRIS&CTRL=OPEN&CTRL=START"), 422, 11, 76, 56);
+            cap("Brightness", 262, 69, 236);
+            var l1 = new Label(); l1.Text = "Speed"; l1.ForeColor = Asm.Muted; l1.Tag = "nostyle"; l1.SetBounds(Asm.S(262), Asm.S(108), Asm.S(70), Asm.S(20)); cp.Controls.Add(l1);
             trkSpeed = new TrackBar();
             trkSpeed.Minimum = 1; trkSpeed.Maximum = 16; trkSpeed.Value = 8; trkSpeed.TickStyle = TickStyle.None;
-            trkSpeed.SetBounds(Asm.S(336), Asm.S(76), Asm.S(162), Asm.S(28)); cp.Controls.Add(trkSpeed);
-            var l2 = new Label(); l2.Text = "Zoom spd"; l2.ForeColor = Asm.Muted; l2.Tag = "nostyle"; l2.SetBounds(Asm.S(262), Asm.S(112), Asm.S(70), Asm.S(20)); cp.Controls.Add(l2);
+            trkSpeed.SetBounds(Asm.S(336), Asm.S(104), Asm.S(162), Asm.S(28)); cp.Controls.Add(trkSpeed);
+            var l2 = new Label(); l2.Text = "Zoom spd"; l2.ForeColor = Asm.Muted; l2.Tag = "nostyle"; l2.SetBounds(Asm.S(262), Asm.S(138), Asm.S(70), Asm.S(20)); cp.Controls.Add(l2);
             trkZoom = new TrackBar();
             trkZoom.Minimum = 1; trkZoom.Maximum = 16; trkZoom.Value = 8; trkZoom.TickStyle = TickStyle.None;
-            trkZoom.SetBounds(Asm.S(336), Asm.S(106), Asm.S(162), Asm.S(28)); cp.Controls.Add(trkZoom);
+            trkZoom.SetBounds(Asm.S(336), Asm.S(134), Asm.S(162), Asm.S(28)); cp.Controls.Add(trkZoom);
 
             // pad PTZ
             pad.Dock = DockStyle.None;
-            pad.SetBounds(Asm.S(516), Asm.S(4), Asm.S(144), Asm.S(144));
+            pad.SetBounds(Asm.S(516), Asm.S(12), Asm.S(150), Asm.S(150));
             cp.Controls.Add(pad);
 
             // Preset
             numPreset = new NumericUpDown();
             numPreset.Minimum = 1; numPreset.Maximum = 256; numPreset.Value = 1;
             numPreset.BackColor = Asm.Panel; numPreset.ForeColor = Asm.Text;
-            numPreset.SetBounds(Asm.S(682), Asm.S(2), Asm.S(168), Asm.S(26)); cp.Controls.Add(numPreset);
-            put(OpBtn(AsmIcon.None, "Go", "Panggil preset", delegate { SendCtl("CMD=PRESET&NO=" + (int)numPreset.Value); }, 80), 682, 30, 82, 32);
+            numPreset.SetBounds(Asm.S(682), Asm.S(8), Asm.S(168), Asm.S(26)); cp.Controls.Add(numPreset);
+            put(OpBtn(AsmIcon.None, "Go", "Panggil preset", delegate { SendCtl("CMD=PRESET&NO=" + (int)numPreset.Value); }, 80), 682, 38, 82, 36);
             put(OpBtn(AsmIcon.None, "Program", "Simpan posisi saat ini ke preset", delegate
             {
                 if (MessageBox.Show("Simpan posisi kamera saat ini ke preset " + (int)numPreset.Value + "?", "Preset", MessageBoxButtons.YesNo) == DialogResult.Yes)
                     SendCtl("CMD=PRESETPRG&NO=" + (int)numPreset.Value);
-            }, 80), 768, 30, 82, 32);
-            cap("Preset", 682, 63, 168);
+            }, 80), 768, 38, 82, 36);
+            cap("Preset", 682, 76, 168);
 
             // AUX
             cmbAux = new ComboBox();
@@ -176,10 +175,10 @@ namespace IproNvrTool
             cmbAux.Items.AddRange(new object[] { "AUX1", "AUX2", "AUX3", "AUX4", "AUX5", "AUX6", "AUX7", "AUX8" });
             cmbAux.SelectedIndex = 0;
             cmbAux.BackColor = Asm.Panel; cmbAux.ForeColor = Asm.Text; cmbAux.FlatStyle = FlatStyle.Flat;
-            cmbAux.SetBounds(Asm.S(682), Asm.S(88), Asm.S(168), Asm.S(26)); cp.Controls.Add(cmbAux);
-            put(OpBtn(AsmIcon.None, "Open", "AUX open", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=OPEN"); }, 80), 682, 116, 82, 32);
-            put(OpBtn(AsmIcon.None, "Close", "AUX close", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=CLOSE"); }, 80), 768, 116, 82, 32);
-            cap("AUX", 682, 149, 168);
+            cmbAux.SetBounds(Asm.S(682), Asm.S(100), Asm.S(168), Asm.S(26)); cp.Controls.Add(cmbAux);
+            put(OpBtn(AsmIcon.None, "Open", "AUX open", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=OPEN"); }, 80), 682, 128, 82, 34);
+            put(OpBtn(AsmIcon.None, "Close", "AUX close", delegate { SendCtl("CMD=" + cmbAux.SelectedItem + "&CTRL=CLOSE"); }, 80), 768, 128, 82, 34);
+            cap("AUX", 682, 163, 168);
             tCam.Controls.Add(cp);
         }
 
@@ -261,12 +260,22 @@ namespace IproNvrTool
         }
 
         /// <summary>Panggil saat pilihan area / isi kamera berubah.</summary>
+        static void EnableExceptLabels(Control root, bool on)
+        {
+            foreach (Control k in root.Controls)
+            {
+                if (k is Label) continue;
+                if (k is Panel) { k.Enabled = true; EnableExceptLabels(k, on); }
+                else k.Enabled = on;
+            }
+        }
+
         public void RefreshState()
         {
             ViewCell c = selected();
             bool cam = c != null && c.HasCamera && !c.Playback && AsmApp.Can(Perm.Camera);
-            foreach (Control k in tCam.Controls) k.Enabled = cam;
-            foreach (Control k in tPb.Controls) k.Enabled = AsmApp.Can(Perm.Playback) && ((Pb != null && Pb.Active) || (c != null && c.HasCamera));
+            EnableExceptLabels(tCam, cam);
+            EnableExceptLabels(tPb, AsmApp.Can(Perm.Playback) && ((Pb != null && Pb.Active) || (c != null && c.HasCamera)));
         }
 
         // ---- PTZ ----

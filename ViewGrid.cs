@@ -136,7 +136,7 @@ namespace IproNvrTool
         {
             InfoModeChanged += OnInfoMode;
             BackColor = Asm.CellFrame;
-            Padding = new Padding(2);
+            Padding = new Padding(1);
             AllowDrop = true;
             SetStyle(ControlStyles.ResizeRedraw | ControlStyles.Selectable, true); // Selectable: agar roda mouse (zoom PTZ virtual) sampai ke sel
 
@@ -357,7 +357,7 @@ namespace IproNvrTool
         public void SetSelected(bool sel)
         {
             Selected = sel;
-            BackColor = sel ? Color.FromArgb(212, 175, 55) : Asm.CellFrame;   // area terpilih: bingkai emas; lainnya abu-abu tipis
+            BackColor = sel ? Color.FromArgb(254, 155, 0) : Asm.CellFrame;   // area terpilih: bingkai emas; lainnya abu-abu tipis
         }
 
         // ---------- isi ----------
@@ -707,7 +707,7 @@ namespace IproNvrTool
         public ViewGrid()
         {
             Dir.StatusChanged += OnDirStatus;
-            BackColor = Asm.Bg;
+            BackColor = Asm.CellFrame;
             DoubleBuffered = true;
             menu = Asm.Menu();
             menu.Opening += OnMenuOpening;
@@ -764,20 +764,20 @@ namespace IproNvrTool
         {
             if (cells.Count == 0) return;
             SuspendLayout();
-            int W = Math.Max(1, ClientSize.Width), H = Math.Max(1, ClientSize.Height);
+            int W = Math.Max(1, ClientSize.Width - 2), H = Math.Max(1, ClientSize.Height - 2);   // 1 px tepi abu-abu di sekeliling
             for (int i = 0; i < cells.Count; i++)
             {
                 ViewCell c = cells[i];
                 if (maximized >= 0)
                 {
                     c.Visible = (i == maximized);
-                    if (i == maximized) c.Bounds = new Rectangle(0, 0, W, H);
+                    if (i == maximized) c.Bounds = new Rectangle(1, 1, W, H);
                     continue;
                 }
                 Rectangle r = layout.Cells[i];
                 int x0 = r.X * W / layout.Cols, x1 = (r.X + r.Width) * W / layout.Cols;
                 int y0 = r.Y * H / layout.Rows, y1 = (r.Y + r.Height) * H / layout.Rows;
-                c.Bounds = new Rectangle(x0, y0, Math.Max(1, x1 - x0), Math.Max(1, y1 - y0));
+                c.Bounds = new Rectangle(x0 + 1, y0 + 1, Math.Max(1, x1 - x0), Math.Max(1, y1 - y0));
                 c.Visible = true;
             }
             ResumeLayout();

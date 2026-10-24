@@ -45,6 +45,38 @@ namespace IproNvrTool
         }
     }
 
+    /// <summary>Logo teks di kiri baris tab (ala "Video Surveillance Software / ASM300 Series").</summary>
+    public class BrandLogo : Control
+    {
+        public BrandLogo()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            Tag = "nostyle";
+        }
+
+        static void Spaced(Graphics g, string t, Font f, Brush b, float x, float y, float sp)
+        {
+            foreach (char c in t)
+            {
+                g.DrawString(c.ToString(), f, b, x, y, StringFormat.GenericTypographic);
+                x += g.MeasureString(c.ToString(), f, 1000, StringFormat.GenericTypographic).Width + sp;
+                if (c == ' ') x += sp;
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(Asm.Bg);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            using (var b = new SolidBrush(Color.White))
+            {
+                Spaced(g, "Video Surveillance Software", Asm.F(9f, true), b, Asm.S(16), Asm.S(7), 1.2f);
+                Spaced(g, "IPRONVR Series", Asm.F(17f, true), b, Asm.S(16), Asm.S(19), 2f);
+            }
+        }
+    }
+
     public class LoginForm : Form
     {
         readonly TextBox txtName = new TextBox();
@@ -192,7 +224,6 @@ namespace IproNvrTool
             Controls.Add(host);
             Controls.Add(titleBar);
 
-            strip.Dock = DockStyle.Fill;
             strip.TabSelected += delegate(string k) { ShowView(k); };
             strip.TabClosed += delegate(string k) { CloseView(k); };
             strip.TabDetach += delegate(string k) { Detach(k); };
@@ -200,20 +231,20 @@ namespace IproNvrTool
             // ---- bilah paling atas: menu, ikon window, kolom seret, tombol jendela ----
             var topBar = new Panel();
             topBar.Dock = DockStyle.Top;
-            topBar.Height = Asm.S(46);
+            topBar.Height = Asm.S(50);
             topBar.BackColor = Asm.Bg;
             topBar.Tag = "nostyle";
             this.topBar = topBar;
 
             var menuBtn = new AsmButton(AsmIcon.Menu, "Menu", null);
-            menuBtn.Borderless = true; menuBtn.Size = new Size(Asm.S(50), Asm.S(46)); menuBtn.Location = new Point(Asm.S(6), 0);
+            menuBtn.Borderless = true; menuBtn.Size = new Size(Asm.S(48), Asm.S(50)); menuBtn.Location = new Point(0, 0);
             menuBtn.Click += delegate { ShowMenu(menuBtn); };
 
-            var wClose = new WinButton(WinButton.Kind.Close); wClose.Dock = DockStyle.Right; wClose.Height = topBar.Height;
+            var wClose = new WinButton(WinButton.Kind.Close); wClose.Dock = DockStyle.Right; wClose.Width = Asm.S(44);
             wClose.Click += delegate { Close(); };
-            wMax = new WinButton(WinButton.Kind.Max); wMax.Dock = DockStyle.Right;
+            wMax = new WinButton(WinButton.Kind.Max); wMax.Dock = DockStyle.Right; wMax.Width = Asm.S(44);
             wMax.Click += delegate { ToggleMaximize(); };
-            var wMin = new WinButton(WinButton.Kind.Min); wMin.Dock = DockStyle.Right;
+            var wMin = new WinButton(WinButton.Kind.Min); wMin.Dock = DockStyle.Right; wMin.Width = Asm.S(44);
             wMin.Click += delegate { WindowState = FormWindowState.Minimized; };
 
             lblUser.Dock = DockStyle.Right;
@@ -233,9 +264,9 @@ namespace IproNvrTool
             drag.MouseDown += dragDown; lblUser.MouseDown += dragDown;
 
             var iconRow = new FlowLayoutPanel();
-            iconRow.Location = new Point(Asm.S(86), 0);
-            iconRow.Size = new Size(Asm.S(4 * 50 + 10), Asm.S(46));
-            iconRow.Padding = new Padding(0, Asm.S(5), 0, 0);
+            iconRow.Location = new Point(Asm.S(98), 0);
+            iconRow.Size = new Size(Asm.S(4 * 60 + 10), Asm.S(50));
+            iconRow.Padding = new Padding(0, Asm.S(7), 0, 0);
             iconRow.Tag = "nostyle";
             iconRow.Controls.Add(Icon(AsmIcon.Live, "Live window", "live"));
             iconRow.Controls.Add(Icon(AsmIcon.Map, "Map window", "map"));
@@ -249,8 +280,21 @@ namespace IproNvrTool
             drag.Controls.Add(menuBtn); drag.Controls.Add(iconRow);
             menuBtn.BringToFront();
 
+            strip.Dock = DockStyle.None;
+            var logo = new BrandLogo();
+            logo.SetBounds(0, 0, Asm.S(398), Asm.S(53));
             titleBar.Controls.Add(strip);
-            titleBar.Height = Asm.S(42);
+            titleBar.Controls.Add(logo);
+            titleBar.Height = Asm.S(53);
+            strip.Height = Asm.S(53);
+            Action fitStrip = delegate { strip.SetBounds(Asm.S(400), 0, Math.Max(0, titleBar.Width - Asm.S(400)), titleBar.Height); };
+            titleBar.Resize += delegate { fitStrip(); };
+            fitStrip();
+            titleBar.Paint += delegate(object o, PaintEventArgs pe)
+            {
+                using (var ln = new Pen(Color.FromArgb(104, 146, 191))) pe.Graphics.DrawLine(ln, 0, titleBar.Height - 2, titleBar.Width, titleBar.Height - 2);
+                using (var ln = new Pen(Asm.TabLine)) pe.Graphics.DrawLine(ln, 0, titleBar.Height - 1, titleBar.Width, titleBar.Height - 1);
+            };
             Controls.Add(topBar);
 
             op = new OperationView();
@@ -291,9 +335,9 @@ namespace IproNvrTool
         AsmButton Icon(AsmIcon ic, string tip, string key)
         {
             var b = new AsmButton(ic, tip, delegate { OpenWindow(key); });
-            b.Size = new Size(Asm.S(46), Asm.S(36));
+            b.Size = new Size(Asm.S(60), Asm.S(36));
             b.Borderless = true;
-            b.Margin = new Padding(0, 0, Asm.S(4), 0);
+            b.Margin = new Padding(0);
             return b;
         }
 

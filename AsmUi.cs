@@ -25,7 +25,7 @@ namespace IproNvrTool
         public static readonly Color Input = Color.FromArgb(13, 14, 16);       // #0d0e10 kolom isian
         public static readonly Color BtnBorder = Color.FromArgb(53, 62, 77);   // #353e4d
         public static readonly Color ViewBorder = Color.FromArgb(95, 95, 95);  // #5f5f5f
-        public static readonly Color CellFrame = Color.FromArgb(70, 72, 80);   // bingkai tipis antar area gambar
+        public static readonly Color CellFrame = Color.FromArgb(95, 95, 95);   // bingkai tipis antar area gambar
         public static readonly Color Label = Color.FromArgb(221, 221, 221);    // #dddddd label
         public static readonly Color Danger = Color.FromArgb(236, 84, 84);
         public static readonly Color Ok = Color.FromArgb(80, 200, 120);
@@ -507,9 +507,9 @@ namespace IproNvrTool
             {
                 foreach (AsmTab t in tabs)
                 {
-                    int w = TextRenderer.MeasureText(g, t.Title, Asm.F(9f, true)).Width + Asm.S(34) + (t.Closable ? Asm.S(22) : 0);
-                    rects.Add(new Rectangle(x, 0, w, Height));
-                    x += w + 2;
+                    int w = TextRenderer.MeasureText(g, t.Title, Asm.F(12.5f, false)).Width + Asm.S(34) + Asm.S(30) + (t.Closable ? Asm.S(22) : 0);
+                    rects.Add(new Rectangle(x, Height - Asm.S(42), w, Asm.S(40)));
+                    x += w + 4;
                 }
             }
         }
@@ -517,7 +517,7 @@ namespace IproNvrTool
         Rectangle CloseRect(Rectangle r)
         {
             int s = Asm.S(14);
-            return new Rectangle(r.Right - s - Asm.S(8), (r.Height - s) / 2, s, s);
+            return new Rectangle(r.Right - s - Asm.S(22), r.Y + (r.Height - s) / 2, s, s);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -525,25 +525,28 @@ namespace IproNvrTool
             Graphics g = e.Graphics;
             g.Clear(Asm.Bg);
             Layout2();
+            using (var ln = new Pen(Color.FromArgb(104, 146, 191))) g.DrawLine(ln, 0, Height - 2, Width, Height - 2);
             using (var ln = new Pen(Asm.TabLine)) g.DrawLine(ln, 0, Height - 1, Width, Height - 1);
             for (int i = 0; i < tabs.Count; i++)
             {
                 AsmTab t = tabs[i];
                 Rectangle r = rects[i];
                 bool sel = t.Key == selected;
+                int sl = Asm.S(18);                           // sisi kanan miring seperti tab ASM300
+                var poly = new[] { new Point(r.X, r.Bottom), new Point(r.X, r.Y), new Point(r.Right - sl, r.Y), new Point(r.Right, r.Bottom) };
                 if (sel)
                 {
-                    int sl = Asm.S(14);                       // sisi kanan miring seperti tab ASM300
-                    var poly = new[] { new Point(r.X, r.Bottom), new Point(r.X, r.Y), new Point(r.Right - sl, r.Y), new Point(r.Right, r.Bottom) };
                     using (var b = new SolidBrush(Asm.TabBg)) g.FillPolygon(b, poly);
-                    using (var p = new Pen(Asm.TabLine)) g.DrawLines(p, new[] { new Point(r.X, r.Bottom), new Point(r.X, r.Y), new Point(r.Right - sl, r.Y), new Point(r.Right, r.Bottom) });
+                    using (var p = new Pen(Color.FromArgb(137, 193, 253))) g.DrawLines(p, poly);
                 }
-                else if (i == hotIdx)
+                else
                 {
-                    using (var b = new SolidBrush(Color.FromArgb(21, 24, 31))) g.FillRectangle(b, r);
+                    using (var b = new SolidBrush(i == hotIdx ? Color.FromArgb(30, 34, 44) : Color.FromArgb(21, 24, 31))) g.FillPolygon(b, poly);
+                    using (var p = new Pen(Asm.BtnBorder)) g.DrawLines(p, poly);
                 }
-                TextRenderer.DrawText(g, t.Title, Asm.F(9f, sel), new Rectangle(r.X + Asm.S(14), 0, r.Width - Asm.S(14) - (t.Closable ? Asm.S(26) : Asm.S(8)), Height),
-                    sel ? Asm.Label : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                AsmIcons.Draw(g, AsmIcon.Live, new Rectangle(r.X + Asm.S(10), r.Y + (r.Height - Asm.S(22)) / 2, Asm.S(22), Asm.S(22)), sel ? Color.FromArgb(160, 205, 245) : Asm.Muted);
+                TextRenderer.DrawText(g, t.Title, Asm.F(12.5f, false), new Rectangle(r.X + Asm.S(40), r.Y, r.Width - Asm.S(40) - sl - (t.Closable ? Asm.S(22) : 0), r.Height),
+                    sel ? Color.FromArgb(200, 225, 248) : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
                 if (t.Closable)
                 {
                     Rectangle c = CloseRect(r);
@@ -640,7 +643,7 @@ namespace IproNvrTool
             SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
             Cursor = Cursors.Hand;
             Tag = "nostyle";
-            if (horizontal) Height = Asm.S(14); else Width = Asm.S(14);
+            if (horizontal) Height = Asm.S(26); else Width = Asm.S(26);
         }
 
         protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
@@ -649,12 +652,33 @@ namespace IproNvrTool
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            using (var b = new SolidBrush(hot ? Asm.BarHot : Asm.Bar)) g.FillRectangle(b, ClientRectangle);
-            AsmIcon ic;
-            if (Horizontal) ic = Collapsed ? AsmIcon.ChevronUp : AsmIcon.ChevronDown;
-            else ic = Collapsed ? AsmIcon.ChevronRight : AsmIcon.ChevronLeft;
-            int s = Math.Min(Width, Height) - 2;
-            AsmIcons.Draw(g, ic, new Rectangle((Width - s) / 2, (Height - s) / 2, s, s), Asm.Text);
+            g.Clear(Asm.Bg);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color fill = hot ? Color.FromArgb(40, 46, 58) : Color.FromArgb(34, 39, 48);
+            Color edge = Color.FromArgb(48, 54, 67);
+            int w = Width, h = Height;
+            PointF[] poly;
+            if (Horizontal)
+            {
+                // tab trapesium di tengah, seperti ASM300
+                float cx = w / 2f, tw = Asm.S(31), bw = Asm.S(40), th = h - 1;
+                poly = new[] { new PointF(cx - bw, h), new PointF(cx - tw, 1), new PointF(cx + tw, 1), new PointF(cx + bw, h) };
+                using (var b = new SolidBrush(Color.FromArgb(10, 11, 13))) g.FillRectangle(b, 0, h - 1, w, 1);
+            }
+            else
+            {
+                float cy = h / 2f, tw = Asm.S(36), bw = Asm.S(46);
+                poly = new[] { new PointF(w, cy - bw), new PointF(1, cy - tw), new PointF(1, cy + tw), new PointF(w, cy + bw) };
+                using (var b = new SolidBrush(Color.FromArgb(38, 44, 53))) g.FillRectangle(b, 0, 0, 1, h);
+            }
+            using (var b = new SolidBrush(fill)) g.FillPolygon(b, poly);
+            using (var p = new Pen(edge)) g.DrawPolygon(p, poly);
+            // panah kecil biru
+            float ax = w / 2f, ay = h / 2f, sz = Asm.S(5);
+            PointF[] ar;
+            if (Horizontal) ar = Collapsed ? new[] { new PointF(ax - sz, ay + sz / 2), new PointF(ax + sz, ay + sz / 2), new PointF(ax, ay - sz / 2) } : new[] { new PointF(ax - sz, ay - sz / 2), new PointF(ax + sz, ay - sz / 2), new PointF(ax, ay + sz / 2) };
+            else ar = Collapsed ? new[] { new PointF(ax - sz / 2, ay - sz), new PointF(ax - sz / 2, ay + sz), new PointF(ax + sz / 2, ay) } : new[] { new PointF(ax + sz / 2, ay - sz), new PointF(ax + sz / 2, ay + sz), new PointF(ax - sz / 2, ay) };
+            using (var b = new SolidBrush(Color.FromArgb(74, 123, 178))) g.FillPolygon(b, ar);
         }
     }
 
@@ -666,11 +690,11 @@ namespace IproNvrTool
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
             Tag = "nostyle";
-            Height = Asm.S(40);
+            Height = Asm.S(43);
             Box.BorderStyle = BorderStyle.None;
             Box.BackColor = Asm.Panel2;
             Box.ForeColor = Asm.Text;
-            Box.Font = Asm.F(10f, false);
+            Box.Font = Asm.F(12f, false);
             Box.MaxLength = 16;
             Box.Tag = "nostyle";
             Box.TextChanged += delegate { Invalidate(); };
@@ -713,7 +737,7 @@ namespace IproNvrTool
             Graphics g = e.Graphics;
             g.Clear(Asm.Panel);
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle r = new Rectangle(Asm.S(4), Asm.S(3), Width - Asm.S(9), Height - Asm.S(7));
+            Rectangle r = new Rectangle(Asm.S(1), Asm.S(3), Width - Asm.S(3), Height - Asm.S(6));
             using (var gp = AsmUi.RoundRect(r, r.Height / 2))
             {
                 using (var b = new SolidBrush(Asm.Panel2)) g.FillPath(b, gp);
@@ -722,13 +746,31 @@ namespace IproNvrTool
             int s = Asm.S(22);
             AsmIcons.Draw(g, AsmIcon.Search, new Rectangle(Asm.S(14), (Height - s) / 2, s, s), Asm.Text);
             if (!Box.Visible)
-                TextRenderer.DrawText(g, "Search", Asm.F(10.5f, true), new Rectangle(Box.Left, 0, Box.Width, Height), Color.FromArgb(125, 129, 144),
+                TextRenderer.DrawText(g, "Search", Asm.F(13f, true), new Rectangle(Box.Left, 0, Box.Width, Height), Color.FromArgb(125, 129, 144),
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
             if (Box.Text.Length > 0)
                 AsmIcons.Draw(g, AsmIcon.Close, new Rectangle(Width - Asm.S(34), (Height - Asm.S(16)) / 2, Asm.S(16), Asm.S(16)), Asm.Text);
         }
 
         public override string Text { get { return Box.Text; } set { Box.Text = value; if (value.Length > 0) Box.Visible = true; } }
+    }
+
+    /// <summary>Label teks tengah di bawah kelompok tombol (digambar sendiri agar tidak ikut redup saat panel dinonaktifkan).</summary>
+    public class CapLabel : Control
+    {
+        public string Caption = "";
+        public CapLabel()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            Tag = "nostyle";
+            Enabled = true;
+        }
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(Asm.Bg);
+            TextRenderer.DrawText(e.Graphics, Caption, Asm.F(11f, false), ClientRectangle, Asm.Label,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        }
     }
 
     public static class AsmUi
@@ -772,7 +814,7 @@ namespace IproNvrTool
             public AccordionBar()
             {
                 SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
-                Height = Asm.S(38);
+                Height = Asm.S(37);
                 Cursor = Cursors.Hand;
                 Tag = "nostyle";
             }
@@ -788,8 +830,8 @@ namespace IproNvrTool
                 using (var b = new SolidBrush(hot && !Open ? Asm.BarHot : Asm.Bar)) g.FillRectangle(b, r);
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 int s = Asm.S(14);
-                AsmIcons.Draw(g, Open ? AsmIcon.ChevronUp : AsmIcon.ChevronDown, new Rectangle(Asm.S(8), (Height - s) / 2, s, s), Asm.Text);
-                TextRenderer.DrawText(g, Title, Asm.F(10.5f, true), new Rectangle(Asm.S(34), 0, Width - Asm.S(38), Height),
+                AsmIcons.Draw(g, Open ? AsmIcon.ChevronUp : AsmIcon.ChevronDown, new Rectangle(Asm.S(10), (Height - s) / 2, s, s), Asm.Text);
+                TextRenderer.DrawText(g, Title, Asm.F(14f, true), new Rectangle(Asm.S(40), 0, Width - Asm.S(44), Height),
                     Match ? Asm.Warn : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
             }
         }
@@ -798,6 +840,12 @@ namespace IproNvrTool
         class Host : Panel
         {
             public FunctionPanel Owner;
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                if (Owner != null && Owner.splitY >= 0)
+                    using (var b = new SolidBrush(Color.FromArgb(160, 160, 160))) e.Graphics.FillRectangle(b, 0, Owner.splitY, Width, Asm.S(2));
+            }
             protected override void OnLayout(LayoutEventArgs e)
             {
                 base.OnLayout(e);
@@ -818,7 +866,7 @@ namespace IproNvrTool
         {
             Tag = "nostyle";
             BackColor = Asm.Panel;
-            Width = Asm.S(270);
+            Width = Asm.S(374);
 
             searchRow.Dock = DockStyle.Top;
             searchRow.Box.TextChanged += delegate
@@ -828,7 +876,7 @@ namespace IproNvrTool
 
             host.Owner = this;
             host.Dock = DockStyle.Fill;
-            host.BackColor = Asm.Panel;
+            host.BackColor = Asm.Bg;
             host.Tag = "nostyle";
 
             Controls.Add(host);
@@ -838,8 +886,8 @@ namespace IproNvrTool
         void DoLayout(Host h)
         {
             int w = h.ClientSize.Width, H = h.ClientSize.Height;
+            int barH = Asm.S(37);
             int y = 0;
-            int barH = Asm.S(38);
             // grup atas: bar ditumpuk dari atas
             foreach (Section s in sections)
             {
@@ -847,28 +895,38 @@ namespace IproNvrTool
                 s.Bar.SetBounds(0, y, w, barH);
                 y += barH;
             }
-            // grup bawah: dari bawah ke atas; isi yang terbuka tepat di bawah bar-nya
             var bot = sections.FindAll(delegate(Section s) { return !s.Top; });
-            int nbars = bot.Count;
-            int openH = 0;
             Section op = bot.Find(delegate(Section s) { return s.Key == openKey; });
-            if (op != null) openH = Math.Max(Asm.S(120), Math.Min(op.Height, H - y - nbars * barH - Asm.S(40)));
-            int by = H - nbars * barH - openH;
-            foreach (Section s in bot)
+            splitY = -1;
+            int by;
+            if (op != null)
             {
-                s.Bar.SetBounds(0, by, w, barH);
-                by += barH;
-                if (s == op) { s.Content.SetBounds(0, by, w, openH); by += openH; }
+                // bagian bawah yang terbuka: ditaruh tepat di bawah ruang kosong + garis pemisah (seperti ASM300); bar lain menempel di dasar
+                int gap = Asm.S(31);
+                splitY = y + gap;
+                int oy = splitY + Asm.S(6);
+                int others = bot.Count - 1;
+                int openH = Math.Max(Asm.S(120), H - oy - barH - others * barH - Asm.S(3));
+                op.Bar.SetBounds(0, oy, w, barH);
+                op.Content.SetBounds(0, oy + barH, w, openH);
+                by = H - others * barH;
+                foreach (Section s in bot) { if (s == op) continue; s.Bar.SetBounds(0, by, w, barH); by += barH; }
             }
-            // isi grup atas yang terbuka mengisi sisa tengah
-            int mid = by - 0;
-            foreach (Section s in sections)
+            else
             {
-                if (!s.Top || s.Key != openKey) continue;
-                int top = y, bottom = H - nbars * barH - openH;
-                s.Content.SetBounds(0, top, w, Math.Max(0, bottom - top));
+                by = H - bot.Count * barH;
+                foreach (Section s in bot) { s.Bar.SetBounds(0, by, w, barH); by += barH; }
+                // isi grup atas yang terbuka mengisi sisa tengah
+                foreach (Section s in sections)
+                {
+                    if (!s.Top || s.Key != openKey) continue;
+                    s.Content.SetBounds(0, y, w, Math.Max(0, H - bot.Count * barH - y));
+                }
             }
+            h.Invalidate();
         }
+
+        int splitY = -1;
 
         public string OpenKey { get { return openKey; } }
 
@@ -1083,7 +1141,7 @@ namespace IproNvrTool
                 SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
                 Tag = "nostyle";
             }
-            Rectangle Rect(int i) { int h = Asm.S(92); return new Rectangle(0, i * (h + 2), Width, h); }
+            Rectangle Rect(int i) { int h = Asm.S(93); return new Rectangle(0, i * (h + 2), Width, h); }
             protected override void OnMouseDown(MouseEventArgs e)
             {
                 for (int i = 0; i < Owner.titles.Count; i++) if (Rect(i).Contains(e.Location)) { Owner.SelectedIndex = i; break; }
@@ -1105,7 +1163,7 @@ namespace IproNvrTool
                     g.RotateTransform(-90);
                     using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                     using (var br = new SolidBrush(on ? Asm.Label : Asm.Text))
-                        g.DrawString(Owner.titles[i], Asm.F(10.5f, true), br, 0, 0, sf);
+                        g.DrawString(Owner.titles[i], Asm.F(12f, true), br, 0, 0, sf);
                     g.Restore(st);
                 }
             }
@@ -1115,7 +1173,7 @@ namespace IproNvrTool
         {
             Tag = "nostyle";
             BackColor = Asm.Bg;
-            strip = new Strip { Owner = this, Width = Asm.S(34) };
+            strip = new Strip { Owner = this, Width = Asm.S(43) };
             Controls.Add(strip);
         }
 

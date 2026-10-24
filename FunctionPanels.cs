@@ -347,6 +347,7 @@ namespace IproNvrTool
         readonly ComboBox cmbM = new ComboBox();
         readonly Label lblColon = new Label();
         readonly Label lblCam = new Label();
+        readonly CheckBox chkSd = new CheckBox();
         readonly AsmButton btnDate = new AsmButton();
         readonly AsmButton btnLast = new AsmButton();
         public Func<CamRef> CameraSource;
@@ -367,7 +368,7 @@ namespace IproNvrTool
                 c.FlatStyle = FlatStyle.Flat;
                 c.BackColor = Color.FromArgb(18, 22, 31);
                 c.ForeColor = Asm.Text;
-                c.Font = Asm.F(10f, false);
+                c.Font = Asm.F(12f, false);
                 c.MaxDropDownItems = 12;
                 c.Tag = "nostyle";
             }
@@ -375,16 +376,18 @@ namespace IproNvrTool
             cal.Value = t.Date;
             cmbH.SelectedIndex = t.Hour;
             cmbM.SelectedIndex = t.Minute;
-            lblColon.Text = ":"; lblColon.ForeColor = Asm.Text; lblColon.Font = Asm.F(11f, true);
+            lblColon.Text = ":"; lblColon.ForeColor = Asm.Text; lblColon.Font = Asm.F(13f, true);
             lblColon.TextAlign = ContentAlignment.MiddleCenter; lblColon.Tag = "nostyle";
             lblCam.ForeColor = Asm.Muted; lblCam.Tag = "nostyle"; lblCam.TextAlign = ContentAlignment.MiddleCenter;
             lblCam.Text = "Camera: (select an image area)";
             lblCam.AutoEllipsis = true;
 
-            btnDate.Label = "Go to date"; btnLast.Label = "Go to last";
+            btnDate.Label = "Go to date"; btnLast.Label = "Go to last"; btnDate.Font = Asm.F(12f, false); btnLast.Font = Asm.F(12f, false);
             btnDate.Click += delegate { Go(Selected()); };
             btnLast.Click += delegate { Go(DateTime.Now.AddMinutes(-5)); };
 
+            chkSd.Text = "SD memory rec."; chkSd.Enabled = false; chkSd.ForeColor = Asm.Muted; chkSd.Font = Asm.F(12f, false); chkSd.Tag = "nostyle";
+            Controls.Add(chkSd);
             Controls.Add(cal); Controls.Add(cmbH); Controls.Add(cmbM); Controls.Add(lblColon);
             Controls.Add(lblCam); Controls.Add(btnDate); Controls.Add(btnLast);
         }
@@ -404,17 +407,18 @@ namespace IproNvrTool
         protected override void OnLayout(LayoutEventArgs e)
         {
             base.OnLayout(e);
-            int pad = Asm.S(10), w = ClientSize.Width - pad * 2, y = pad;
-            cal.SetBounds(pad, y, w, Asm.S(236)); y += cal.Height + Asm.S(12);
-            int ch = Asm.S(28), gap = Asm.S(22);
-            cmbH.SetBounds(pad, y, (w - gap) / 2, ch);
-            lblColon.SetBounds(pad + (w - gap) / 2, y, gap, ch);
-            cmbM.SetBounds(pad + (w - gap) / 2 + gap, y, (w - gap) / 2, ch);
-            y += ch + Asm.S(10);
-            lblCam.SetBounds(pad, y, w, Asm.S(22)); y += Asm.S(30);
-            int bw = (w - Asm.S(12)) / 2, bh = Asm.S(34);
-            btnDate.SetBounds(pad, y, bw, bh);
-            btnLast.SetBounds(pad + bw + Asm.S(12), y, bw, bh);
+            int cx = ClientSize.Width / 2;
+            // posisi mengikuti ASM300 (sidebar 374 px): kalender 265 px di tengah, jam/menit, SD memory rec., dua tombol
+            cal.SetBounds(cx - Asm.S(132), Asm.S(5), Asm.S(265), Asm.S(237));
+            int y = Asm.S(254), ch = Asm.S(27);
+            cmbH.SetBounds(cx - Asm.S(173), y, Asm.S(158), ch);
+            lblColon.SetBounds(cx - Asm.S(15), y, Asm.S(30), ch);
+            cmbM.SetBounds(cx + Asm.S(16), y, Asm.S(157), ch);
+            chkSd.SetBounds(cx - Asm.S(70), Asm.S(292), Asm.S(150), Asm.S(24));
+            int bw = Asm.S(133), bh = Asm.S(37);
+            btnDate.SetBounds(cx - Asm.S(160), Asm.S(328), bw, bh);
+            btnLast.SetBounds(cx + Asm.S(28), Asm.S(328), bw, bh);
+            lblCam.SetBounds(Asm.S(10), Asm.S(378), ClientSize.Width - Asm.S(20), Asm.S(22));
         }
 
         public void RefreshCamera()
