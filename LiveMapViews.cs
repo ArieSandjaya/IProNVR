@@ -161,7 +161,6 @@ namespace IproNvrTool
             fp.AddSection("dev", "Device", dev, true);
             fp.AddSection("qpb", "Quick playback", qpp, false, 380);
             fp.AddSection("dl", "Download", dlp, false, 330);
-            fp.Width = Asm.S(230);
             fp.Open("grp");
             fp.SearchTextChanged += delegate(string t)
             {
@@ -573,7 +572,6 @@ namespace IproNvrTool
             lb.Tag = "nostyle";
             lb.SelectedIndexChanged += delegate { ShowSelected(); };
             fp.AddSection("map", "Map", lb, true);
-            fp.Width = Asm.S(220);
             fp.Open("map");
             fp.Dock = DockStyle.Left;
             fp.SearchTextChanged += delegate(string t) { Reload(t); };
