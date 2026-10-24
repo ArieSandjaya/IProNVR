@@ -1029,6 +1029,119 @@ namespace IproNvrTool
         }
     }
 
+    /// <summary>Bilah kecil di tengah atas layar penuh (pin, minimize, keluar); otomatis tersembunyi seperti bilah koneksi Remote Desktop.</summary>
+    public class FullScreenBar : Control
+    {
+        public event Action ExitClicked;
+        public event Action MinimizeClicked;
+        public string Caption = "i-PRO NVR Tool";
+        readonly Control host;
+        readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+        bool pinned, shown = true;
+        int hotBtn = -1;
+        DateTime leaveAt = DateTime.Now.AddSeconds(3);
+
+        public FullScreenBar(Control host)
+        {
+            this.host = host;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
+            Tag = "nostyle";
+            Size = new Size(Asm.S(300), Asm.S(32));
+            Cursor = Cursors.Default;
+            host.Resize += delegate { Place(); };
+            host.HandleCreated += delegate { Place(); };
+            timer.Interval = 120;
+            timer.Tick += delegate { Tick(); };
+            timer.Start();
+            Place();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) timer.Dispose();
+            base.Dispose(disposing);
+        }
+
+        void Place()
+        {
+            Left = (host.ClientSize.Width - Width) / 2;
+            Top = shown ? 0 : -Height + Asm.S(3);
+        }
+
+        void Tick()
+        {
+            if (IsDisposed || !host.IsHandleCreated) return;
+            Point c = host.PointToClient(Cursor.Position);
+            bool nearTop = c.Y <= Asm.S(3) && c.X >= Left - Asm.S(40) && c.X <= Right + Asm.S(40);
+            bool onBar = c.Y >= 0 && c.Y <= Height && c.X >= Left && c.X <= Right && shown;
+            if (nearTop || onBar) leaveAt = DateTime.Now.AddSeconds(1.2);
+            bool want = pinned || nearTop || onBar || DateTime.Now < leaveAt;
+            if (want != shown) { shown = want; Place(); BringToFront(); }
+        }
+
+        Rectangle Btn(int i) { int w = Asm.S(40); return new Rectangle(Width - Asm.S(8) - (3 - i) * w, 0, w, Height); }
+
+        int Hit(Point p) { for (int i = 0; i < 3; i++) if (Btn(i).Contains(p)) return i; return -1; }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            int h = Hit(e.Location);
+            if (h != hotBtn) { hotBtn = h; Invalidate(); }
+            base.OnMouseMove(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e) { hotBtn = -1; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            int h = Hit(e.Location);
+            if (e.Button == MouseButtons.Left)
+            {
+                if (h == 0) { pinned = !pinned; Invalidate(); }
+                else if (h == 1 && MinimizeClicked != null) MinimizeClicked();
+                else if (h == 2 && ExitClicked != null) ExitClicked();
+            }
+            base.OnMouseUp(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.Clear(Color.Black);
+            Rectangle r = new Rectangle(0, -Asm.S(10), Width - 1, Height + Asm.S(10) - 1);
+            using (var gp = AsmUi.RoundRect(r, Asm.S(8)))
+            {
+                using (var b = new SolidBrush(Color.FromArgb(29, 33, 40))) g.FillPath(b, gp);
+                using (var p = new Pen(Asm.TabLine)) g.DrawPath(p, gp);
+            }
+            TextRenderer.DrawText(g, Caption, Asm.F(10.5f, false), new Rectangle(Asm.S(14), 0, Width - Asm.S(14) - 3 * Asm.S(40) - Asm.S(8), Height), Asm.Label,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+            using (var p = new Pen(Asm.Text, 1.6f))
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    Rectangle b = Btn(i);
+                    if (i == hotBtn) using (var hb = new SolidBrush(i == 2 ? Color.FromArgb(196, 43, 28) : Color.FromArgb(48, 54, 67))) g.FillRectangle(hb, b.X, 0, b.Width, Height - 1);
+                    int cx = b.X + b.Width / 2, cy = Height / 2, d = Asm.S(6);
+                    if (i == 0)
+                    {
+                        // pin: kepala + jarum; terisi bila terkunci
+                        if (pinned) using (var br = new SolidBrush(Asm.Text)) g.FillEllipse(br, cx - d / 2, cy - d, d, d);
+                        else g.DrawEllipse(p, cx - d / 2, cy - d, d, d);
+                        g.DrawLine(p, cx, cy, cx, cy + d);
+                    }
+                    else if (i == 1) g.DrawLine(p, cx - d, cy + d / 2, cx + d, cy + d / 2);
+                    else
+                    {
+                        g.DrawRectangle(p, cx - d, cy - d + Asm.S(3), 2 * d - Asm.S(3), 2 * d - Asm.S(3));
+                        g.DrawLines(p, new[] { new Point(cx - d + Asm.S(3), cy - d + Asm.S(3)), new Point(cx - d + Asm.S(3), cy - d), new Point(cx + d, cy - d), new Point(cx + d, cy + d - Asm.S(3)), new Point(cx + d - Asm.S(3), cy + d - Asm.S(3)) });
+                    }
+                }
+            }
+        }
+    }
+
     /// <summary>Jendela layar penuh yang menampung ViewGrid (menu "Full screen"); tutup dengan Esc.</summary>
     public class FullScreenForm : Form
     {
@@ -1051,24 +1164,12 @@ namespace IproNvrTool
             c.Dock = DockStyle.Fill;
             Controls.Add(c);
             KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) Close(); };
-            // tombol keluar untuk mouse (tanpa perlu keyboard)
-            var x = new Button();
-            x.Text = "\u2715  Exit full screen";
-            x.FlatStyle = FlatStyle.Flat;
-            x.FlatAppearance.BorderColor = Color.FromArgb(120, 120, 120);
-            x.BackColor = Color.FromArgb(40, 40, 40);
-            x.ForeColor = Color.White;
-            x.Tag = "nostyle";
-            x.Font = new Font("Segoe UI", 9f);
-            x.Size = new Size(160, 28);
-            x.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            x.Location = new Point(Screen.PrimaryScreen.Bounds.Width - 170, 6);
-            x.Cursor = Cursors.Hand;
-            x.TabStop = false;
-            x.Click += delegate { Close(); };
-            Controls.Add(x);
-            x.BringToFront();
-            Resize += delegate { x.Location = new Point(ClientSize.Width - x.Width - 10, 6); x.BringToFront(); };
+            // bilah koneksi ala Remote Desktop: muncul di tengah atas saat mouse ke tepi atas
+            var bar = new FullScreenBar(this);
+            bar.ExitClicked += delegate { Close(); };
+            bar.MinimizeClicked += delegate { WindowState = FormWindowState.Minimized; };
+            Controls.Add(bar);
+            bar.BringToFront();
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)

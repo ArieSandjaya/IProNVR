@@ -561,10 +561,21 @@ namespace IproNvrTool
             base.WndProc(ref m);
         }
 
+        FullScreenBar fsBar;
+
         void ToggleFull()
         {
+            if (fsBar == null)
+            {
+                fsBar = new FullScreenBar(this);
+                fsBar.Visible = false;
+                fsBar.ExitClicked += delegate { if (fullScreen) ToggleFull(); };
+                fsBar.MinimizeClicked += delegate { WindowState = FormWindowState.Minimized; };
+                Controls.Add(fsBar);
+            }
             if (!fullScreen)
             {
+                fsBar.Visible = true; fsBar.BringToFront();
                 MaximizedBounds = Screen.FromControl(this).Bounds;
                 topBar.Visible = false;
                 WindowState = FormWindowState.Normal;
@@ -573,6 +584,7 @@ namespace IproNvrTool
             }
             else
             {
+                fsBar.Visible = false;
                 topBar.Visible = true;
                 MaximizedBounds = Screen.FromControl(this).WorkingArea;
                 WindowState = FormWindowState.Normal;
