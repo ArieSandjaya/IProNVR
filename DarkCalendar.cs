@@ -51,10 +51,10 @@ namespace IproNvrTool
             g.Clear(Asm.Panel);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             Rectangle r = Inner;
-            using (var b = new SolidBrush(Color.FromArgb(28, 33, 44))) g.FillRectangle(b, r);
+            using (var b = new SolidBrush(Asm.Panel2)) g.FillRectangle(b, r);
             Rectangle head = new Rectangle(r.X, r.Y, r.Width, HeadH);
-            using (var b = new SolidBrush(Color.FromArgb(214, 217, 225))) g.FillRectangle(b, head);
-            Color ink = Color.FromArgb(40, 46, 60);
+            using (var b = new SolidBrush(Asm.Label)) g.FillRectangle(b, head);
+            Color ink = Color.FromArgb(48, 54, 67);
             TextRenderer.DrawText(g, month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture), Asm.F(9.5f, true), head, ink,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             int ah = Asm.S(8);
@@ -85,13 +85,13 @@ namespace IproNvrTool
                 {
                     int s = Math.Min(cr.Width, cr.Height) - Asm.S(4);
                     var circle = new Rectangle(cr.X + (cr.Width - s) / 2, cr.Y + (cr.Height - s) / 2, s, s);
-                    using (var b = new SolidBrush(sel ? Color.FromArgb(34, 74, 120) : Color.FromArgb(44, 54, 74))) g.FillEllipse(b, circle);
+                    using (var b = new SolidBrush(sel ? Color.FromArgb(23, 41, 58) : Color.FromArgb(44, 54, 74))) g.FillEllipse(b, circle);
                 }
                 if (today && !sel) fg = Asm.Accent;
                 TextRenderer.DrawText(g, d.Day.ToString(), Asm.F(9.5f, false), cr, fg,
                     TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             }
-            using (var p = new Pen(Color.FromArgb(236, 238, 244), Asm.S(2))) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
+            using (var p = new Pen(Color.White, Asm.S(2))) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
         }
 
         int HitDay(Point pt)

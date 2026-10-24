@@ -135,7 +135,7 @@ namespace IproNvrTool
         public ViewCell()
         {
             InfoModeChanged += OnInfoMode;
-            BackColor = Asm.Bg;
+            BackColor = Asm.CellFrame;
             Padding = new Padding(2);
             AllowDrop = true;
             SetStyle(ControlStyles.ResizeRedraw | ControlStyles.Selectable, true); // Selectable: agar roda mouse (zoom PTZ virtual) sampai ke sel
@@ -357,7 +357,7 @@ namespace IproNvrTool
         public void SetSelected(bool sel)
         {
             Selected = sel;
-            BackColor = sel ? Color.FromArgb(212, 175, 55) : Color.Black;   // area terpilih: bingkai emas; lainnya hitam
+            BackColor = sel ? Color.FromArgb(212, 175, 55) : Asm.CellFrame;   // area terpilih: bingkai emas; lainnya abu-abu tipis
         }
 
         // ---------- isi ----------

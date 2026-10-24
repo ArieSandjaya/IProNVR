@@ -14,6 +14,7 @@
   <ItemGroup>
     <!-- Server adalah proyek terpisah (Server/IproNvrServer) -->
     <Compile Remove="Server\**" />
+    <EmbeddedResource Include="Fonts\*.ttf" />
     <EmbeddedResource Remove="Server\**" />
     <None Remove="Server\**" />
   </ItemGroup>

@@ -30,8 +30,8 @@ namespace IproNvrTool
 
         void Box(Graphics g, Rectangle r)
         {
-            using (var b = new SolidBrush(Color.FromArgb(14, 17, 24))) g.FillRectangle(b, r);
-            using (var p = new Pen(Color.FromArgb(40, 48, 64))) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
+            using (var b = new SolidBrush(Asm.Bg)) g.FillRectangle(b, r);
+            using (var p = new Pen(Asm.BtnBorder)) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -55,14 +55,14 @@ namespace IproNvrTool
             Rectangle a1 = new Rectangle(name.Right + Asm.S(4), y, sz, h);
             Rectangle a2 = new Rectangle(a1.Right + Asm.S(2), y, sz, h);
             foreach (Rectangle r in new[] { a1, a2 })
-                using (var b = new SolidBrush(Color.FromArgb(54, 64, 84))) g.FillRectangle(b, r);
-            AsmIcons.Draw(g, AsmIcon.Alarm, Rectangle.Inflate(a1, -Asm.S(6), -Asm.S(6)), Color.FromArgb(150, 160, 178));
-            using (var b = new SolidBrush(Color.FromArgb(150, 160, 178)))
+                using (var b = new SolidBrush(Color.FromArgb(48, 54, 67))) g.FillRectangle(b, r);
+            AsmIcons.Draw(g, AsmIcon.Alarm, Rectangle.Inflate(a1, -Asm.S(6), -Asm.S(6)), Asm.Text);
+            using (var b = new SolidBrush(Asm.Text))
             {
                 int d = h - Asm.S(12);
                 g.FillEllipse(b, a2.X + (a2.Width - d) / 2, a2.Y + (a2.Height - d) / 2, d, d);
             }
-            TextRenderer.DrawText(g, "!", Asm.F(10f, true), a2, Color.FromArgb(54, 64, 84),
+            TextRenderer.DrawText(g, "!", Asm.F(10f, true), a2, Color.FromArgb(48, 54, 67),
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
 
             // REC + jam
@@ -78,7 +78,7 @@ namespace IproNvrTool
             TextRenderer.DrawText(g, "REC", Asm.F(8.5f, true), new Rectangle(rec.X, rec.Y, rec.Width, h / 2 + Asm.S(2)), Asm.Text,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             int d2 = Asm.S(11);
-            using (var b = new SolidBrush(recording ? Color.FromArgb(230, 40, 40) : Color.FromArgb(80, 90, 108)))
+            using (var b = new SolidBrush(recording ? Color.FromArgb(230, 40, 40) : Color.FromArgb(67, 71, 85)))
                 g.FillEllipse(b, rec.X + (rec.Width - d2) / 2, rec.Y + h / 2 + Asm.S(3), d2, d2);
             if (has)
                 TextRenderer.DrawText(g, c.Playback ? "Playback" : "Live", Asm.F(9.5f, false), right, Asm.Muted,

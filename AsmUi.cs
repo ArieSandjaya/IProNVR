@@ -9,30 +9,83 @@ namespace IproNvrTool
     /// <summary>Warna, font, dan bantuan umum untuk tampilan ala ASM300 (gelap, panel biru-abu, aksen biru).</summary>
     public static class Asm
     {
-        public static readonly Color Bg = Color.FromArgb(10, 12, 16);
-        public static readonly Color Panel = Color.FromArgb(22, 26, 34);
-        public static readonly Color Panel2 = Color.FromArgb(30, 35, 46);
-        public static readonly Color Bar = Color.FromArgb(44, 58, 82);
-        public static readonly Color BarHot = Color.FromArgb(60, 80, 114);
-        public static readonly Color BarOpen = Color.FromArgb(32, 84, 148);
-        public static readonly Color Border = Color.FromArgb(62, 72, 90);
-        public static readonly Color Text = Color.FromArgb(228, 233, 241);
-        public static readonly Color Muted = Color.FromArgb(138, 150, 168);
-        public static readonly Color Accent = Color.FromArgb(70, 152, 255);
+        // palet disamplel dari screenshot ASM300
+        public static readonly Color Bg = Color.FromArgb(0, 0, 0);
+        public static readonly Color Panel = Color.FromArgb(21, 24, 31);       // #15181f badan panel samping
+        public static readonly Color Panel2 = Color.FromArgb(32, 34, 41);      // #202229 tombol / kolom
+        public static readonly Color Bar = Color.FromArgb(48, 54, 67);         // #303643 bar accordion
+        public static readonly Color BarHot = Color.FromArgb(58, 66, 82);
+        public static readonly Color BarOpen = Color.FromArgb(48, 54, 67);
+        public static readonly Color Border = Color.FromArgb(64, 74, 92);      // #404a5c
+        public static readonly Color Text = Color.FromArgb(182, 188, 210);     // #b6bcd2 teks & ikon
+        public static readonly Color Muted = Color.FromArgb(88, 91, 103);      // #585b67 nonaktif
+        public static readonly Color Accent = Color.FromArgb(104, 146, 191);   // #6892bf
+        public static readonly Color TabBg = Color.FromArgb(30, 55, 77);       // #1e374d tab aktif
+        public static readonly Color TabLine = Color.FromArgb(69, 97, 128);    // #456180
+        public static readonly Color Input = Color.FromArgb(13, 14, 16);       // #0d0e10 kolom isian
+        public static readonly Color BtnBorder = Color.FromArgb(53, 62, 77);   // #353e4d
+        public static readonly Color ViewBorder = Color.FromArgb(95, 95, 95);  // #5f5f5f
+        public static readonly Color CellFrame = Color.FromArgb(70, 72, 80);   // bingkai tipis antar area gambar
+        public static readonly Color Label = Color.FromArgb(221, 221, 221);    // #dddddd label
         public static readonly Color Danger = Color.FromArgb(236, 84, 84);
         public static readonly Color Ok = Color.FromArgb(80, 200, 120);
         public static readonly Color Warn = Color.FromArgb(245, 170, 50);
         public static readonly Color Yellow = Color.FromArgb(250, 214, 70);
 
         static readonly Dictionary<string, Font> fonts = new Dictionary<string, Font>();
+        static string famReg, famBold;
+        static float fontScale = 1f;
+
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+        static extern IntPtr AddFontMemResourceEx(IntPtr pbFont, uint cbFont, IntPtr pdv, ref uint pcFonts);
+
+        /// <summary>Muat Source Sans 3 (font bawaan tampilan ASM300) dari resource; bila gagal pakai Segoe UI.</summary>
+        static void InitFonts()
+        {
+            famReg = "Segoe UI"; famBold = "Segoe UI";
+            try
+            {
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT) return;
+                var asm = System.Reflection.Assembly.GetExecutingAssembly();
+                int ok = 0;
+                foreach (string res in new[] { "SourceSans3-400.ttf", "SourceSans3-600.ttf" })
+                {
+                    string name = null;
+                    foreach (string n in asm.GetManifestResourceNames()) if (n.EndsWith(res)) name = n;
+                    if (name == null) continue;
+                    byte[] data;
+                    using (var st = asm.GetManifestResourceStream(name))
+                    {
+                        data = new byte[st.Length];
+                        int off = 0;
+                        while (off < data.Length) { int r = st.Read(data, off, data.Length - off); if (r <= 0) break; off += r; }
+                    }
+                    IntPtr p = System.Runtime.InteropServices.Marshal.AllocCoTaskMem(data.Length);
+                    System.Runtime.InteropServices.Marshal.Copy(data, 0, p, data.Length);
+                    uint cnt = 0;
+                    if (AddFontMemResourceEx(p, (uint)data.Length, IntPtr.Zero, ref cnt) != IntPtr.Zero) ok++;
+                }
+                if (ok == 2)
+                {
+                    using (var t1 = new Font("Source Sans 3", 10f))
+                    using (var t2 = new Font("Source Sans 3 SemiBold", 10f))
+                        if (t1.Name == "Source Sans 3" && t2.Name == "Source Sans 3 SemiBold")
+                        { famReg = "Source Sans 3"; famBold = "Source Sans 3 SemiBold"; fontScale = 1.12f; }
+                }
+            }
+            catch { }
+        }
 
         public static Font F(float pt, bool bold)
         {
+            if (famReg == null) InitFonts();
             string key = pt + (bold ? "b" : "r") + AppSettings.Current.AsmMagnification;
             Font f;
             if (!fonts.TryGetValue(key, out f))
             {
-                f = new Font("Segoe UI", pt * AppSettings.Current.AsmMagnification / 100f, bold ? FontStyle.Bold : FontStyle.Regular);
+                bool semi = famBold != famReg;
+                f = new Font(bold ? famBold : famReg, pt * fontScale * AppSettings.Current.AsmMagnification / 100f,
+                    bold && !semi ? FontStyle.Bold : FontStyle.Regular);
                 fonts[key] = f;
             }
             return f;
@@ -301,18 +354,18 @@ namespace IproNvrTool
         {
             Graphics g = e.Graphics;
             Color bg = Asm.Panel2;
-            if (!Enabled) bg = Asm.Panel;
-            else if (down) bg = Asm.BarOpen;
-            else if (isChecked || Highlight) bg = Color.FromArgb(34, 86, 150);
-            else if (hot) bg = Asm.BarHot;
+            if (!Enabled) bg = Color.FromArgb(24, 27, 34);
+            else if (down) bg = Asm.TabBg;
+            else if (isChecked || Highlight) bg = Asm.TabBg;
+            else if (hot) bg = Color.FromArgb(40, 46, 58);
             using (var b = new SolidBrush(Borderless && !hot && !isChecked && !down ? Parent != null ? Parent.BackColor : Asm.Panel : bg))
                 g.FillRectangle(b, ClientRectangle);
             if (!Borderless)
             {
-                using (var p = new Pen(isChecked || Highlight ? Asm.Accent : Asm.Border))
+                using (var p = new Pen(isChecked || Highlight ? Asm.Accent : Asm.BtnBorder))
                     g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
             }
-            Color fg = !Enabled ? Color.FromArgb(84, 92, 106) : (IconColor.HasValue ? IconColor.Value : Asm.Text);
+            Color fg = !Enabled ? Asm.Muted : (IconColor.HasValue ? IconColor.Value : Asm.Text);
             int pad = Asm.S(5);
             if (GridN > 0)
             {
@@ -442,19 +495,25 @@ namespace IproNvrTool
             Graphics g = e.Graphics;
             g.Clear(Asm.Bg);
             Layout2();
+            using (var ln = new Pen(Asm.TabLine)) g.DrawLine(ln, 0, Height - 1, Width, Height - 1);
             for (int i = 0; i < tabs.Count; i++)
             {
                 AsmTab t = tabs[i];
                 Rectangle r = rects[i];
                 bool sel = t.Key == selected;
-                using (var b = new SolidBrush(sel ? Asm.Panel2 : (i == hotIdx ? Asm.Panel : Asm.Bg)))
-                    g.FillRectangle(b, r);
                 if (sel)
                 {
-                    using (var b = new SolidBrush(Asm.Accent)) g.FillRectangle(b, r.X, r.Bottom - Asm.S(3), r.Width, Asm.S(3));
+                    int sl = Asm.S(14);                       // sisi kanan miring seperti tab ASM300
+                    var poly = new[] { new Point(r.X, r.Bottom), new Point(r.X, r.Y), new Point(r.Right - sl, r.Y), new Point(r.Right, r.Bottom) };
+                    using (var b = new SolidBrush(Asm.TabBg)) g.FillPolygon(b, poly);
+                    using (var p = new Pen(Asm.TabLine)) g.DrawLines(p, new[] { new Point(r.X, r.Bottom), new Point(r.X, r.Y), new Point(r.Right - sl, r.Y), new Point(r.Right, r.Bottom) });
+                }
+                else if (i == hotIdx)
+                {
+                    using (var b = new SolidBrush(Color.FromArgb(21, 24, 31))) g.FillRectangle(b, r);
                 }
                 TextRenderer.DrawText(g, t.Title, Asm.F(9f, sel), new Rectangle(r.X + Asm.S(14), 0, r.Width - Asm.S(14) - (t.Closable ? Asm.S(26) : Asm.S(8)), Height),
-                    sel ? Asm.Text : Asm.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                    sel ? Asm.Label : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
                 if (t.Closable)
                 {
                     Rectangle c = CloseRect(r);
@@ -579,7 +638,7 @@ namespace IproNvrTool
             Tag = "nostyle";
             Height = Asm.S(40);
             Box.BorderStyle = BorderStyle.None;
-            Box.BackColor = Color.FromArgb(18, 22, 31);
+            Box.BackColor = Asm.Panel2;
             Box.ForeColor = Asm.Text;
             Box.Font = Asm.F(10f, false);
             Box.MaxLength = 16;
@@ -627,13 +686,13 @@ namespace IproNvrTool
             Rectangle r = new Rectangle(Asm.S(4), Asm.S(3), Width - Asm.S(9), Height - Asm.S(7));
             using (var gp = AsmUi.RoundRect(r, r.Height / 2))
             {
-                using (var b = new SolidBrush(Color.FromArgb(18, 22, 31))) g.FillPath(b, gp);
-                using (var p = new Pen(Box.Focused ? Asm.Accent : Color.FromArgb(52, 62, 82), 1.5f)) g.DrawPath(p, gp);
+                using (var b = new SolidBrush(Asm.Panel2)) g.FillPath(b, gp);
+                using (var p = new Pen(Box.Focused ? Asm.Accent : Color.FromArgb(40, 56, 74), 1.5f)) g.DrawPath(p, gp);
             }
             int s = Asm.S(22);
             AsmIcons.Draw(g, AsmIcon.Search, new Rectangle(Asm.S(14), (Height - s) / 2, s, s), Asm.Text);
             if (!Box.Visible)
-                TextRenderer.DrawText(g, "Search", Asm.F(10.5f, true), new Rectangle(Box.Left, 0, Box.Width, Height), Color.FromArgb(120, 130, 150),
+                TextRenderer.DrawText(g, "Search", Asm.F(10.5f, true), new Rectangle(Box.Left, 0, Box.Width, Height), Color.FromArgb(125, 129, 144),
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding);
             if (Box.Text.Length > 0)
                 AsmIcons.Draw(g, AsmIcon.Close, new Rectangle(Width - Asm.S(34), (Height - Asm.S(16)) / 2, Asm.S(16), Asm.S(16)), Asm.Text);
@@ -683,7 +742,7 @@ namespace IproNvrTool
             public AccordionBar()
             {
                 SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
-                Height = Asm.S(34);
+                Height = Asm.S(38);
                 Cursor = Cursors.Hand;
                 Tag = "nostyle";
             }
@@ -695,17 +754,13 @@ namespace IproNvrTool
             {
                 Graphics g = e.Graphics;
                 g.Clear(Asm.Panel);
+                Rectangle r = new Rectangle(0, Asm.S(3), Width, Height - Asm.S(6));
+                using (var b = new SolidBrush(hot && !Open ? Asm.BarHot : Asm.Bar)) g.FillRectangle(b, r);
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, Asm.S(2), Width - 1, Height - Asm.S(4));
-                Color c1 = Open ? Color.FromArgb(70, 88, 118) : (hot ? Color.FromArgb(62, 76, 100) : Color.FromArgb(54, 66, 88));
-                Color c2 = Open ? Color.FromArgb(52, 66, 92) : (hot ? Color.FromArgb(46, 58, 80) : Color.FromArgb(40, 50, 70));
-                using (var gp = AsmUi.RoundRect(r, Asm.S(3)))
-                using (var br = new LinearGradientBrush(r, c1, c2, 90f))
-                    g.FillPath(br, gp);
                 int s = Asm.S(14);
-                AsmIcons.Draw(g, Open ? AsmIcon.ChevronUp : AsmIcon.ChevronDown, new Rectangle(Asm.S(10), (Height - s) / 2, s, s), Color.FromArgb(200, 210, 226));
-                TextRenderer.DrawText(g, Title, Asm.F(10f, true), new Rectangle(Asm.S(34), 0, Width - Asm.S(38), Height),
-                    Match ? Asm.Warn : Color.FromArgb(205, 214, 230), TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                AsmIcons.Draw(g, Open ? AsmIcon.ChevronUp : AsmIcon.ChevronDown, new Rectangle(Asm.S(8), (Height - s) / 2, s, s), Asm.Text);
+                TextRenderer.DrawText(g, Title, Asm.F(10.5f, true), new Rectangle(Asm.S(34), 0, Width - Asm.S(38), Height),
+                    Match ? Asm.Warn : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
             }
         }
 
@@ -754,7 +809,7 @@ namespace IproNvrTool
         {
             int w = h.ClientSize.Width, H = h.ClientSize.Height;
             int y = 0;
-            int barH = Asm.S(34);
+            int barH = Asm.S(38);
             // grup atas: bar ditumpuk dari atas
             foreach (Section s in sections)
             {
@@ -1013,15 +1068,14 @@ namespace IproNvrTool
                 {
                     Rectangle r = Rect(i);
                     bool on = i == Owner.sel;
-                    using (var b = new SolidBrush(on ? Color.FromArgb(34, 46, 68) : Color.FromArgb(20, 25, 35))) g.FillRectangle(b, r);
-                    using (var p = new Pen(on ? Asm.Accent : Asm.Border)) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
-                    if (on) using (var b = new SolidBrush(Asm.Accent)) g.FillRectangle(b, r.X, r.Y, Asm.S(3), r.Height);
+                    using (var b = new SolidBrush(on ? Asm.TabBg : Asm.Panel2)) g.FillRectangle(b, r);
+                    using (var p = new Pen(on ? Asm.TabLine : Asm.BtnBorder)) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
                     var st = g.Save();
                     g.TranslateTransform(r.X + r.Width / 2f, r.Y + r.Height / 2f);
                     g.RotateTransform(-90);
                     using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                    using (var br = new SolidBrush(on ? Asm.Text : Asm.Muted))
-                        g.DrawString(Owner.titles[i], Asm.F(10f, on), br, 0, 0, sf);
+                    using (var br = new SolidBrush(on ? Asm.Label : Asm.Text))
+                        g.DrawString(Owner.titles[i], Asm.F(10.5f, true), br, 0, 0, sf);
                     g.Restore(st);
                 }
             }
