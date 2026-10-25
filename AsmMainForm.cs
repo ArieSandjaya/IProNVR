@@ -397,13 +397,9 @@ namespace IproNvrTool
             foreach (AsmTab t in strip.Tabs) if (t.Key == key) title = t.Title;
             strip.Remove(key);
             host.Controls.Remove(v);
-            var f = new Form();
-            f.Text = title + " - i-PRO NVR Tool";
-            f.Size = new Size(1200, 760);
-            f.BackColor = Asm.Bg;
-            f.StartPosition = FormStartPosition.CenterScreen;
+            var f = new AsmWindow(title + " - i-PRO NVR Tool", ((Form)this).Icon);
             v.Visible = true;
-            f.Controls.Add(v);
+            f.Body.Controls.Add(v);
             detached[key] = f;
             f.FormClosed += delegate
             {
@@ -667,6 +663,119 @@ namespace IproNvrTool
                 if (lv != null) { try { lv.Shutdown(); } catch { } }
             }
             try { Task.Run(delegate { Pool.LogoutAll(); Sessions.LogoutAll(); }).Wait(5000); } catch { }
+        }
+    }
+}
+
+namespace IproNvrTool
+{
+    /// <summary>Jendela lepas (tab yang di-detach): tanpa bingkai Windows, bilah judul gelap bergaya ASM300
+    /// (ikon, judul, minimize/maximize/tutup, seret, klik ganda = maximize, ubah ukuran dari tepi).</summary>
+    public class AsmWindow : Form
+    {
+        readonly Panel bar = new Panel();
+        readonly Label lbl = new Label();
+        readonly Panel body = new Panel();
+        WinButton wMax;
+        Image appIcon;
+
+        public Control Body { get { return body; } }
+
+        public AsmWindow(string title, Icon icon)
+        {
+            Text = title;
+            FormBorderStyle = FormBorderStyle.None;
+            BackColor = Asm.Bg;
+            StartPosition = FormStartPosition.CenterScreen;
+            Size = new Size(1200, 760);
+            MinimumSize = new Size(Asm.S(500), Asm.S(320));
+            if (icon != null) { Icon = icon; try { appIcon = new Icon(icon, 16, 16).ToBitmap(); } catch { } }
+
+            bar.Dock = DockStyle.Top;
+            bar.Height = Asm.S(36);
+            bar.BackColor = Asm.Bg;
+            bar.Tag = "nostyle";
+
+            var wClose = new WinButton(WinButton.Kind.Close); wClose.Dock = DockStyle.Right; wClose.Width = Asm.S(44);
+            wClose.Click += delegate { Close(); };
+            wMax = new WinButton(WinButton.Kind.Max); wMax.Dock = DockStyle.Right; wMax.Width = Asm.S(44);
+            wMax.Click += delegate { ToggleMax(); };
+            var wMin = new WinButton(WinButton.Kind.Min); wMin.Dock = DockStyle.Right; wMin.Width = Asm.S(44);
+            wMin.Click += delegate { WindowState = FormWindowState.Minimized; };
+
+            var drag = new Panel(); drag.Dock = DockStyle.Fill; drag.BackColor = Asm.Bg; drag.Tag = "nostyle";
+            drag.Paint += delegate(object o, PaintEventArgs e)
+            {
+                int x = Asm.S(10);
+                if (appIcon != null) { e.Graphics.DrawImage(appIcon, x, (drag.Height - 16) / 2, 16, 16); x += 16 + Asm.S(8); }
+                TextRenderer.DrawText(e.Graphics, Text, Asm.F(10f, false), new Rectangle(x, 0, drag.Width - x, drag.Height), Asm.Text,
+                    TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            };
+            drag.MouseDown += delegate(object o, MouseEventArgs e)
+            {
+                if (e.Button != MouseButtons.Left) return;
+                if (e.Clicks == 2) { ToggleMax(); return; }
+                if (WindowState == FormWindowState.Maximized) return;
+                NativeMove(Handle);
+            };
+            TextChanged += delegate { drag.Invalidate(); };
+
+            bar.Controls.Add(drag);
+            bar.Controls.Add(wMin);
+            bar.Controls.Add(wMax);
+            bar.Controls.Add(wClose);
+
+            var line = new Panel(); line.Dock = DockStyle.Top; line.Height = 1; line.BackColor = Asm.Border; line.Tag = "nostyle";
+            body.Dock = DockStyle.Fill;
+            body.BackColor = Asm.Bg;
+            body.Tag = "nostyle";
+            Controls.Add(body);
+            Controls.Add(line);
+            Controls.Add(bar);
+            UiSmooth.Attach(this);
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ReleaseCapture();
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+
+        static void NativeMove(IntPtr h)
+        {
+            try { ReleaseCapture(); SendMessage(h, 0xA1, (IntPtr)2, IntPtr.Zero); } catch { }
+        }
+
+        void ToggleMax()
+        {
+            MaximizedBounds = Screen.FromControl(this).WorkingArea;
+            WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+            wMax.K = WindowState == FormWindowState.Maximized ? WinButton.Kind.Restore : WinButton.Kind.Max;
+            wMax.Invalidate();
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            MaximizedBounds = Screen.FromControl(this).WorkingArea;
+            base.OnLoad(e);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x84 && WindowState == FormWindowState.Normal)   // WM_NCHITTEST: ubah ukuran dari tepi
+            {
+                base.WndProc(ref m);
+                if ((int)m.Result == 1)
+                {
+                    int lp = (int)(long)m.LParam;
+                    Point pt = PointToClient(new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF)));
+                    int e = Asm.S(6);
+                    bool l = pt.X < e, r = pt.X >= Width - e, t = pt.Y < e, b = pt.Y >= Height - e;
+                    if (t && l) m.Result = (IntPtr)13; else if (t && r) m.Result = (IntPtr)14;
+                    else if (b && l) m.Result = (IntPtr)16; else if (b && r) m.Result = (IntPtr)17;
+                    else if (l) m.Result = (IntPtr)10; else if (r) m.Result = (IntPtr)11;
+                    else if (t) m.Result = (IntPtr)12; else if (b) m.Result = (IntPtr)15;
+                }
+                return;
+            }
+            base.WndProc(ref m);
         }
     }
 }
