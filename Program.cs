@@ -30,6 +30,7 @@ namespace IproNvrTool
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Theme.Init();
+            AppIcon.Install();
 
             bool classic = false;
             foreach (string a in args)

@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <Content Include="6296844.ico" />
+    <EmbeddedResource Include="6296844.ico" LogicalName="IproNvrTool.app.ico" />
   </ItemGroup>
 
   <ItemGroup>

@@ -206,6 +206,7 @@ namespace IproNvrTool
         {
             Text = "i-PRO NVR Tool - ASM300 style";
             FormBorderStyle = FormBorderStyle.None;      // bilah judul digambar sendiri (topBar)
+            if (AppIcon.Get() != null) base.Icon = AppIcon.Get();
             Width = 1480;
             Height = 900;
             StartPosition = FormStartPosition.CenterScreen;
@@ -397,7 +398,7 @@ namespace IproNvrTool
             foreach (AsmTab t in strip.Tabs) if (t.Key == key) title = t.Title;
             strip.Remove(key);
             host.Controls.Remove(v);
-            var f = new AsmWindow(title + " - i-PRO NVR Tool", ((Form)this).Icon);
+            var f = new AsmWindow(title + " - i-PRO NVR Tool", AppIcon.Get());
             v.Visible = true;
             f.Body.Controls.Add(v);
             detached[key] = f;
