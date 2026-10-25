@@ -39,7 +39,7 @@ namespace IproNvrTool
             tCam.BackColor = Asm.Bg;
             tPb.BackColor = Asm.Panel2;
             tabs.AddPage("Camera", tCam);
-            tabs.AddPage("Playback", tPb);
+            tabs.AddPage("HDD", tPb);
             Controls.Add(tabs);
             holdTimer.Interval = 350;
             holdTimer.Tick += delegate
@@ -188,55 +188,15 @@ namespace IproNvrTool
 
         void BuildPlayback()
         {
-            var h = new FlowLayoutPanel();
-            h.Dock = DockStyle.Fill;
-            h.Padding = new Padding(Asm.S(6), Asm.S(6), 0, 0);
-            h.Tag = "nostyle";
-            h.BackColor = Asm.Panel2;
-            h.Controls.Add(OpLab("Waktu"));
-            dtpGo = new DateTimePicker();
-            dtpGo.Format = DateTimePickerFormat.Custom;
-            dtpGo.CustomFormat = "yyyy/MM/dd  HH:mm:ss";
-            dtpGo.Width = Asm.S(170);
-            dtpGo.Margin = new Padding(2, 6, 2, 0);
-            dtpGo.Value = DateTime.Now.AddMinutes(-10);
-            h.Controls.Add(dtpGo);
-            h.Controls.Add(OpBtn(AsmIcon.Play, "Go", "Putar dari waktu ini (di tampilan ini)", delegate
-            {
-                if (Pb != null && SelRef() != null) Pb.PlayAtUtc(dtpGo.Value.ToUniversalTime());
-            }, 64));
-            var live = OpBtn(AsmIcon.Live, "Live", "Kembali ke live", delegate { if (Pb != null) Pb.Exit(); }, 70);
-            h.Controls.Add(live);
-            h.SetFlowBreak(live, true);
-
-            h.Controls.Add(OpBtn(AsmIcon.FastRew, "", "Fast reverse", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.FastReverse(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.PrevFrame, "", "Frame sebelumnya", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Step(false); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Reverse, "", "Putar mundur", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Reverse(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Pause, "", "Pause", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Pause(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Play, "", "Putar maju", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Play(); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.NextFrame, "", "Frame berikutnya", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Step(true); }); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Minus, "Lambat", "Perlambat putaran (0.25x - 8x)", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.SpeedDown(); }); }, 74));
-            h.Controls.Add(OpBtn(AsmIcon.Plus, "Cepat", "Percepat putaran (0.25x - 8x)", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.SpeedUp(); }); }, 70));
-            h.Controls.Add(OpBtn(AsmIcon.FastFwd, "", "Fast forward", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.FastForward(); }); }, 40));
-            var stp = OpBtn(AsmIcon.Stop, "", "Stop", delegate { if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Stop(); }); }, 40);
-            h.Controls.Add(stp);
-            h.SetFlowBreak(stp, true);
-
-            h.Controls.Add(OpLab("Skip"));
-            cmbSkip = new ComboBox();
-            cmbSkip.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSkip.Items.AddRange(new object[] { "10 detik", "30 detik", "1 menit", "5 menit", "10 menit", "30 menit", "1 jam" });
-            cmbSkip.SelectedIndex = 2;
-            cmbSkip.Width = Asm.S(90);
-            cmbSkip.Margin = new Padding(2, 6, 2, 0);
-            h.Controls.Add(cmbSkip);
-            h.Controls.Add(OpBtn(AsmIcon.SkipBack, "", "Mundur sebesar nilai skip", delegate { SkipBy(-1); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.SkipFwd, "", "Maju sebesar nilai skip", delegate { SkipBy(1); }, 40));
-            h.Controls.Add(OpBtn(AsmIcon.Download, "Quick DL", "Quick download kamera terpilih (dari posisi ini bila sedang playback)", delegate
-            {
-                CamRef r = SelRef();
-                if (r != null && QuickDownloadRequested != null) QuickDownloadRequested(r);
-            }, 90));
+            ComboBox cs; DateTimePicker dg;
+            Panel h = HddPage.Build(tips,
+                delegate(Action<PlaybackEngine> a) { if (Pb != null) Pb.Each(a); },
+                delegate(int d) { SkipBy(d); },
+                delegate(DateTime u) { if (Pb != null && SelRef() != null) Pb.PlayAtUtc(u); },
+                delegate { if (Pb != null) Pb.Exit(); },
+                delegate { CamRef r = SelRef(); if (r != null && QuickDownloadRequested != null) QuickDownloadRequested(r); },
+                out cs, out dg);
+            cmbSkip = cs; dtpGo = dg;
             tPb.Controls.Add(h);
         }
 
