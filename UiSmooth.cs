@@ -36,6 +36,12 @@ namespace IproNvrTool
             try
             {
                 if (c is LiveTile) return;                 // tile video diatur sendiri
+                // tombol WinForms biasa yang belum diberi gaya (latar gelap + teks gelap = tak terbaca): beri gaya tema gelap
+                if (c.GetType() == typeof(Button))
+                {
+                    var bt = (Button)c;
+                    if (bt.FlatStyle != FlatStyle.Flat) Asm.FlatButton(bt);
+                }
                 if (c is Panel || c is TreeView || c is ListView || c is ListBox || c is TabControl || c is FlowLayoutPanel || c is TableLayoutPanel)
                 {
                     if (DoubleBufferedProp != null) DoubleBufferedProp.SetValue(c, true, null);

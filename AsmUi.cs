@@ -100,6 +100,20 @@ namespace IproNvrTool
             return (int)Math.Round(px * Base * AppSettings.Current.AsmMagnification / 100.0);
         }
 
+        /// <summary>Gaya tombol WinForms biasa agar terbaca di tema gelap (latar panel, teks terang, garis tipis).</summary>
+        public static void FlatButton(Button b)
+        {
+            b.UseVisualStyleBackColor = false;
+            b.FlatStyle = FlatStyle.Flat;
+            b.BackColor = Panel2;
+            b.ForeColor = Text;
+            b.Cursor = Cursors.Hand;
+            b.FlatAppearance.BorderColor = BtnBorder;
+            b.FlatAppearance.BorderSize = 1;
+            b.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, 46, 58);
+            b.FlatAppearance.MouseDownBackColor = TabBg;
+        }
+
         public static ContextMenuStrip Menu()
         {
             var m = new ContextMenuStrip();
