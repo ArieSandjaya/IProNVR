@@ -70,6 +70,19 @@ namespace IproNvrTool
             }
             else if (Norm(brand) == Dahua)
             {
+                // DVR / XVR / HCVR (kanal analog atau hibrid): semua kanal dari ChannelTitle dianggap terdaftar
+                string type = "";
+                try { type = get("/cgi-bin/magicBox.cgi?action=getDeviceType"); } catch (Exception) { }
+                if (Regex.IsMatch(type, @"DVR|XVR|HCVR|HCVI|HDCVI", RegexOptions.IgnoreCase))
+                {
+                    raw = get("/cgi-bin/configManager.cgi?action=getConfig&name=ChannelTitle");
+                    foreach (Match m in Regex.Matches(raw, @"ChannelTitle\[(\d+)\]\.Name\s*="))
+                    {
+                        int ch = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) + 1;
+                        if (!d.ContainsKey(ch)) d[ch] = 1;
+                    }
+                    if (d.Count > 0) return d;
+                }
                 raw = get("/cgi-bin/configManager.cgi?action=getConfig&name=RemoteDevice");
                 foreach (Match m in Regex.Matches(raw, @"RemoteDevice\[(\d+)\]\.Enable\s*=\s*(\w+)"))
                 {
