@@ -154,7 +154,15 @@ namespace IproNvrTool
                     nn.Nodes.Add(CamNode(nvr.Id, c.Channel));
                     any = true;
                 }
-                if (nn.Nodes.Count > 0 || (filter.Length == 0 && folders.Count == 0)) tv.Nodes.Add(nn);
+                if (nn.Nodes.Count == 0 && filter.Length == 0)
+                {
+                    // NVR tampil walau belum ada kamera (mis. menunggu pembacaan daftar kamera dari NVR)
+                    bool allInFolders = Dir.Cameras(nvr.Id).Count > 0;
+                    var ph = new TreeNode(allInFolders ? "(all cameras are in folders)" : "(no cameras yet)");
+                    ph.ForeColor = Asm.Muted;
+                    nn.Nodes.Add(ph);
+                }
+                if (nn.Nodes.Count > 0) tv.Nodes.Add(nn);
             }
             if (filter.Length > 0) tv.ExpandAll();
             else foreach (TreeNode n in tv.Nodes) if (open.Count == 0 || open.Contains(n.Text)) n.Expand();

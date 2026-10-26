@@ -419,6 +419,8 @@ namespace IproNvrTool
             }
         }
 
+        static readonly HashSet<long> autoFilled = new HashSet<long>();
+
         static void PollNvr(NvrRecord n)
         {
             NvrEndpoint ep = n.ToEndpoint();
@@ -446,6 +448,15 @@ namespace IproNvrTool
                     Events.Add(Events.Device, e, true);
                 }
                 return;
+            }
+
+            // kamera yang dilaporkan NVR tetapi belum ada di database (mis. NVR ke-2 dst belum pernah "Ambil daftar kamera"): simpan sekali
+            bool missing = false;
+            foreach (CamStatus s in res.Items) if (s.Status != 0 && Dir.Cam(n.Id, s.Channel) == null) { missing = true; break; }
+            if (missing && autoFilled.Add(n.Id))
+            {
+                try { Db.SaveCameraList(n.Id, res.Items, res.Raw); Log.Write("Monitor " + n.Name + ": " + res.Items.Count + " kamera dari NVR disimpan otomatis."); }
+                catch (Exception ex) { Log.Write("Monitor " + n.Name + ": simpan daftar kamera gagal: " + ex.Message); autoFilled.Remove(n.Id); }
             }
 
             foreach (CamStatus s in res.Items)
