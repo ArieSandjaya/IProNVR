@@ -514,17 +514,34 @@ namespace IproNvrTool
             return g;
         }
 
+        int _prod, _dropBusy, _dropGap, _diagTick = Environment.TickCount;
+
+        /// <summary>Tile besar: tiap ~15 dtk catat fps yang dihasilkan ffmpeg vs yang ditampilkan (untuk mencari sumber fps rendah).</summary>
+        void Diag()
+        {
+            int el = unchecked(Environment.TickCount - _diagTick);
+            if (el < 15000) return;
+            if (_decodeWidth == 0 || _decodeWidth >= 960)
+                Log.Write("CAM " + Cam + " [" + (_srcLabel ?? "") + (_forceSoftware ? ", CPU" : ", GPU:" + AppSettings.Current.HwAccel) + "] 15 dtk: ffmpeg " + (_prod * 1000 / el)
+                    + " fps, tampil " + ((_prod - _dropBusy - _dropGap) * 1000 / el) + " fps (buang: UI sibuk " + _dropBusy + ", batas fps " + _dropGap + ")");
+            _prod = 0; _dropBusy = 0; _dropGap = 0; _diagTick = Environment.TickCount;
+        }
+
         void ShowJpeg(byte[] jpeg)
         {
             _lastTick = Environment.TickCount;
+            _prod++;
+            Diag();
             if (_busy)
             {
+                _dropBusy++;
                 Interlocked.Increment(ref _frames);
                 return;
             }
             int gap = DisplayGapMs();
             if (gap > 0 && unchecked(Environment.TickCount - _lastShowTick) < gap)
             {
+                _dropGap++;
                 Interlocked.Increment(ref _frames);
                 return;
             }
