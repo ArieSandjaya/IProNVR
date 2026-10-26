@@ -500,13 +500,18 @@ namespace IproNvrTool
         string _fpsText = "";
 
         /// <summary>Batas fps tampilan: makin banyak stream aktif, makin rendah, supaya UI thread tidak jenuh (penyebab gambar patah-patah).</summary>
-        static int DisplayGapMs()
+        /// <summary>Jeda minimum antar gambar yang ditampilkan. Tile besar (1 area / layar penuh: lebar dekode >= 1280) tidak dibatasi,
+        /// 2-4 area dibatasi paling banyak ~30 fps; batas ketat hanya untuk dinding banyak area (itu yang membuat fps tampak kecil).</summary>
+        int DisplayGapMs()
         {
+            if (_decodeWidth == 0 || _decodeWidth >= 1280) return 0;
             int n = ActiveStreams;
-            if (n > 40) return 120;   // ~8 fps
-            if (n > 16) return 80;    // ~12 fps
-            if (n > 6) return 50;     // ~20 fps
-            return 0;
+            int g = 0;
+            if (n > 40) g = 120;        // ~8 fps
+            else if (n > 16) g = 80;    // ~12 fps
+            else if (n > 6) g = 50;     // ~20 fps
+            if (_decodeWidth >= 960) g = Math.Min(g, 33);
+            return g;
         }
 
         void ShowJpeg(byte[] jpeg)
