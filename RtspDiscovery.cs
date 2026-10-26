@@ -222,15 +222,17 @@ namespace IproNvrTool
         class Cand
         {
             public string Method, Sub, Main;
+            public List<string> Extra = new List<string>();   // stream lain (mis. stream ketiga) ikut diuji agar yang terkecil/terbesar bisa dipilih
             public Cand(string method, string sub, string main) { Method = method; Sub = sub; Main = main; }
+            public Cand Ex(string u) { Extra.Add(u); return this; }
         }
 
         static List<Cand> Patterns()
         {
             string h = "rtsp://{user}:{pass}@{ip}:554";
             var l = new List<Cand>();
-            l.Add(new Cand("pola Dahua/OEM", h + "/cam/realmonitor?channel=1&subtype=1", h + "/cam/realmonitor?channel=1&subtype=0"));
-            l.Add(new Cand("pola Hikvision", h + "/Streaming/Channels/102", h + "/Streaming/Channels/101"));
+            l.Add(new Cand("pola Dahua/OEM", h + "/cam/realmonitor?channel=1&subtype=1", h + "/cam/realmonitor?channel=1&subtype=0").Ex(h + "/cam/realmonitor?channel=1&subtype=2"));
+            l.Add(new Cand("pola Hikvision", h + "/Streaming/Channels/102", h + "/Streaming/Channels/101").Ex(h + "/Streaming/Channels/103"));
             l.Add(new Cand("pola Axis (H.264)", h + "/axis-media/media.amp?videocodec=h264&resolution=640x360", h + "/axis-media/media.amp?videocodec=h264"));
             l.Add(new Cand("pola Axis lama (MPEG-4)", h + "/mpeg4/media.amp?resolution=640x480", h + "/mpeg4/media.amp"));
             l.Add(new Cand("pola Panasonic/i-PRO", h + "/MediaInput/h264/stream_2", h + "/MediaInput/h264/stream_1"));
@@ -282,8 +284,20 @@ namespace IproNvrTool
             // 2. templat NVR
             if (!string.IsNullOrWhiteSpace(nvrTemplate))
             {
-                string main = Regex.IsMatch(nvrTemplate, "subtype=1", RegexOptions.IgnoreCase) ? Regex.Replace(nvrTemplate, "subtype=1", "subtype=0", RegexOptions.IgnoreCase) : null;
-                cands.Add(new Cand("templat NVR", nvrTemplate.Trim(), main));
+                string t0 = nvrTemplate.Trim(), main = null;
+                Cand tc;
+                if (Regex.IsMatch(t0, "subtype=1", RegexOptions.IgnoreCase))
+                {
+                    main = Regex.Replace(t0, "subtype=1", "subtype=0", RegexOptions.IgnoreCase);
+                    tc = new Cand("templat NVR", t0, main).Ex(Regex.Replace(t0, "subtype=1", "subtype=2", RegexOptions.IgnoreCase));
+                }
+                else if (Regex.IsMatch(t0, @"/Streaming/Channels/(\d)02\b", RegexOptions.IgnoreCase))
+                {
+                    main = Regex.Replace(t0, @"/Streaming/Channels/(\d)02\b", "/Streaming/Channels/$101", RegexOptions.IgnoreCase);
+                    tc = new Cand("templat NVR", t0, main).Ex(Regex.Replace(t0, @"/Streaming/Channels/(\d)02\b", "/Streaming/Channels/$103", RegexOptions.IgnoreCase));
+                }
+                else tc = new Cand("templat NVR", t0, null);
+                cands.Add(tc);
             }
 
             // 3. pola merk (hanya bila port RTSP standar terbuka)
@@ -298,18 +312,40 @@ namespace IproNvrTool
                 StreamInfo si = StreamProbe.Probe(exe, Url(c.Sub, user, pass, ip), out err, 9000);
                 if (si == null) { note += (note.Length > 0 ? "; " : "") + c.Method + ": " + Short(err); continue; }
                 res.Method = c.Method;
-                res.SubTemplate = c.Sub;
-                res.Sub = si;
-                if (c.Main != null)
+                // kumpulkan semua stream yang terbaca, lalu pilih otomatis: piksel terkecil = sub, terbesar = main
+                var got = new List<KeyValuePair<string, StreamInfo>>();
+                got.Add(new KeyValuePair<string, StreamInfo>(c.Sub, si));
+                var more = new List<string>();
+                if (c.Main != null) more.Add(c.Main);
+                more.AddRange(c.Extra);
+                foreach (string u in more)
                 {
+                    if (ct.IsCancellationRequested) break;
                     string e2;
-                    StreamInfo mi = StreamProbe.Probe(exe, Url(c.Main, user, pass, ip), out e2, 9000);
-                    if (mi != null) { res.Main = mi; res.MainTemplate = c.Main; }
+                    StreamInfo xi = StreamProbe.Probe(exe, Url(u, user, pass, ip), out e2, 9000);
+                    if (xi != null) got.Add(new KeyValuePair<string, StreamInfo>(u, xi));
                 }
+                Rank(got, res);
                 return res;
             }
             res.Note = note.Length > 0 ? note : "tidak ada kandidat";
             return res;
+        }
+
+        /// <summary>Sub = stream berpiksel terkecil, Main = terbesar (bila ada dua atau lebih resolusi berbeda); tanpa konfigurasi manual.</summary>
+        public static void Rank(List<KeyValuePair<string, StreamInfo>> got, DiscoveryResult res)
+        {
+            KeyValuePair<string, StreamInfo> lo = got[0], hi = got[0];
+            foreach (KeyValuePair<string, StreamInfo> kv in got)
+            {
+                long p = (long)kv.Value.Width * kv.Value.Height;
+                if (p < (long)lo.Value.Width * lo.Value.Height) lo = kv;
+                if (p > (long)hi.Value.Width * hi.Value.Height) hi = kv;
+            }
+            res.SubTemplate = lo.Key; res.Sub = lo.Value;
+            bool distinct = (long)hi.Value.Width * hi.Value.Height > (long)lo.Value.Width * lo.Value.Height;
+            if (distinct) { res.MainTemplate = hi.Key; res.Main = hi.Value; }
+            else if (got.Count > 1) { res.MainTemplate = got[1].Key; res.Main = got[1].Value; }   // semua sama besar: tetap catat main
         }
 
         static string Short(string s)
