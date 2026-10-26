@@ -31,6 +31,15 @@ namespace IproNvrTool
             return "rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1";
         }
 
+        /// <summary>Petunjuk bila port yang diisi kemungkinan bukan port HTTP (mis. 37777 = port SDK Dahua di Smart PSS). Kosong bila tidak relevan.</summary>
+        public static string PortHint(string brand, int port)
+        {
+            if (port == 37777 || port == 37778) return " Port " + port + " adalah port SDK Dahua (Smart PSS), bukan HTTP. Isi port HTTP perangkat (biasanya 80; lihat Network > Port di perangkat).";
+            if (port == 554) return " Port 554 adalah RTSP, bukan HTTP. Isi port HTTP perangkat (biasanya 80).";
+            if (port == 8000 && Norm(brand) == Hikvision) return " Port 8000 adalah port SDK Hikvision, bukan HTTP. Isi port HTTP (biasanya 80).";
+            return "";
+        }
+
         /// <summary>Tes login ke NVR merek non-i-PRO: satu GET yang harus berhasil (digest). Melempar exception bila gagal.</summary>
         public static void Login(string brand, Func<string, string> get)
         {

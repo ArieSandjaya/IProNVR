@@ -153,7 +153,7 @@ namespace IproNvrTool
                 }
                 catch (Exception ex) { res.CamError = ex.Message; }
             }
-            catch (Exception ex) { res.Ok = false; res.Error = ex.Message; }
+            catch (Exception ex) { res.Ok = false; res.Error = ex.Message + BrandCgi.PortHint(BrandId, ep.Port); }
             return res;
         }
 
@@ -289,7 +289,7 @@ namespace IproNvrTool
                 }
                 catch (Exception ex) { res.CamError = ex.Message; }
             }
-            catch (Exception ex) { res.Ok = false; res.Error = ex.Message; }
+            catch (Exception ex) { res.Ok = false; res.Error = ex.Message + BrandCgi.PortHint(BrandId, ep.Port); }
             return res;
         }
 

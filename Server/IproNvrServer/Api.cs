@@ -195,7 +195,7 @@ namespace IproNvrServer
                     cl = BrandCgi.Cameras(brand, get, out text);
                 }
             }
-            catch (Exception ex) { error = "Gagal menghubungi NVR " + host + ":" + port + " - " + NvrList.Explain(ex); return null; }
+            catch (Exception ex) { error = "Gagal menghubungi NVR " + host + ":" + port + " - " + NvrList.Explain(ex) + BrandCgi.PortHint(brand, port); return null; }
             if (cl.Count == 0)
             {
                 string raw = (text ?? "").Replace("\r", " ").Replace("\n", " | ");
