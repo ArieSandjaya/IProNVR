@@ -127,7 +127,7 @@ namespace IproNvrTool
         public override string BrandName { get { return "Hikvision"; } }
         public override string DefaultCamTemplate { get { return BrandCgi.DefaultCamTemplate(BrandCgi.Hikvision); } }
 
-        protected override string RtspPath(int ch, bool sub) { return "/Streaming/Channels/" + (ch * 100 + (sub ? 2 : 1)); }
+        protected override string RtspPath(int ch, bool sub) { return BrandCgi.ViaRtspPath(BrandId, ch, sub); }
 
         protected override string PlaybackPath(int ch, DateTime s, DateTime e)
         {
@@ -261,7 +261,7 @@ namespace IproNvrTool
         public override string BrandName { get { return "Dahua"; } }
         public override string DefaultCamTemplate { get { return BrandCgi.DefaultCamTemplate(BrandCgi.Dahua); } }
 
-        protected override string RtspPath(int ch, bool sub) { return "/cam/realmonitor?channel=" + ch + "&subtype=" + (sub ? 1 : 0); }
+        protected override string RtspPath(int ch, bool sub) { return BrandCgi.ViaRtspPath(BrandId, ch, sub); }
 
         protected override string PlaybackPath(int ch, DateTime s, DateTime e)
         {

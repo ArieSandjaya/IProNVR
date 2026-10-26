@@ -354,7 +354,7 @@ function edit(r,row){
     api('POST','/api/'+r,b).then(function(rs){close();msg={t:'Tersimpan.'};return reload().then(function(){if(r=='nvrs'&&!row&&rs&&rs.id)return fetchCams(rs.id)})}).catch(function(e){alert(e.message)})}}
 function fetchCams(id){
   say('Menghubungi NVR (tes login dan baca daftar kamera)...');
-  return api('POST','/api/nvr-cameras',{nvr_id:id}).then(function(r){msg={t:'Login NVR berhasil. '+r.registered+' kamera terdaftar di NVR ('+(r.registered-r.error_conn)+' normal, '+r.error_conn+' error koneksi) dari '+r.total_slots+' kanal; '+r.added+' kamera baru ditambahkan'+(r.unregistered?'; '+r.unregistered+' kamera sudah tidak terdaftar di NVR (ditandai)':'')+'. Isi IP kamera lalu jalankan Deteksi RTSP.'};return reload()}).catch(function(e){say(e.message,true)})}
+  return api('POST','/api/nvr-cameras',{nvr_id:id}).then(function(r){msg={t:'Login NVR berhasil. '+r.registered+' kamera terdaftar di NVR ('+(r.registered-r.error_conn)+' normal, '+r.error_conn+' error koneksi) dari '+r.total_slots+' kanal; '+r.added+' kamera baru ditambahkan'+(r.unregistered?'; '+r.unregistered+' kamera sudah tidak terdaftar di NVR (ditandai)':'')+'. i-PRO: isi IP kamera lalu jalankan Deteksi RTSP. Hikvision/Dahua: langsung jalankan Deteksi RTSP (tanpa IP kamera).'};return reload()}).catch(function(e){say(e.message,true)})}
 function genChannels(){
   var nv=+flt.nvr;if(!nv){alert('Pilih NVR dulu pada filter.');return}
   var n=prompt('Buat kamera kanal 1 sampai berapa untuk NVR "'+nvrName(nv)+'"? (kanal yang sudah ada tidak berubah)',String(((data.nvrs||[]).filter(function(x){return x.id==nv})[0]||{}).max_channels||16));

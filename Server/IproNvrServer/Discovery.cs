@@ -79,15 +79,18 @@ namespace IproNvrServer
                 foreach (object x in (System.Collections.IEnumerable)o) want.Add(Convert.ToInt64(Convert.ToDouble(x, System.Globalization.CultureInfo.InvariantCulture)));
             bool overwrite = B(body, "overwrite");
 
+            string brand = BrandCgi.Norm(Convert.ToString(nvr["brand"]));
+            bool viaDevice = brand != BrandCgi.Ipro;
             var todo = new List<Row>();
             foreach (Row c in store.List(Schema.ByRoute("cameras")))
             {
                 if (Convert.ToInt64(c["nvr_id"]) != nvrId) continue;
                 if (want.Count > 0 && !want.Contains(Convert.ToInt64(c["id"]))) continue;
-                if (string.IsNullOrWhiteSpace(Convert.ToString(c["ip_address"]))) continue;
+                // i-PRO: RTSP langsung ke kamera (butuh IP). Hikvision/Dahua: RTSP lewat NVR/DVR itu sendiri (tanpa IP kamera; mis. kamera analog di XVR)
+                if (viaDevice == false && string.IsNullOrWhiteSpace(Convert.ToString(c["ip_address"]))) continue;
                 todo.Add(c);
             }
-            if (todo.Count == 0) { error = "Tidak ada kamera dengan IP. Isi kolom ip_address dulu."; return null; }
+            if (todo.Count == 0) { error = viaDevice ? "NVR ini belum punya kamera. Jalankan \"Deteksi kamera\" dulu." : "Tidak ada kamera dengan IP. Isi kolom ip_address dulu."; return null; }
 
             DiscoJob job;
             lock (lk)
@@ -104,7 +107,12 @@ namespace IproNvrServer
             string tpl = Convert.ToString(nvr["rtsp_template"]);
             string cu = Convert.ToString(nvr["cam_user"]), cp = Convert.ToString(nvr["cam_pass"]);
             Log.Write("Deteksi RTSP dimulai oleh " + by + ": NVR " + job.Nvr + ", " + todo.Count + " kamera");
-            Task.Run(delegate { Run(job, exe, todo, tpl, cu, cp, overwrite); });
+            if (viaDevice)
+            {
+                string dh = Convert.ToString(nvr["host"]), du = Convert.ToString(nvr["username"]), dp = Convert.ToString(nvr["password"]);
+                Task.Run(delegate { RunVia(job, exe, todo, brand, dh, du, dp); });
+            }
+            else Task.Run(delegate { Run(job, exe, todo, tpl, cu, cp, overwrite); });
             return job.Id;
         }
 
@@ -154,6 +162,54 @@ namespace IproNvrServer
             catch (OperationCanceledException) { lock (lk) job.State = "cancelled"; }
             catch (Exception ex) { Add(job, "ERROR: " + ex.Message); lock (lk) job.State = "error"; }
             Log.Write("Deteksi RTSP selesai (NVR " + job.Nvr + "): " + job.Found + "/" + job.Total + " ditemukan");
+        }
+
+        /// <summary>Hikvision/Dahua: uji stream utama + substream lewat perangkat (rtsp://user:pass@host:554/...), catat codec/resolusi/fps.
+        /// URL tidak disimpan per kamera: client menyusunnya dari alamat NVR + nomor kanal.</summary>
+        void RunVia(DiscoJob job, string exe, List<Row> todo, string brand, string host, string user, string pass)
+        {
+            try
+            {
+                var opt = new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = job.Cts.Token };
+                Parallel.ForEach(todo, opt, delegate(Row cam)
+                {
+                    long id = Convert.ToInt64(cam["id"]);
+                    int ch = Convert.ToInt32(cam["channel"]);
+                    string label = "CH" + ch + " " + Convert.ToString(cam["name"]);
+                    string line;
+                    try
+                    {
+                        string b = "rtsp://" + Uri.EscapeDataString(user) + ":" + Uri.EscapeDataString(pass) + "@" + host + ":554";
+                        string e1, e2;
+                        StreamInfo mi = StreamProbe.Probe(exe, b + BrandCgi.ViaRtspPath(brand, ch, false), out e1, 10000);
+                        StreamInfo si = StreamProbe.Probe(exe, b + BrandCgi.ViaRtspPath(brand, ch, true), out e2, 10000);
+                        var upd = new Dictionary<string, object>();
+                        upd["id"] = id;
+                        if (mi != null || si != null)
+                        {
+                            upd["scan_detail"] = (mi != null ? "Main " + mi : "Main -") + " | " + (si != null ? "Sub " + si : "Sub -") + "  [via " + BrandCgi.Name(brand) + "]";
+                            StreamInfo pick = si ?? mi;
+                            upd["codec"] = pick.Codec; upd["width"] = pick.Width; upd["height"] = pick.Height;
+                            lock (lk) job.Found++;
+                            line = "OK   " + label + ": " + upd["scan_detail"];
+                        }
+                        else
+                        {
+                            upd["scan_detail"] = "RTSP tidak terbaca: " + (e1 ?? e2);
+                            line = "GAGAL " + label + ": " + upd["scan_detail"];
+                        }
+                        store.Upsert(Schema.ByRoute("cameras"), upd);
+                    }
+                    catch (OperationCanceledException) { line = "BATAL " + label; }
+                    catch (Exception ex) { line = "ERROR " + label + ": " + ex.Message; }
+                    Add(job, line);
+                    lock (lk) job.Done++;
+                });
+                lock (lk) job.State = job.Cts.IsCancellationRequested ? "cancelled" : "done";
+            }
+            catch (OperationCanceledException) { lock (lk) job.State = "cancelled"; }
+            catch (Exception ex) { Add(job, "ERROR: " + ex.Message); lock (lk) job.State = "error"; }
+            Log.Write("Deteksi RTSP via perangkat selesai (NVR " + job.Nvr + "): " + job.Found + "/" + job.Total + " terbaca");
         }
 
         public void Cancel(string id)

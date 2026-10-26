@@ -766,6 +766,59 @@ namespace IproNvrTool
             }));
         }
 
+        /// <summary>Hikvision/Dahua: uji RTSP utama + sub lewat NVR/DVR itu sendiri (tanpa IP kamera); hasil dicatat di detail kamera.</summary>
+        void ProbeViaDevice(NvrRecord nvr, List<CameraRecord> cams, string exe)
+        {
+            if (cams.Count == 0) { MessageBox.Show("NVR ini belum punya kamera. Tes login / ambil daftar kamera dulu."); return; }
+            if (MessageBox.Show("Menguji stream utama + sub " + cams.Count + " kamera lewat " + BrandCgi.Name(nvr.Brand) + " (RTSP). Bisa beberapa menit. Lanjutkan?",
+                "Deteksi RTSP", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            cts = new System.Threading.CancellationTokenSource();
+            System.Threading.CancellationToken ct = cts.Token;
+            SetBusy(true, "Uji RTSP dimulai...");
+            btnCancel.Enabled = true;
+            long nvrId = nvr.Id;
+            string name = nvr.Name, brand = nvr.Brand;
+            string b = "rtsp://" + Uri.EscapeDataString(nvr.Username) + ":" + Uri.EscapeDataString(nvr.Password) + "@" + nvr.Host + ":554";
+            Task.Run(() =>
+            {
+                var rows = new List<Db.RtspRow>();
+                int ok = 0, done = 0;
+                var gate = new object();
+                try
+                {
+                    var opt = new ParallelOptions();
+                    opt.MaxDegreeOfParallelism = 3;
+                    opt.CancellationToken = ct;
+                    Parallel.ForEach(cams, opt, delegate(CameraRecord k)
+                    {
+                        string e1, e2;
+                        StreamInfo mi = StreamProbe.Probe(exe, b + BrandCgi.ViaRtspPath(brand, k.Channel, false), out e1, 10000);
+                        StreamInfo si = StreamProbe.Probe(exe, b + BrandCgi.ViaRtspPath(brand, k.Channel, true), out e2, 10000);
+                        var row = new Db.RtspRow();
+                        row.Id = k.Id;
+                        row.Detail = (mi != null || si != null)
+                            ? (mi != null ? "Main " + mi : "Main -") + " | " + (si != null ? "Sub " + si : "Sub -") + "  [via " + BrandCgi.Name(brand) + "]"
+                            : "RTSP tidak terbaca: " + (e1 ?? e2);
+                        lock (gate) { rows.Add(row); done++; if (mi != null || si != null) ok++; }
+                        Progress(name, done, cams.Count, "CAM " + k.Channel + ": " + row.Detail);
+                    });
+                }
+                catch (OperationCanceledException) { }
+                string err = null;
+                try { if (rows.Count > 0) Db.SetRtspResults(rows); }
+                catch (Exception ex) { err = "database: " + ex.Message; }
+                return name + ": stream terbaca untuk " + ok + " dari " + done + " kamera" + (ct.IsCancellationRequested ? " (dibatalkan)" : "") + (err != null ? "; " + err : "");
+            }).ContinueWith(task => Ui.Post(this, delegate
+            {
+                SetBusy(false, "");
+                RefreshNvrGrid(nvrId);
+                RefreshCameraGrid();
+                string text = task.IsFaulted ? "Uji gagal: " + task.Exception.GetBaseException().Message : task.Result;
+                lblProg.Text = text;
+                Log.Write("Deteksi RTSP via perangkat: " + text);
+            }));
+        }
+
         /// <summary>Deteksi otomatis URL RTSP tiap kamera (ONVIF -> templat NVR -> pola merk), diuji dengan ffmpeg; hasil disimpan per kamera.</summary>
         void ProbeSubstreams()
         {
@@ -777,6 +830,11 @@ namespace IproNvrTool
             List<CameraRecord> cams;
             try { cams = Db.ListCameras(nvr.Id); }
             catch (Exception ex) { MessageBox.Show("Gagal membaca daftar kamera: " + ex.Message); return; }
+            if (BrandCgi.Norm(nvr.Brand) != BrandCgi.Ipro)
+            {
+                ProbeViaDevice(nvr, cams, exe);
+                return;
+            }
             var todo = new List<CameraRecord>();
             foreach (CameraRecord k in cams) if (!string.IsNullOrWhiteSpace(k.IpAddress)) todo.Add(k);
             if (todo.Count == 0)

@@ -31,6 +31,13 @@ namespace IproNvrTool
             return "rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1";
         }
 
+        /// <summary>Path RTSP lewat perangkat (NVR/DVR) itu sendiri: tanpa IP kamera. sub = substream.</summary>
+        public static string ViaRtspPath(string brand, int ch, bool sub)
+        {
+            if (Norm(brand) == Hikvision) return "/Streaming/Channels/" + (ch * 100 + (sub ? 2 : 1));
+            return "/cam/realmonitor?channel=" + ch + "&subtype=" + (sub ? 1 : 0);
+        }
+
         /// <summary>Petunjuk bila port yang diisi kemungkinan bukan port HTTP (mis. 37777 = port SDK Dahua di Smart PSS). Kosong bila tidak relevan.</summary>
         public static string PortHint(string brand, int port)
         {
