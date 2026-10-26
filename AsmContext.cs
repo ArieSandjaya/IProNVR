@@ -147,7 +147,10 @@ namespace IproNvrTool
         public static List<CameraRecord> Registered(long nvrId)
         {
             var l = new List<CameraRecord>();
-            foreach (CameraRecord c in Cameras(nvrId)) if (c.RegStatus != 0) l.Add(c);
+            // status hidup dari monitor (poll NVR) lebih baru daripada nilai di database
+            foreach (CameraRecord c in Cameras(nvrId)) if (Status(nvrId, c.Channel) != 0) l.Add(c);
+            // belum ada status sama sekali (mis. NVR baru / merek lain yang belum terbaca): tampilkan semua kamera NVR itu
+            if (l.Count == 0) l.AddRange(Cameras(nvrId));
             return l;
         }
     }

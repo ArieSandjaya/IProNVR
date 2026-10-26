@@ -299,16 +299,16 @@ namespace IproNvrTool
                 {
                     long nid = Lng(k, "nvr_id");
                     if (!nvrIds.Contains(nid)) continue;
-                    Exec(c, tx, @"INSERT INTO camera (nvr_id, channel, name, ip_address, location, note, rtsp_url, rtsp_main_url, codec, width, height, scan_detail, cam_user, cam_pass_enc)
-                                  VALUES (@n, @ch, @name, @ip, @loc, @note, @url, @murl, @codec, @w, @h, @det, @cu, @cp)
+                    Exec(c, tx, @"INSERT INTO camera (nvr_id, channel, name, ip_address, location, note, rtsp_url, rtsp_main_url, reg_status, codec, width, height, scan_detail, cam_user, cam_pass_enc)
+                                  VALUES (@n, @ch, @name, @ip, @loc, @note, @url, @murl, @rs, @codec, @w, @h, @det, @cu, @cp)
                                   ON CONFLICT (nvr_id, channel) DO UPDATE SET name = excluded.name, ip_address = excluded.ip_address, location = excluded.location,
-                                  note = excluded.note, rtsp_url = excluded.rtsp_url, rtsp_main_url = excluded.rtsp_main_url, scan_detail = excluded.scan_detail,
+                                  note = excluded.note, rtsp_url = excluded.rtsp_url, rtsp_main_url = excluded.rtsp_main_url, reg_status = excluded.reg_status, scan_detail = excluded.scan_detail,
                                   cam_user = excluded.cam_user, cam_pass_enc = excluded.cam_pass_enc,
                                   codec = CASE WHEN excluded.codec <> '' THEN excluded.codec ELSE camera.codec END,
                                   width = CASE WHEN excluded.width > 0 THEN excluded.width ELSE camera.width END,
                                   height = CASE WHEN excluded.height > 0 THEN excluded.height ELSE camera.height END",
                         "@n", nid, "@ch", (int)Lng(k, "channel"), "@name", Str(k, "name"), "@ip", Str(k, "ip_address"), "@loc", Str(k, "location"),
-                        "@note", Str(k, "note"), "@url", Str(k, "rtsp_url"), "@murl", Str(k, "rtsp_main_url"), "@codec", Str(k, "codec"),
+                        "@note", Str(k, "note"), "@url", Str(k, "rtsp_url"), "@murl", Str(k, "rtsp_main_url"), "@rs", (int)Lng(k, "reg_status"), "@codec", Str(k, "codec"),
                         "@w", Lng(k, "width") > 0 ? (object)(int)Lng(k, "width") : null, "@h", Lng(k, "height") > 0 ? (object)(int)Lng(k, "height") : null,
                         "@det", Str(k, "scan_detail"), "@cu", Str(k, "cam_user"), "@cp", Secret.Protect(Str(k, "cam_pass")));
                 }
