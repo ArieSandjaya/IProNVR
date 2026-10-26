@@ -110,7 +110,8 @@ namespace IproNvrServer
             if (viaDevice)
             {
                 string dh = Convert.ToString(nvr["host"]), du = Convert.ToString(nvr["username"]), dp = Convert.ToString(nvr["password"]);
-                Task.Run(delegate { RunVia(job, exe, todo, brand, dh, du, dp); });
+                string dtpl = Convert.ToString(nvr["rtsp_template"]), dcu = Convert.ToString(nvr["cam_user"]), dcp = Convert.ToString(nvr["cam_pass"]);
+                Task.Run(delegate { RunVia(job, exe, todo, brand, dh, du, dp, dtpl, dcu, dcp, overwrite); });
             }
             else Task.Run(delegate { Run(job, exe, todo, tpl, cu, cp, overwrite); });
             return job.Id;
@@ -166,7 +167,7 @@ namespace IproNvrServer
 
         /// <summary>Hikvision/Dahua: uji stream utama + substream lewat perangkat (rtsp://user:pass@host:554/...), catat codec/resolusi/fps.
         /// URL tidak disimpan per kamera: client menyusunnya dari alamat NVR + nomor kanal.</summary>
-        void RunVia(DiscoJob job, string exe, List<Row> todo, string brand, string host, string user, string pass)
+        void RunVia(DiscoJob job, string exe, List<Row> todo, string brand, string host, string user, string pass, string tpl, string cu, string cp, bool overwrite)
         {
             try
             {
@@ -179,6 +180,28 @@ namespace IproNvrServer
                     string line;
                     try
                     {
+                        // kamera yang punya IP (kamera IP di NVR): coba langsung ke kamera dulu (ONVIF/templat/pola merk), seperti i-PRO
+                        string cip = Convert.ToString(cam["ip_address"]);
+                        if (!string.IsNullOrWhiteSpace(cip))
+                        {
+                            string ku = Convert.ToString(cam["cam_user"]), kp = Convert.ToString(cam["cam_pass"]);
+                            bool own = !string.IsNullOrEmpty(ku);
+                            DiscoveryResult dr = RtspDiscovery.Discover(exe, cip, own ? ku : cu, own ? kp : cp, tpl, job.Cts.Token);
+                            if (dr.SubTemplate != null)
+                            {
+                                var du2 = new Dictionary<string, object>();
+                                du2["id"] = id;
+                                du2["scan_detail"] = dr.Summary();
+                                bool had = !string.IsNullOrWhiteSpace(Convert.ToString(cam["rtsp_url"]));
+                                if (overwrite || !had) { du2["rtsp_url"] = dr.SubTemplate; du2["rtsp_main_url"] = dr.MainTemplate ?? ""; }
+                                du2["codec"] = dr.Sub.Codec; du2["width"] = dr.Sub.Width; du2["height"] = dr.Sub.Height;
+                                store.Upsert(Schema.ByRoute("cameras"), du2);
+                                lock (lk) job.Found++;
+                                Add(job, "OK   " + label + " [langsung ke kamera]: " + dr.Summary());
+                                lock (lk) job.Done++;
+                                return;
+                            }
+                        }
                         string b = "rtsp://" + Uri.EscapeDataString(user) + ":" + Uri.EscapeDataString(pass) + "@" + host + ":554";
                         string e1, e2;
                         StreamInfo mi = StreamProbe.Probe(exe, b + BrandCgi.ViaRtspPath(brand, ch, false), out e1, 10000);

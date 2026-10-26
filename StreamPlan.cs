@@ -66,7 +66,23 @@ namespace IproNvrTool
             INvrDriver drv = NvrDrivers.For(nvr);
             if (drv.BrandId != "ipro")
             {
-                // merek lain: RTSP lewat NVR itu sendiri (satu login, tidak perlu IP/URL tiap kamera)
+                // kamera IP yang sudah terdeteksi langsung (URL tersimpan): pakai itu. Selain itu (kamera analog di XVR, dll): RTSP lewat NVR itu sendiri
+                if (cam != null && !string.IsNullOrWhiteSpace(cam.RtspUrl))
+                {
+                    string su = CameraRtspUrl(nvr, cam, !sub);
+                    if (su.Length > 0)
+                    {
+                        var ds = new StreamSource();
+                        ds.Rtsp = true; ds.Url = su; ds.Label = sub ? "RTSP sub" : "RTSP utama";
+                        list.Add(ds);
+                        var fb2 = new StreamSource();
+                        fb2.Rtsp = true; fb2.Label = drv.BrandName + (sub ? " sub" : " utama");
+                        NvrStreamSource n2 = drv.LiveSource(nvr, cam.Channel, sub);
+                        fb2.Url = n2.RtspUrl;
+                        if (fb2.Url.Length > 0) list.Add(fb2);
+                        return list;
+                    }
+                }
                 NvrStreamSource ns = drv.LiveSource(nvr, cam != null ? cam.Channel : 1, sub);
                 if (ns.Kind == NvrStreamKind.Rtsp && ns.RtspUrl.Length > 0)
                 {

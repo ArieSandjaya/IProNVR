@@ -778,6 +778,7 @@ namespace IproNvrTool
             btnCancel.Enabled = true;
             long nvrId = nvr.Id;
             string name = nvr.Name, brand = nvr.Brand;
+            string tplN = nvr.RtspTemplate, cuN = nvr.CamUser, cpN = nvr.CamPassword;
             string b = "rtsp://" + Uri.EscapeDataString(nvr.Username) + ":" + Uri.EscapeDataString(nvr.Password) + "@" + nvr.Host + ":554";
             Task.Run(() =>
             {
@@ -791,6 +792,21 @@ namespace IproNvrTool
                     opt.CancellationToken = ct;
                     Parallel.ForEach(cams, opt, delegate(CameraRecord k)
                     {
+                        if (!string.IsNullOrWhiteSpace(k.IpAddress))
+                        {
+                            string ku = string.IsNullOrEmpty(k.CamUser) ? cuN : k.CamUser, kp = string.IsNullOrEmpty(k.CamUser) ? cpN : k.CamPassword;
+                            DiscoveryResult dr;
+                            try { dr = RtspDiscovery.Discover(exe, k.IpAddress, ku, kp, tplN, ct); } catch (OperationCanceledException) { throw; } catch (Exception) { dr = new DiscoveryResult(); }
+                            if (dr.SubTemplate != null)
+                            {
+                                var r2 = new Db.RtspRow();
+                                r2.Id = k.Id; r2.Detail = dr.Summary() + "  [langsung ke kamera]";
+                                r2.RtspUrl = dr.SubTemplate; r2.RtspMainUrl = dr.MainTemplate ?? "";
+                                lock (gate) { rows.Add(r2); done++; ok++; }
+                                Progress(name, done, cams.Count, "CAM " + k.Channel + ": " + r2.Detail);
+                                return;
+                            }
+                        }
                         string e1, e2;
                         StreamInfo mi = StreamProbe.Probe(exe, b + BrandCgi.ViaRtspPath(brand, k.Channel, false), out e1, 10000);
                         StreamInfo si = StreamProbe.Probe(exe, b + BrandCgi.ViaRtspPath(brand, k.Channel, true), out e2, 10000);
