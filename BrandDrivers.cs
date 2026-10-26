@@ -17,7 +17,7 @@ namespace IproNvrTool
         public abstract string BrandId { get; }
         public abstract string BrandName { get; }
         public abstract string DefaultCamTemplate { get; }
-        public virtual NvrCaps Capabilities { get { return NvrCaps.Live | NvrCaps.Download | NvrCaps.Hdd | NvrCaps.Snapshot; } }
+        public virtual NvrCaps Capabilities { get { return NvrCaps.Live | NvrCaps.Playback | NvrCaps.Download | NvrCaps.Hdd | NvrCaps.Snapshot; } }
 
         public abstract RegistrationResult Test(NvrEndpoint ep);
         public abstract CameraListResult ListCameras(NvrEndpoint ep);
@@ -49,6 +49,41 @@ namespace IproNvrTool
             s.Kind = NvrStreamKind.Rtsp;
             s.RtspUrl = RtspBase(nvr, RtspPort) + PlaybackPath(channel, startUtc, endUtc);
             return s;
+        }
+
+        /// <summary>Cadangan download: ffmpeg menyalin stream RTSP playback ke .mp4 (berjalan real-time: 10 menit rekaman = sekitar 10 menit). Tanpa CGI pencarian.</summary>
+        protected void RtspDownload(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string folder, DownloadJob job, Action<string> status)
+        {
+            string ffmpeg = FfmpegPipe.FindExe();
+            if (ffmpeg == null) { job.Result = "ffmpeg.exe tidak ditemukan (dibutuhkan untuk download lewat RTSP)."; return; }
+            DateTime s = startLocal.ToUniversalTime(), e = endLocal.ToUniversalTime();
+            int total = (int)Math.Max(1, (e - s).TotalSeconds);
+            string url = PlaybackSource(nvr, channel, s, e).RtspUrl;
+            string file = Path.Combine(folder, Safe(nvr.Name + "_CH" + channel + "_" + startLocal.ToString("yyyyMMdd_HHmmss")) + ".mp4");
+            var psi = new ProcessStartInfo(ffmpeg, "-y -hide_banner -loglevel error -rtsp_transport tcp -i \"" + url.Replace("\"", "%22") + "\" -t " + total + " -c:v copy -an \"" + file + "\"");
+            psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardError = true;
+            var err = new StringBuilder();
+            using (Process p = Process.Start(psi))
+            {
+                p.ErrorDataReceived += delegate(object o, DataReceivedEventArgs a) { if (a.Data != null && err.Length < 1500) err.AppendLine(a.Data); };
+                p.BeginErrorReadLine();
+                DateTime t0 = DateTime.UtcNow;
+                while (!p.WaitForExit(1000))
+                {
+                    double el = (DateTime.UtcNow - t0).TotalSeconds;
+                    if (job.Cancel || el > total + 180) { try { p.Kill(); } catch { } break; }
+                    long len = 0; try { len = new FileInfo(file).Length; } catch { }
+                    job.Bytes = len;
+                    if (status != null) status("Downloading via RTSP... " + (int)Math.Min(100, el * 100 / total) + "%");
+                }
+            }
+            long size = 0; try { size = File.Exists(file) ? new FileInfo(file).Length : 0; } catch { }
+            if (size > 1024) { job.Files++; job.Bytes = size; }
+            else
+            {
+                try { if (File.Exists(file)) File.Delete(file); } catch { }
+                if (!job.Cancel) { job.NoRecording = true; job.Result = "Tidak ada rekaman / playback RTSP ditolak. " + err.ToString().Trim(); }
+            }
         }
 
         // ---------- helper HTTP ----------
@@ -221,8 +256,15 @@ namespace IproNvrTool
             try
             {
                 if (status != null) status("Searching recordings...");
-                List<Seg> segs = Search(ep, channel, startLocal.ToUniversalTime(), endLocal.ToUniversalTime());
-                if (segs.Count == 0) { job.NoRecording = true; job.Result = "No recording in this range."; return; }
+                List<Seg> segs = null;
+                try { segs = Search(ep, channel, startLocal.ToUniversalTime(), endLocal.ToUniversalTime()); }
+                catch (Exception ex0) { Log.Write("Hikvision search gagal, pakai RTSP: " + ex0.Message); }
+                if (segs == null || segs.Count == 0)
+                {
+                    if (status != null) status("Mencoba download lewat RTSP...");
+                    RtspDownload(nvr, channel, startLocal, endLocal, folder, job, status);
+                    return;
+                }
                 int i = 0;
                 foreach (Seg s in segs)
                 {
@@ -337,15 +379,20 @@ namespace IproNvrTool
             try
             {
                 if (status != null) status("Searching recordings...");
-                string r = Get(ep, "/cgi-bin/mediaFileFind.cgi?action=factory.create", 15000);
-                Match om = Regex.Match(r, @"result\s*=\s*(\d+)");
-                if (!om.Success) throw new Exception("mediaFileFind.create gagal: " + r.Trim());
-                obj = om.Groups[1].Value;
-                Get(ep, "/cgi-bin/mediaFileFind.cgi?action=findFile&object=" + obj + "&condition.Channel=" + channel
-                    + "&condition.StartTime=" + Uri.EscapeDataString(Ts(startLocal)) + "&condition.EndTime=" + Uri.EscapeDataString(Ts(endLocal))
-                    + "&condition.Types[0]=dav", 30000);
                 var files = new List<KeyValuePair<string, string>>();   // path, start
-                for (int page = 0; page < 200; page++)
+                string searchErr = null;
+                try
+                {
+                    string r = Get(ep, "/cgi-bin/mediaFileFind.cgi?action=factory.create", 15000);
+                    Match om = Regex.Match(r, @"result\s*=\s*(\d+)");
+                    if (!om.Success) throw new Exception("mediaFileFind.create gagal: " + r.Trim());
+                    obj = om.Groups[1].Value;
+                    string fr = Get(ep, "/cgi-bin/mediaFileFind.cgi?action=findFile&object=" + obj + "&condition.Channel=" + channel
+                        + "&condition.StartTime=" + Uri.EscapeDataString(Ts(startLocal)) + "&condition.EndTime=" + Uri.EscapeDataString(Ts(endLocal))
+                        + "&condition.Types[0]=dav", 30000);
+                    if (fr.IndexOf("Error", StringComparison.OrdinalIgnoreCase) >= 0 && fr.IndexOf("OK", StringComparison.OrdinalIgnoreCase) < 0)
+                        throw new Exception("findFile: " + fr.Trim());
+                    for (int page = 0; page < 200; page++)
                 {
                     string t = Get(ep, "/cgi-bin/mediaFileFind.cgi?action=findNextFile&object=" + obj + "&count=100", 30000);
                     Match fm = Regex.Match(t, @"found\s*=\s*(\d+)");
@@ -357,8 +404,16 @@ namespace IproNvrTool
                         Match st = Regex.Match(t, @"items\[" + i + @"\]\.StartTime\s*=\s*([^\r\n]+)");
                         if (p.Success) files.Add(new KeyValuePair<string, string>(p.Groups[1].Value.Trim(), st.Success ? st.Groups[1].Value.Trim() : ""));
                     }
+                    }
                 }
-                if (files.Count == 0) { job.NoRecording = true; job.Result = "No recording in this range."; return; }
+                catch (Exception ex0) { searchErr = ex0.Message; Log.Write("Dahua search gagal, pakai RTSP: " + ex0.Message); }
+                if (files.Count == 0)
+                {
+                    if (status != null) status("Mencoba download lewat RTSP...");
+                    RtspDownload(nvr, channel, startLocal, endLocal, folder, job, status);
+                    if (job.Files == 0 && searchErr != null && job.Result.Length > 0) job.Result += " (pencarian: " + searchErr + ")";
+                    return;
+                }
                 string ffmpeg = FfmpegPipe.FindExe();
                 bool wantMp4 = kind != null && kind.StartsWith("MP4", StringComparison.OrdinalIgnoreCase) && ffmpeg != null;
                 int n = 0;

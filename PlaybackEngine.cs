@@ -33,13 +33,13 @@ namespace IproNvrTool
         static readonly double[] Speeds = { 0.25, 0.5, 1, 2, 4, 8 };
         volatile int speedIdx = 2;
         /// <summary>Kecepatan putar (0.25x - 8x) pada mode PLAY / putar mundur. Diatur di sisi aplikasi: gambar tiap GOP ditebar menurut durasi rekamannya / kecepatan.</summary>
-        public double Speed { get { return Speeds[speedIdx]; } }
+        public virtual double Speed { get { return Speeds[speedIdx]; } }
         public void SpeedUp() { if (speedIdx < Speeds.Length - 1) speedIdx++; }
         public void SpeedDown() { if (speedIdx > 0) speedIdx--; }
         public void SpeedReset() { speedIdx = 2; }
         DateTime? _shownUtc;
         /// <summary>Waktu rekaman pada gambar yang sedang tampil (CurUtc = posisi data yang sudah diambil dari NVR, bisa mendahului beberapa detik).</summary>
-        public DateTime? ShownUtc { get { lock (curLock) return _shownUtc ?? _curUtc; } }
+        public virtual DateTime? ShownUtc { get { lock (curLock) return _shownUtc ?? _curUtc; } }
         void SetShown(DateTime? t) { lock (curLock) _shownUtc = t; }
         DateTime? reqUtc;
 
@@ -49,7 +49,21 @@ namespace IproNvrTool
         /// <summary>Pesan per kanal (menunggu data, gagal, tidak ada rekaman, dsb.) agar area gambar tidak hanya hitam tanpa penjelasan.</summary>
         public event Action<int, string> ChannelStatus;
 
-        void ChStatus(int ch, string msg)
+        protected void RaiseFrame(int ch, byte[] jpg)
+        {
+            Action<int, byte[]> h = Frame;
+            if (h != null) h(ch, jpg);
+        }
+
+        /// <summary>Engine playback sesuai merek: i-PRO lewat sesi NVR, merek lain lewat RTSP playback.</summary>
+        public static PlaybackEngine Create(NvrRecord nvr)
+        {
+            INvrDriver d = NvrDrivers.For(nvr);
+            if (d.BrandId == "ipro") return new PlaybackEngine(nvr);
+            return new RtspPlaybackEngine(nvr, d);
+        }
+
+        protected void ChStatus(int ch, string msg)
         {
             Action<int, string> h = ChannelStatus;
             if (h != null) { try { h(ch, msg); } catch { } }
@@ -73,18 +87,18 @@ namespace IproNvrTool
             IntervalMs = Math.Max(300, AppSettings.Current.PlaybackFetchMs);
         }
 
-        public string Mode { get { return mode; } }
-        public DateTime? CurUtc { get { return curUtc; } }
+        public virtual string Mode { get { return mode; } }
+        public virtual DateTime? CurUtc { get { return curUtc; } }
         public int FfStep { get { return ffStep; } }
-        public bool Active { get { return mode != "STOP"; } }
+        public virtual bool Active { get { return mode != "STOP"; } }
 
-        void Status(string s)
+        protected void Status(string s)
         {
             Action<string> h = StatusChanged;
             if (h != null) h(s);
         }
 
-        public void SetChannels(IEnumerable<int> chans)
+        public virtual void SetChannels(IEnumerable<int> chans)
         {
             lock (channels)
             {
@@ -184,7 +198,7 @@ namespace IproNvrTool
 
         // ---------- perintah ----------
 
-        public void GotoUtc(DateTime utc)
+        public virtual void GotoUtc(DateTime utc)
         {
             mode = "PLAY";
             ffStep = 1;
@@ -209,7 +223,7 @@ namespace IproNvrTool
             StartTimer();
         }
 
-        public void Play()
+        public virtual void Play()
         {
             if (!curUtc.HasValue) return;
             mode = "PLAY";
@@ -238,11 +252,11 @@ namespace IproNvrTool
             StartTimer();
         }
 
-        public void Reverse() { ffStep = 1; Simple("BPLAY", "BPLAY", false); }
-        public void FastForward() { ffStep = Math.Min(7, ffStep + 1); Simple("FF", "FF", true); }
-        public void FastReverse() { ffStep = Math.Min(7, ffStep + 1); Simple("REW", "REW", true); }
+        public virtual void Reverse() { ffStep = 1; Simple("BPLAY", "BPLAY", false); }
+        public virtual void FastForward() { ffStep = Math.Min(7, ffStep + 1); Simple("FF", "FF", true); }
+        public virtual void FastReverse() { ffStep = Math.Min(7, ffStep + 1); Simple("REW", "REW", true); }
 
-        public void Pause()
+        public virtual void Pause()
         {
             DateTime? c0 = curUtc;
             if (!c0.HasValue) return;
@@ -255,7 +269,7 @@ namespace IproNvrTool
             });
         }
 
-        public void Step(bool next)
+        public virtual void Step(bool next)
         {
             DateTime? c0 = curUtc;
             if (!c0.HasValue) return;
@@ -271,14 +285,14 @@ namespace IproNvrTool
         }
 
         /// <summary>Lompat maju/mundur sekian detik dari posisi sekarang.</summary>
-        public void Skip(int seconds)
+        public virtual void Skip(int seconds)
         {
             DateTime? c0 = curUtc;
             if (!c0.HasValue) return;
             GotoUtc(c0.Value.AddSeconds(seconds));
         }
 
-        public void Stop()
+        public virtual void Stop()
         {
             mode = "STOP";
             ffStep = 1;
@@ -539,7 +553,7 @@ namespace IproNvrTool
             finally { lock (co.Q) { co.Running = false; co.Playing = 0; } }
         }
 
-        public void Dispose()
+        public virtual void Dispose()
         {
             if (disposed) return;
             disposed = true;

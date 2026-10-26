@@ -840,7 +840,7 @@ namespace IproNvrTool
                         Log.Write("Playback belum didukung untuk merek " + NvrDrivers.For(nvr).BrandName + " (" + nvr.Name + ")");
                         continue;
                     }
-                    e = new PlaybackEngine(nvr);
+                    e = PlaybackEngine.Create(nvr);
                     long nid = kv.Key;
                     e.Frame += delegate(int ch, byte[] jpg) { OnPlaybackFrame(nid, ch, jpg); };
                     e.ChannelStatus += delegate(int ch, string msg)
