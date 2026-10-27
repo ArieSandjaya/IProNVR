@@ -253,7 +253,7 @@ function camTitle(nid,ch){var c=(data.cameras||[]).filter(function(x){return x.n
 function editGroup(row){
   var isNew=!row,v=row||{},lay=layById(v.layout||'4'),slots=[];
   (v.slots||'').split(',').forEach(function(s){var p=s.split(':');slots.push(p.length==2&&+p[0]>0&&+p[1]>0?{n:+p[0],c:+p[1]}:null)});
-  var sel=0,q='';
+  var sel=0,q='',fn='';
   var el=document.getElementById('modal');
   function fit(){while(slots.length<lay[3].length)slots.push(null);slots.length=lay[3].length;if(sel>=slots.length)sel=0}
   function used(n,c){for(var i=0;i<slots.length;i++)if(slots[i]&&slots[i].n==n&&slots[i].c==c)return i+1;return 0}
@@ -265,13 +265,13 @@ function editGroup(row){
     var lh=LAYOUTS.map(function(L){return '<div class="lay'+(L[0]==lay[0]?' on':'')+'" data-l="'+L[0]+'" title="Pola '+L[0]+' ('+L[3].length+' area)"><div class="pv" style="grid-template-columns:repeat('+L[1]+',1fr);grid-template-rows:repeat('+L[2]+',1fr)">'+L[3].map(function(r){return '<i style="grid-column:'+(r[0]+1)+'/span '+r[2]+';grid-row:'+(r[1]+1)+'/span '+r[3]+'"></i>'}).join('')+'</div>'+L[0]+'</div>'}).join('');
     var gv=lay[3].map(function(r,i){var s=slots[i];return '<div class="ga'+(s?' has':'')+(i==sel?' sel':'')+'" data-i="'+i+'" style="grid-column:'+(r[0]+1)+'/span '+r[2]+';grid-row:'+(r[1]+1)+'/span '+r[3]+'">'+(s?'<b>'+esc(camTitle(s.n,s.c))+'</b><span class="x" data-x="'+i+'" title="Kosongkan area">✕</span>':'<b>'+(i+1)+'</b>')+'</div>'}).join('');
     var tree=(data.nvrs||[]).map(function(n){
-      var cams=(data.cameras||[]).filter(function(c){return c.nvr_id==n.id&&(!q||(c.name+' CH'+c.channel+' '+c.location+' '+n.name).toLowerCase().indexOf(q)>=0)});
+      if(fn&&String(n.id)!==fn)return '';var cams=(data.cameras||[]).filter(function(c){return c.nvr_id==n.id&&(!q||(c.name+' CH'+c.channel+' '+c.location+' '+n.name).toLowerCase().indexOf(q)>=0)});
       if(!cams.length)return '';
       return '<div class="nh">'+esc(n.name)+' <small>('+cams.length+')</small></div>'+cams.map(function(c){var u=used(n.id,c.channel);return '<div class="ci'+(u?' used':'')+'" draggable="true" data-n="'+n.id+'" data-c="'+c.channel+'">CH'+c.channel+' '+esc(c.name&&c.name!='CH'+c.channel?c.name:'')+(u?'<em>area '+u+'</em>':(c.reg_status==2?'<em style="color:#dc3545">error</em>':''))+'</div>'}).join('')}).join('')||'<div class="ci">Tidak ada kamera. Tambahkan kamera di menu NVR / Kamera.</div>';
     el.innerHTML='<div class="m wide"><div class="mh"><h3>'+(isNew?'Tambah Group':'Ubah Group')+'</h3><button class="btn sm" id="mx">✕</button></div>'+
      '<div class="ge"><div><label>Nama group</label><input id="gn" value="'+esc(v.name||'')+'"><label style="margin-top:10px">Pemilik</label><select id="go"><option value="">Semua user</option>'+users+'</select><label style="margin-top:10px">Pola layar</label><div class="lays">'+lh+'</div></div>'+
      '<div><label>Tampilan ('+lay[3].length+' area)</label><div class="gv" style="grid-template-columns:repeat('+lay[1]+',1fr);grid-template-rows:repeat('+lay[2]+',1fr)">'+gv+'</div><div class="ghint">Klik area untuk memilih (bingkai emas), lalu klik kamera di daftar kanan, atau seret kamera ke area. Seret antar area untuk menukar.</div></div>'+
-     '<div><label>Kamera</label><input id="gq" placeholder="Cari kamera…" value="'+esc(q)+'"><div class="ctree">'+tree+'</div></div></div>'+
+     '<div><label>Kamera</label><select id="gf" style="margin-bottom:6px"><option value="">Semua NVR</option>'+(data.nvrs||[]).map(function(n){return '<option value="'+n.id+'"'+(String(n.id)===fn?' selected':'')+'>'+esc(n.name)+'</option>'}).join('')+'</select><input id="gq" placeholder="Cari kamera…" value="'+esc(q)+'"><div class="ctree">'+tree+'</div></div></div>'+
      '<div class="mf"><button class="btn" id="gclr">Kosongkan semua</button><span style="flex:1"></span><button class="btn" id="mc">Batal</button><button class="btn p" id="ms">Simpan</button></div></div>';
     el.style.display='flex';
     var keepq=el.querySelector('#gq');
@@ -294,6 +294,7 @@ function editGroup(row){
     [].forEach.call(el.querySelectorAll('.ci[data-n]'),function(d){
       d.ondragstart=function(e){e.dataTransfer.setData('text/plain','c:'+d.dataset.n+':'+d.dataset.c)};
       d.onclick=function(){put(sel,+d.dataset.n,+d.dataset.c);sel=nextEmpty(sel);draw()}});
+    el.querySelector('#gf').onchange=function(){fn=this.value;draw()};
     keepq.oninput=function(){q=this.value.toLowerCase();var pos=this.selectionStart;draw();var nq=el.querySelector('#gq');nq.focus();nq.setSelectionRange(pos,pos)};
     el.querySelector('#ms').onclick=function(){
       var name=(v.name||'').trim();if(!name){alert('Isi nama group.');return}

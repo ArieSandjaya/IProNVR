@@ -18,18 +18,40 @@ namespace IproNvrTool
             StartPosition = FormStartPosition.CenterParent;
             Size = new Size(Asm.S(360), Asm.S(480));
             tv.Dock = DockStyle.Fill;
-            foreach (NvrRecord n in Dir.Nvrs)
+            var cmbNvr = new ComboBox(); cmbNvr.Dock = DockStyle.Top; cmbNvr.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbNvr.Items.Add("Semua NVR");
+            foreach (NvrRecord n0 in Dir.Nvrs) cmbNvr.Items.Add(n0.Name);
+            cmbNvr.SelectedIndex = 0;
+            var txtQ = new TextBox(); txtQ.Dock = DockStyle.Top;
+            Action fill = delegate
             {
-                var nn = new TreeNode(n.Name);
-                foreach (CameraRecord c in Dir.Registered(n.Id))
+                string q = txtQ.Text.Trim();
+                int sel = cmbNvr.SelectedIndex - 1;      // -1 = semua NVR
+                var nvrs = new List<NvrRecord>(Dir.Nvrs);
+                tv.BeginUpdate();
+                tv.Nodes.Clear();
+                for (int k = 0; k < nvrs.Count; k++)
                 {
-                    var cn = new TreeNode(c.Channel + " : " + Dir.CamName(n.Id, c.Channel));
-                    cn.Tag = new CamRef(n.Id, c.Channel);
-                    nn.Nodes.Add(cn);
+                    if (sel >= 0 && k != sel) continue;
+                    NvrRecord n = nvrs[k];
+                    var nn = new TreeNode(n.Name);
+                    foreach (CameraRecord c in Dir.Registered(n.Id))
+                    {
+                        string title = c.Channel + " : " + Dir.CamName(n.Id, c.Channel);
+                        if (q.Length > 0 && title.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        var cn = new TreeNode(title);
+                        cn.Tag = new CamRef(n.Id, c.Channel);
+                        nn.Nodes.Add(cn);
+                    }
+                    if (nn.Nodes.Count == 0 && q.Length > 0) continue;
+                    tv.Nodes.Add(nn);
                 }
-                tv.Nodes.Add(nn);
-            }
-            tv.ExpandAll();
+                tv.ExpandAll();
+                tv.EndUpdate();
+            };
+            cmbNvr.SelectedIndexChanged += delegate { fill(); };
+            txtQ.TextChanged += delegate { fill(); };
+            fill();
             tv.NodeMouseDoubleClick += delegate(object s, TreeNodeMouseClickEventArgs e) { Pick(e.Node); };
             var ok = new Button();
             ok.Text = "OK";
@@ -37,6 +59,8 @@ namespace IproNvrTool
             ok.Height = Asm.S(32);
             ok.Click += delegate { Pick(tv.SelectedNode); };
             Controls.Add(tv);
+            Controls.Add(txtQ);
+            Controls.Add(cmbNvr);
             Controls.Add(ok);
             Theme.ApplyTo(this, true);
         }
