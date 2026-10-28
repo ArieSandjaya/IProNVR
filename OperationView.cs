@@ -181,7 +181,7 @@ namespace IproNvrTool
 
             fp.AddSection("dev", "Device tree", devTree, true);
             fp.AddSection("grp", "Group", grpPanel, true);
-            fp.AddSection("seq", "Sequence", seqPanel, true);
+            // panel Sequence disembunyikan dari side menu (objek tetap ada; sequence diatur di Setup)
             fp.AddSection("qpb", "Quick playback", qpPanel, false, 380);
             fp.AddSection("dl", "Download", dlPanel, false, 330);
             fp.AddSection("alm", "Alarm log", almLog, false);
@@ -195,14 +195,11 @@ namespace IproNvrTool
         {
             bool dev = devTree.Filter(text);
             bool grp = grpPanel.Filter(text);
-            bool sq = seqPanel.Filter(text);
             fp.MarkMatch("dev", text.Length > 0 && dev);
             fp.MarkMatch("grp", text.Length > 0 && grp);
-            fp.MarkMatch("seq", text.Length > 0 && sq);
             if (text.Length == 0) return;
             if (dev) fp.Open("dev");
             else if (grp) fp.Open("grp");
-            else if (sq) fp.Open("seq");
         }
 
         // =============== toolbar ===============

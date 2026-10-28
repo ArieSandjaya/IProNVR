@@ -157,16 +157,15 @@ namespace IproNvrTool
             qpp.PlayRequested += delegate(CamRef r, DateTime t) { PlayCamera(r, t.ToUniversalTime()); };
             dlp = new DownloadPanel();
             dlp.CameraSource = qpp.CameraSource;
-            fp.AddSection("seq", "Sequence", seqp, true);
             fp.AddSection("dev", "Device", dev, true);
             fp.AddSection("qpb", "Quick playback", qpp, false, 380);
             fp.AddSection("dl", "Download", dlp, false, 330);
             fp.Open("grp");
             fp.SearchTextChanged += delegate(string t)
             {
-                bool a = grp.Filter(t), b = seqp.Filter(t), c = dev.Filter(t);
+                bool a = grp.Filter(t), c = dev.Filter(t);
                 if (t.Length == 0) return;
-                if (a) fp.Open("grp"); else if (b) fp.Open("seq"); else if (c) fp.Open("dev");
+                if (a) fp.Open("grp"); else if (c) fp.Open("dev");
             };
             fp.Dock = DockStyle.Left;
             handle.Dock = DockStyle.Left;
