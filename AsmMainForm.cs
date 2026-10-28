@@ -311,6 +311,7 @@ namespace IproNvrTool
             };
             AsmApp.OpenWindow = delegate(string k) { OnUi(delegate { OpenWindow(k); }); };
             SetupView.SettingsApplied += delegate { OnUi(delegate { op.RefreshFromSettings(); UpdateUser(); }); };
+            ServerLink.AutoSynced += delegate { OnUi(delegate { op.RefreshFromSettings(); }); };
             IproNvrTool.Events.Added += OnEvent;
 
             idleTimer.Interval = 15000;

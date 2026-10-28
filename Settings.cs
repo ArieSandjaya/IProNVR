@@ -67,6 +67,7 @@ namespace IproNvrTool
         public string ServerUrl = "";           // mis. http://192.168.1.5:8470
         public string ServerUser = "";          // akun untuk sinkron otomatis (cukup operator, hanya baca)
         public string ServerPassEnc = "";       // password akun sinkron (DPAPI)
+        public int ServerSyncMin = 5;           // sinkron otomatis ke server tiap N menit (0 = mati)
         public long ServerVersion = 0;          // nomor versi konfigurasi terakhir yang sudah disalin
 
         public string LiveStartItems = "";      // "1=g:Nama;2=s:Nama" per Live window

@@ -141,11 +141,46 @@ namespace IproNvrTool
 
         // ---------- sinkron ----------
 
-        /// <summary>Sinkron sekali saat aplikasi dibuka (bila server mati, dipakai data tersimpan terakhir). Selanjutnya hanya manual lewat menu / tombol.</summary>
+        /// <summary>Sinkron saat aplikasi dibuka (bila server mati, dipakai data tersimpan terakhir), lalu berulang tiap ServerSyncMin menit.</summary>
         public static void Start()
         {
             if (!Enabled) return;
             SyncNow(false, 6000);
+            StartAuto();
+        }
+
+        static System.Threading.Timer autoTimer;
+        static int autoBusy;
+        /// <summary>Dipicu (thread latar) setelah sinkron otomatis membawa perubahan; UI memuat ulang tampilan.</summary>
+        public static event Action AutoSynced;
+
+        /// <summary>Jadwalkan ulang sinkron otomatis sesuai pengaturan (menit; 0 = mati). Aman dipanggil berulang (mis. setelah pengaturan diubah).</summary>
+        public static void StartAuto()
+        {
+            lock (syncLock)
+            {
+                if (autoTimer != null) { autoTimer.Dispose(); autoTimer = null; }
+                int min = AppSettings.Current.ServerSyncMin;
+                if (min <= 0) return;
+                int ms = (int)Math.Min(int.MaxValue / 2, (long)min * 60000);
+                autoTimer = new System.Threading.Timer(delegate { AutoTick(); }, null, ms, ms);
+            }
+        }
+
+        static void AutoTick()
+        {
+            if (!Enabled) return;
+            if (System.Threading.Interlocked.Exchange(ref autoBusy, 1) == 1) return;
+            try
+            {
+                if (SyncNow(false, 10000))
+                {
+                    Action h = AutoSynced;
+                    if (h != null) { try { h(); } catch { } }
+                }
+            }
+            catch (Exception ex) { Log.Write("Sinkron otomatis: " + ex.Message); }
+            finally { autoBusy = 0; }
         }
 
         /// <summary>Periksa perubahan di server sekarang (menu "Periksa pembaruan dari server"). Mengembalikan teks hasil.</summary>
