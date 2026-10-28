@@ -24,8 +24,16 @@ namespace IproNvrTool
             tv.BorderStyle = BorderStyle.None;
             tv.Font = Asm.F(9f, false);
             tv.ShowLines = false;
+            tv.ShowPlusMinus = false;           // +/- digambar sendiri (gaya ASM300)
+            tv.ShowRootLines = false;
+            tv.FullRowSelect = true;
             tv.HideSelection = false;
-            tv.ItemHeight = Asm.S(22);
+            tv.ItemHeight = Asm.S(26);
+            tv.Indent = Asm.S(8);
+            tv.DrawMode = TreeViewDrawMode.OwnerDrawAll;
+            tv.DrawNode += OnDrawNode;
+            tv.MouseDown += OnTreeMouseDown;
+            tv.HandleCreated += delegate { try { SetWindowTheme(tv.Handle, "DarkMode_Explorer", null); } catch { } };
             tv.Tag = "nostyle";
             tv.ItemDrag += OnItemDrag;
             tv.NodeMouseDoubleClick += delegate(object s, TreeNodeMouseClickEventArgs e)
@@ -42,6 +50,103 @@ namespace IproNvrTool
             Rebuild();
             Dir.Changed += OnDirChanged;
             Dir.StatusChanged += OnDirChanged;
+        }
+
+        [System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        static extern int SetWindowTheme(IntPtr hWnd, string app, string idList);
+
+        // ---------- gambar pohon gaya ASM300: [+] ikon NVR nama / ikon kamera nama ----------
+
+        void OnTreeMouseDown(object sender, MouseEventArgs e)
+        {
+            TreeNode n = tv.GetNodeAt(e.X, e.Y);
+            if (n == null || n.Level != 0 || n.Nodes.Count == 0) return;
+            if (e.X < Asm.S(26)) { if (n.IsExpanded) n.Collapse(); else n.Expand(); }
+        }
+
+        void OnDrawNode(object sender, DrawTreeNodeEventArgs e)
+        {
+            TreeNode n = e.Node;
+            if (n == null || e.Bounds.Height <= 0) return;
+            Graphics g = e.Graphics;
+            var row = new Rectangle(0, e.Bounds.Top, tv.ClientSize.Width, tv.ItemHeight);
+            bool sel = (e.State & TreeNodeStates.Selected) != 0;
+            using (var b = new SolidBrush(sel ? Asm.TabBg : Asm.Panel)) g.FillRectangle(b, row);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            int cy = row.Top + row.Height / 2;
+            CamRef r = n.Tag as CamRef;
+            int xText;
+            Color col;
+            if (n.Level == 0)
+            {
+                // [+]/[-]
+                using (var pen = new Pen(Asm.Muted, 1.4f))
+                {
+                    int cx = Asm.S(14), h = Asm.S(4);
+                    if (n.Nodes.Count > 0)
+                    {
+                        g.DrawLine(pen, cx - h, cy, cx + h, cy);
+                        if (!n.IsExpanded) g.DrawLine(pen, cx, cy - h, cx, cy + h);
+                    }
+                }
+                DrawNvrIcon(g, Asm.S(34), cy, Asm.Label);
+                xText = Asm.S(58);
+                col = Asm.Label;
+            }
+            else
+            {
+                xText = Asm.S(70);
+                col = Asm.Label;
+                if (r != null)
+                {
+                    int st = Dir.Status(r.NvrId, r.Channel);
+                    col = st == 2 ? Asm.Danger : (st == 0 ? Asm.Muted : Asm.Label);
+                    CameraRecord cr = Dir.Cam(r.NvrId, r.Channel);
+                    bool dome = cr == null || !string.IsNullOrWhiteSpace(cr.IpAddress);
+                    DrawCamIcon(g, Asm.S(46), cy, col, dome);
+                    if (Dir.IsRecording(r.NvrId, r.Channel))
+                        using (var b = new SolidBrush(Asm.Danger)) g.FillEllipse(b, tv.ClientSize.Width - Asm.S(22), cy - Asm.S(3), Asm.S(6), Asm.S(6));
+                }
+                else col = Asm.Muted;      // keterangan (belum ada kamera, dll)
+            }
+            if (r == null && n.Level > 0) xText = Asm.S(46);
+            var rc = new Rectangle(xText, row.Top, Math.Max(10, tv.ClientSize.Width - xText - Asm.S(26)), row.Height);
+            TextRenderer.DrawText(g, n.Text, tv.Font, rc, col, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        }
+
+        static void DrawNvrIcon(Graphics g, int cx, int cy, Color c)
+        {
+            int w = Asm.S(18), h = Asm.S(7);
+            var rc = new Rectangle(cx - w / 2, cy - h / 2, w, h);
+            using (var path = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                int d = Asm.S(3);
+                path.AddArc(rc.X, rc.Y, d, d, 180, 90); path.AddArc(rc.Right - d, rc.Y, d, d, 270, 90);
+                path.AddArc(rc.Right - d, rc.Bottom - d, d, d, 0, 90); path.AddArc(rc.X, rc.Bottom - d, d, d, 90, 90);
+                path.CloseFigure();
+                using (var b = new SolidBrush(c)) g.FillPath(b, path);
+            }
+        }
+
+        static void DrawCamIcon(Graphics g, int cx, int cy, Color c, bool dome)
+        {
+            using (var b = new SolidBrush(c))
+            {
+                if (dome)
+                {
+                    // dome: pelat atas + badan menyempit ke bawah
+                    int w = Asm.S(14), top = cy - Asm.S(5);
+                    g.FillRectangle(b, cx - w / 2, top, w, Asm.S(3));
+                    g.FillPolygon(b, new Point[] { new Point(cx - Asm.S(5), top + Asm.S(4)), new Point(cx + Asm.S(5), top + Asm.S(4)),
+                        new Point(cx + Asm.S(2), top + Asm.S(9)), new Point(cx - Asm.S(2), top + Asm.S(9)) });
+                }
+                else
+                {
+                    // box/bullet: badan memanjang + lensa di kiri
+                    g.FillRectangle(b, cx - Asm.S(5), cy - Asm.S(3), Asm.S(11), Asm.S(6));
+                    g.FillRectangle(b, cx - Asm.S(8), cy - Asm.S(2), Asm.S(3), Asm.S(4));
+                }
+            }
         }
 
         int _rebuildPending;
@@ -95,8 +200,6 @@ namespace IproNvrTool
             n.Tag = new CamRef(nvrId, ch);
             int st = Dir.Status(nvrId, ch);
             n.ForeColor = st == 2 ? Asm.Danger : (st == 0 ? Asm.Muted : Asm.Text);
-            if (st == 2) n.Text += "  (error)";
-            else if (Dir.IsRecording(nvrId, ch)) n.Text += "  \u25CF";
             return n;
         }
 
@@ -133,7 +236,7 @@ namespace IproNvrTool
                     {
                         if (Dir.Nvr(r.NvrId) == null || !Match(r.NvrId, r.Channel)) continue;
                         TreeNode cn = CamNode(r.NvrId, r.Channel);
-                        cn.Text = Dir.Title(r.NvrId, r.Channel) + (Dir.Status(r.NvrId, r.Channel) == 2 ? "  (error)" : (Dir.IsRecording(r.NvrId, r.Channel) ? "  \u25CF" : ""));
+                        cn.Text = Dir.Title(r.NvrId, r.Channel);
                         fn.Nodes.Add(cn);
                         any = true;
                     }
