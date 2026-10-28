@@ -62,6 +62,18 @@ td .mono{font:12px ui-monospace,Consolas,monospace;color:var(--mut);max-width:34
 .sb a{display:block;background:#0000001a;color:#fffc;text-align:center;padding:3px;text-decoration:none;cursor:pointer}
 .sb.b{background:var(--acc)}.sb.g{background:var(--ok)}.sb.y{background:var(--warn);color:#212529}.sb.r{background:var(--bad)}
 .bar{height:10px;background:#e9ecef;border-radius:5px;overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:var(--acc);transition:width .4s}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes stripes{to{background-position:28px 0}}
+@keyframes slide{0%{left:-35%}100%{left:100%}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(13,110,253,.35)}50%{box-shadow:0 0 0 6px rgba(13,110,253,0)}}
+@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #c5cee0;border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+.bar.run i{background-image:linear-gradient(45deg,rgba(255,255,255,.3) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.3) 50%,rgba(255,255,255,.3) 75%,transparent 75%);background-size:28px 28px;animation:stripes .7s linear infinite}
+.bar.ind{position:relative}.bar.ind i{position:absolute;width:35%;animation:slide 1.1s ease-in-out infinite}
+.card.runc{animation:pulse 1.8s ease-in-out infinite}
+.dots::after{content:'';animation:dots 1.4s steps(1) infinite}
+.alert.busy{display:flex;align-items:center}
+@media (prefers-reduced-motion:reduce){.spin,.bar.run i,.bar.ind i,.card.runc,.dots::after{animation:none}}
 pre.log{margin:8px 0 0;max-height:240px;overflow:auto;font:12px ui-monospace,Consolas,monospace;white-space:pre-wrap;background:#f8f9fa;border:1px solid var(--line);border-radius:4px;padding:8px}
 .alert{padding:10px 14px;border-radius:4px;margin:0 0 12px;border:1px solid}
 .alert.ok{background:#d4edda;border-color:#c3e6cb;color:#155724}.alert.er{background:#f8d7da;border-color:#f5c6cb;color:#721c24}
@@ -121,7 +133,7 @@ function $(h){var d=document.createElement('div');d.innerHTML=h.trim();return d.
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function api(m,u,b){return fetch(u,{method:m,headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).then(function(r){return r.json().then(function(j){if(r.status==401){logout();throw new Error(j.error)}if(!r.ok)throw new Error(j.error||r.status);return j})})}
 function logout(){tok=null;me=null;sessionStorage.removeItem('tok');render()}
-function say(t,bad){msg={t:t,bad:bad};render()}
+function say(t,bad,busy){msg={t:t,bad:bad,busy:busy};render()}
 function nvrName(id){var n=(data.nvrs||[]).filter(function(x){return x.id==id})[0];return n?n.name:'#'+id}
 function sch(r){return schema.filter(function(x){return x.route==r})[0]}
 
@@ -152,7 +164,7 @@ function render(){
   var body=page=='home'?home():listPage(page);
   c.appendChild(body);
   body.insertBefore($('<div id="job" class="card" style="display:none"></div>'),body.children[1]);   // di bawah judul halaman
-  if(msg){c.insertBefore($('<div class="alert '+(msg.bad?'er':'ok')+'">'+esc(msg.t)+'</div>'),c.firstChild);msg=null}
+  if(msg){c.insertBefore($('<div class="alert '+(msg.bad?'er':'ok')+(msg.busy?' busy':'')+'">'+(msg.busy?'<span class="spin"></span>':'')+esc(msg.t)+'</div>'),c.firstChild);msg=null}
   drawJob();
 }
 function head(title,sub){return $('<div class="ch"><h1>'+esc(title)+'</h1><div class="bc">Beranda / <b>'+esc(sub||title)+'</b></div></div>')}
@@ -354,7 +366,7 @@ function edit(r,row){
     [].forEach.call(el.querySelectorAll('[data-n]'),function(i){var val=i.value,k=i.dataset.k;if(i.dataset.n=='nvr_id'||k=='I')val=Number(val||0);else if(k=='R')val=Number(val);b[i.dataset.n]=val});
     api('POST','/api/'+r,b).then(function(rs){close();msg={t:'Tersimpan.'};return reload().then(function(){if(r=='nvrs'&&!row&&rs&&rs.id)return fetchCams(rs.id)})}).catch(function(e){alert(e.message)})}}
 function fetchCams(id){
-  say('Menghubungi NVR (tes login dan baca daftar kamera)...');
+  say('Menghubungi NVR (tes login dan baca daftar kamera)...',false,true);
   return api('POST','/api/nvr-cameras',{nvr_id:id}).then(function(r){msg={t:'Login NVR berhasil. '+r.registered+' kamera terdaftar di NVR ('+(r.registered-r.error_conn)+' normal, '+r.error_conn+' error koneksi) dari '+r.total_slots+' kanal; '+r.added+' kamera baru ditambahkan'+(r.unregistered?'; '+r.unregistered+' kamera sudah tidak terdaftar di NVR (ditandai)':'')+'. i-PRO: isi IP kamera lalu jalankan Deteksi RTSP. Hikvision/Dahua: langsung jalankan Deteksi RTSP (tanpa IP kamera).'};return reload()}).catch(function(e){say(e.message,true)})}
 function genChannels(){
   var nv=+flt.nvr;if(!nv){alert('Pilih NVR dulu pada filter.');return}
@@ -383,7 +395,16 @@ function drawJob(){
   el.style.display='block';
   var pct=job.total?Math.round(100*job.done/job.total):0;
   var st={running:['Berjalan','info'],done:['Selesai','ok'],cancelled:['Dibatalkan','warn'],error:['Error','bad']}[job.state]||[job.state,''];
-  el.innerHTML='<div class="ct"><h3>Deteksi RTSP otomatis'+(job.nvr?' - '+esc(job.nvr):'')+'</h3><span class="badge '+st[1]+'">'+st[0]+'</span>'+(job.state=='running'?'<button class="btn sm d" id="jc">Batal</button>':'<button class="btn sm" id="jx">Tutup</button>')+'</div><div class="cb"><div>'+job.done+' / '+job.total+' kamera diproses · <b>'+job.found+'</b> URL ditemukan</div><div class="bar"><i style="width:'+pct+'%"></i></div><pre class="log">'+esc((job.lines||[]).join('\n'))+'</pre></div>';
+  var run=job.state=='running';
+  var barEl=el.querySelector('.bar');
+  if(run&&el.dataset.jid==job.id&&barEl){   // update di tempat agar animasi tidak mulai ulang tiap polling
+    var cnt=el.querySelector('.cnt');if(cnt)cnt.innerHTML=job.done+' / '+job.total+' kamera diproses · <b>'+job.found+'</b> URL ditemukan';
+    barEl.className='bar'+(job.done?' run':' ind');var bi=barEl.firstChild;bi.style.width=(job.done?pct+'%':'');
+    var lg0=el.querySelector('.log');if(lg0){lg0.textContent=(job.lines||[]).join('\n');lg0.scrollTop=lg0.scrollHeight}
+    return}
+  el.dataset.jid=run?job.id:'';el.className='card'+(run?' runc':'');
+  el.innerHTML='<div class="ct"><h3>'+(run?'<span class="spin"></span>':'')+'Deteksi RTSP otomatis'+(job.nvr?' - '+esc(job.nvr):'')+(run?'<span class="dots"></span>':'')+'</h3><span class="badge '+st[1]+'">'+st[0]+'</span>'+(job.state=='running'?'<button class="btn sm d" id="jc">Batal</button>':'<button class="btn sm" id="jx">Tutup</button>')+'</div><div class="cb"><div class="cnt">'+job.done+' / '+job.total+' kamera diproses · <b>'+job.found+'</b> URL ditemukan</div><div class="bar'+(run?(job.done?' run':' ind'):'')+'"><i style="'+(run&&!job.done?'':'width:'+pct+'%')+'"></i></div><pre class="log">'+esc((job.lines||[]).join('\n'))+'</pre></div>';
+  var lg=el.querySelector('.log');if(lg)lg.scrollTop=lg.scrollHeight;
   var c=document.getElementById('jc');if(c)c.onclick=function(){api('DELETE','/api/jobs/'+job.id)};
   var x=document.getElementById('jx');if(x)x.onclick=function(){job=null;el.style.display='none'};
   var pre=el.querySelector('pre');if(pre)pre.scrollTop=pre.scrollHeight}
