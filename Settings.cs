@@ -43,6 +43,8 @@ namespace IproNvrTool
         public int OpMaxAreas = 16;             // jumlah area maksimum Operation window
         public int LiveMaxAreas = 16;           // jumlah area maksimum Live window
         public bool ResumePlayback = true;      // lanjut playback saat ganti kamera
+        public string AppTitle = "IPRONVR Series";                     // judul besar di pojok kiri atas (bebas diisi)
+        public string AppSubtitle = "Video Surveillance Software";     // baris kecil di atas judul
         public int AutoLogoutMin = 0;           // 0 = mati
         public int QdPreSec = 5;                // quick download: mundur sekian detik
         public int QdMinutes = 10;              // quick download: lama (menit)

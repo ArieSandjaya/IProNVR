@@ -269,6 +269,8 @@ namespace IproNvrTool
             AppSettings s = AppSettings.Current;
             var p = new SettingsPage();
             p.Heading("Tampilan");
+            p.Text("Judul aplikasi", s.AppTitle, delegate(string v) { s.AppTitle = v.Trim(); }, "Teks besar di pojok kiri atas dan judul jendela. Kosong = IPRONVR Series.");
+            p.Text("Sub judul", s.AppSubtitle, delegate(string v) { s.AppSubtitle = v.Trim(); }, "Teks kecil di atas judul. Boleh dikosongkan.");
             p.Combo("Display magnification (%)", new string[] { "75", "100", "125", "150", "175", "200" }, s.AsmMagnification.ToString(),
                 delegate(string v) { s.AsmMagnification = int.Parse(v); }, "Berlaku setelah aplikasi dibuka ulang.");
             p.Combo("Format tanggal", new string[] { "yyyy/MM/dd", "dd/MM/yyyy", "MM/dd/yyyy" }, s.DateFormat, delegate(string v) { s.DateFormat = v; }, null);

@@ -71,8 +71,8 @@ namespace IproNvrTool
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
             using (var b = new SolidBrush(Color.White))
             {
-                Spaced(g, "Video Surveillance Software", Asm.F(9f, true), b, Asm.S(16), Asm.S(7), 1.2f);
-                Spaced(g, "IPRONVR Series", Asm.F(17f, true), b, Asm.S(16), Asm.S(19), 2f);
+                Spaced(g, AppSettings.Current.AppSubtitle ?? "", Asm.F(9f, true), b, Asm.S(16), Asm.S(7), 1.2f);
+                Spaced(g, string.IsNullOrWhiteSpace(AppSettings.Current.AppTitle) ? "IPRONVR Series" : AppSettings.Current.AppTitle, Asm.F(17f, true), b, Asm.S(16), Asm.S(19), 2f);
             }
         }
     }
@@ -204,7 +204,7 @@ namespace IproNvrTool
 
         public AsmMainForm()
         {
-            Text = "i-PRO NVR Tool - ASM300 style";
+            Text = string.IsNullOrWhiteSpace(AppSettings.Current.AppTitle) ? "IPRONVR" : AppSettings.Current.AppTitle;
             FormBorderStyle = FormBorderStyle.None;      // bilah judul digambar sendiri (topBar)
             if (AppIcon.Get() != null) base.Icon = AppIcon.Get();
             Width = 1480;
@@ -283,6 +283,7 @@ namespace IproNvrTool
 
             strip.Dock = DockStyle.None;
             var logo = new BrandLogo();
+            SetupView.SettingsApplied += delegate { OnUi(delegate { logo.Invalidate(); Text = string.IsNullOrWhiteSpace(AppSettings.Current.AppTitle) ? "IPRONVR" : AppSettings.Current.AppTitle; }); };
             logo.SetBounds(0, 0, Asm.S(398), Asm.S(53));
             titleBar.Controls.Add(strip);
             titleBar.Controls.Add(logo);
