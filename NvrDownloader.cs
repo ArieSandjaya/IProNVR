@@ -14,6 +14,7 @@ namespace IproNvrTool
         public int Files;
         public long Bytes;
         public string Result = "";
+        public string Warn = "";   // catatan non-fatal (mis. konversi mp4 gagal)
         public bool NoRecording;   // ada chunk tanpa rekaman (bukan kegagalan: chunk berikutnya tetap dicoba)
 
         public void Abort()

@@ -24,8 +24,51 @@ namespace IproNvrTool
         public abstract List<DiskRecord> ListDisks(NvrEndpoint ep);
         protected abstract string RtspPath(int channel, bool sub);
         protected abstract string PlaybackPath(int channel, DateTime startUtc, DateTime endUtc);
-        public abstract void Download(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
+        protected abstract void DoDownload(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
             string folder, DownloadJob job, Action<string> status);
+
+        public void Download(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
+            string folder, DownloadJob job, Action<string> status)
+        {
+            try { DoDownload(nvr, channel, startLocal, endLocal, kind, folder, job, status); }
+            catch (Exception ex) { if (job.Result.Length == 0) job.Result = "Error: " + ex.Message; Log.Write("Download " + BrandName + ": " + ex.Message); }
+            if (job.Cancel) job.Result = "Dibatalkan.";
+            else if (job.Result.Length == 0 || (job.Files > 0 && job.Result.StartsWith("No recording")))
+                job.Result = "Selesai: " + job.Files + " file, " + (job.Bytes / 1024) + " KB -> " + folder + (job.Warn.Length > 0 ? "  (" + job.Warn.Trim() + ")" : "");
+            Log.Write("Download " + BrandName + " " + nvr.Name + " CH" + channel + ": " + job.Result);
+            if (status != null) status(job.Result);
+        }
+
+        /// <summary>Hasil unduhan mentah -> .mp4 (tanpa re-encode bila bisa). Urutan: salin video + audio AAC, salin video tanpa audio, encode ulang H.264. true bila mp4 jadi.</summary>
+        protected static bool ConvertToMp4(string ffmpeg, string src, string mp4, bool videoOnly, out string err)
+        {
+            err = "";
+            string[] opts = videoOnly
+                ? new string[] { "-c:v copy -an", "-c:v libx264 -preset veryfast -an" }
+                : new string[] { "-c:v copy -c:a aac", "-c:v copy -an", "-c:v libx264 -preset veryfast -c:a aac" };
+            foreach (string o in opts)
+            {
+                try
+                {
+                    try { if (File.Exists(mp4)) File.Delete(mp4); } catch { }
+                    var psi = new ProcessStartInfo(ffmpeg, "-y -hide_banner -loglevel error -i \"" + src + "\" " + o + " \"" + mp4 + "\"");
+                    psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardError = true;
+                    using (Process p = Process.Start(psi))
+                    {
+                        string e = p.StandardError.ReadToEnd();
+                        if (!p.WaitForExit(600000)) { try { p.Kill(); } catch { } err = "timeout"; continue; }
+                        if (p.ExitCode == 0 && File.Exists(mp4) && new FileInfo(mp4).Length > 1024) return true;
+                        err = e.Trim();
+                    }
+                }
+                catch (Exception ex) { err = ex.Message; }
+            }
+            try { if (File.Exists(mp4)) File.Delete(mp4); } catch { }
+            return false;
+        }
+
+        protected static bool WantMp4(string kind) { return kind != null && kind.StartsWith("MP4", StringComparison.OrdinalIgnoreCase); }
+        protected static bool VideoOnly(string kind) { return kind != null && kind.EndsWith("VO", StringComparison.OrdinalIgnoreCase); }
         public abstract byte[] Snapshot(NvrRecord nvr, int channel, DateTime utc, int width);
 
         protected static string RtspBase(NvrRecord nvr, int rtspPort)
@@ -248,7 +291,7 @@ namespace IproNvrTool
             return all;
         }
 
-        public override void Download(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
+        protected override void DoDownload(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
             string folder, DownloadJob job, Action<string> status)
         {
             Directory.CreateDirectory(folder);
@@ -280,8 +323,20 @@ namespace IproNvrTool
                     byte[] b = Encoding.UTF8.GetBytes(body);
                     req.ContentLength = b.Length;
                     using (Stream st = req.GetRequestStream()) st.Write(b, 0, b.Length);
-                    SaveStream(req, file, job);
+                    string ffm = WantMp4(kind) ? FfmpegPipe.FindExe() : null;
+                    string raw = ffm != null ? Path.ChangeExtension(file, ".ps") : file;
+                    long before = job.Bytes;
+                    SaveStream(req, raw, job);
+                    if (job.Bytes - before < 1024) { try { File.Delete(raw); } catch { } job.Warn += "file " + i + " kosong (ditolak perangkat). "; continue; }
                     job.Files++;
+                    if (ffm != null && !job.Cancel)
+                    {
+                        if (status != null) status("Konversi ke mp4 " + i + "/" + segs.Count + "...");
+                        string err;
+                        if (ConvertToMp4(ffm, raw, file, VideoOnly(kind), out err)) { try { File.Delete(raw); } catch { } }
+                        else job.Warn += "konversi mp4 gagal (file .ps disimpan): " + (err.Length > 120 ? err.Substring(0, 120) : err) + " ";
+                    }
+                    else if (WantMp4(kind) && i == 1) job.Warn += "ffmpeg.exe tidak ditemukan: file mentah dari perangkat, belum dikonversi. ";
                 }
             }
             catch (Exception ex)
@@ -370,7 +425,7 @@ namespace IproNvrTool
             return list;
         }
 
-        public override void Download(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
+        protected override void DoDownload(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
             string folder, DownloadJob job, Action<string> status)
         {
             Directory.CreateDirectory(folder);
@@ -415,7 +470,8 @@ namespace IproNvrTool
                     return;
                 }
                 string ffmpeg = FfmpegPipe.FindExe();
-                bool wantMp4 = kind != null && kind.StartsWith("MP4", StringComparison.OrdinalIgnoreCase) && ffmpeg != null;
+                bool wantMp4 = WantMp4(kind);
+                if (wantMp4 && ffmpeg == null) job.Warn += "ffmpeg.exe tidak ditemukan: file disimpan sebagai .dav, bukan .mp4. ";
                 int n = 0;
                 foreach (KeyValuePair<string, string> f in files)
                 {
@@ -425,10 +481,19 @@ namespace IproNvrTool
                     string stamp = Regex.Replace(f.Value, @"[^0-9]", "");
                     string dav = Path.Combine(folder, Safe(nvr.Name + "_CH" + channel + "_" + (stamp.Length > 0 ? stamp : n.ToString())) + ".dav");
                     string path = f.Key.StartsWith("/") ? f.Key : "/" + f.Key;
+                    long before = job.Bytes;
                     SaveStream(NvrSession.CreateRequest(ep, "/cgi-bin/RPC_Loadfile" + path, 30000), dav, job);
+                    if (job.Bytes - before < 1024) { try { File.Delete(dav); } catch { } job.Warn += "file " + n + " kosong (ditolak DVR). "; continue; }
                     job.Files++;
-                    if (wantMp4 && !job.Cancel) ConvertToMp4(ffmpeg, dav);
+                    if (wantMp4 && ffmpeg != null && !job.Cancel)
+                    {
+                        if (status != null) status("Konversi ke mp4 " + n + "/" + files.Count + "...");
+                        string err;
+                        if (ConvertToMp4(ffmpeg, dav, Path.ChangeExtension(dav, ".mp4"), VideoOnly(kind), out err)) { try { File.Delete(dav); } catch { } }
+                        else job.Warn += "konversi mp4 gagal (file .dav disimpan): " + (err.Length > 120 ? err.Substring(0, 120) : err) + " ";
+                    }
                 }
+                if (job.Files == 0 && !job.Cancel && job.Result.Length == 0) job.Result = "Download gagal: DVR tidak mengirim data. " + job.Warn;
             }
             catch (Exception ex)
             {
@@ -442,23 +507,6 @@ namespace IproNvrTool
                     try { Get(ep, "/cgi-bin/mediaFileFind.cgi?action=destroy&object=" + obj, 8000); } catch { }
                 }
             }
-        }
-
-        /// <summary>.dav -> .mp4 tanpa re-encode; file .dav dihapus bila berhasil, bila gagal dibiarkan.</summary>
-        static void ConvertToMp4(string ffmpeg, string dav)
-        {
-            try
-            {
-                string mp4 = Path.ChangeExtension(dav, ".mp4");  // sumber .dav / .mkv
-                var psi = new ProcessStartInfo(ffmpeg, "-y -hide_banner -loglevel error -i \"" + dav + "\" -c copy \"" + mp4 + "\"");
-                psi.UseShellExecute = false; psi.CreateNoWindow = true;
-                using (Process p = Process.Start(psi))
-                {
-                    if (!p.WaitForExit(120000)) { try { p.Kill(); } catch { } return; }
-                    if (p.ExitCode == 0 && File.Exists(mp4) && new FileInfo(mp4).Length > 0) File.Delete(dav);
-                }
-            }
-            catch (Exception ex) { Log.Write("Dahua: konversi mp4 gagal: " + ex.Message); }
         }
 
         public override byte[] Snapshot(NvrRecord nvr, int channel, DateTime utc, int width)
