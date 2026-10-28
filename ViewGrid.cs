@@ -399,7 +399,84 @@ namespace IproNvrTool
             lblName.Visible = false;
         }
 
+        LiveTile _stash; NvrSession _stashSess; long _stashNvr; int _stashCh;
+
+        /// <summary>Hanya RTSP langsung (tanpa sesi push NVR) yang bisa ditahan tanpa reconnect.</summary>
+        public bool RtspLive
+        {
+            get
+            {
+                if (Tile == null || NvrId == 0) return false;
+                NvrRecord n = Dir.Nvr(NvrId);
+                return n != null && (AppSettings.Current.LiveAllRtsp || NvrDrivers.For(n).BrandId != "ipro");
+            }
+        }
+
+        /// <summary>Tahan stream area ini (tetap tersambung, tidak digambar).</summary>
+        public bool Suspend()
+        {
+            if (!RtspLive) return false;
+            Tile.Suspended = true;
+            return true;
+        }
+
+        /// <summary>Lanjutkan stream yang ditahan. Mengembalikan false bila tidak ada yang ditahan.</summary>
+        public bool Resume()
+        {
+            if (Tile == null || !Tile.Suspended) return false;
+            Tile.Suspended = false;
+            return true;
+        }
+
+        /// <summary>Simpan tile substream (tetap hidup) agar area bisa menampilkan stream utama tanpa mematikannya.</summary>
+        public bool Stash()
+        {
+            if (!RtspLive || _stash != null) return false;
+            _stash = Tile; _stashSess = sess; _stashNvr = NvrId; _stashCh = Channel;
+            Tile.Suspended = true;
+            Controls.Remove(Tile);
+            Tile = null; sess = null;
+            return true;
+        }
+
+        /// <summary>Buang stream utama dan pasang kembali tile substream yang disimpan. False bila tidak ada simpanan.</summary>
+        public bool Unstash()
+        {
+            if (_stash == null) return false;
+            LiveTile st = _stash; NvrSession ss = _stashSess; long sn = _stashNvr; int sc = _stashCh;
+            _stash = null; _stashSess = null;
+            StopCurrent();
+            NvrId = sn; Channel = sc;
+            Tile = st; sess = ss;
+            Tile.Suspended = false;
+            Controls.Add(Tile);
+            lblName.SendToBack();
+            Tile.BringToFront();
+            SetName();
+            return true;
+        }
+
+        void DropStash()
+        {
+            if (_stash == null) return;
+            LiveTile t = _stash; NvrSession s = _stashSess; long nid = _stashNvr; int ch = _stashCh;
+            _stash = null; _stashSess = null;
+            t.Halt();
+            t.Dispose();
+            if (s != null)
+            {
+                Pool.BeginRelease(nid, s, ch);
+                Task.Run(delegate { try { t.SendStop(); } catch { } Pool.EndRelease(nid, s); });
+            }
+        }
+
         public void StopLive()
+        {
+            DropStash();
+            StopCurrent();
+        }
+
+        void StopCurrent()
         {
             LiveTile t = Tile;
             NvrSession s = sess;
@@ -440,7 +517,8 @@ namespace IproNvrTool
         /// <summary>Tampilkan kamera secara live. useSub: pakai substream bila ada (multi-area).</summary>
         public void ShowLive(NvrRecord nvr, int channel, bool useSub, int decodeWidth, int delayMs)
         {
-            StopLive();
+            if (_stash != null && (_stashNvr != nvr.Id || _stashCh != channel)) DropStash();
+            StopCurrent();
             if (Pic != null) { Controls.Remove(Pic); if (Pic.Image != null) Pic.Image.Dispose(); Pic.Dispose(); Pic = null; }
             Playback = false;
             NvrId = nvr.Id;
@@ -813,15 +891,20 @@ namespace IproNvrTool
                 if (!restoring)
                 {
                     // kamera lain di-pause (stream dihentikan) selama satu kamera dipilih
+                    // RTSP langsung: stream lain hanya ditahan (tetap tersambung) sehingga kembali ke multiview tanpa reconnect
                     for (int i = 0; i < cells.Count; i++)
-                        if (i != c.Index) cells[i].StopLive();
-                    if (c.HasCamera) Assign(c.Index, c.NvrId, c.Channel, false);   // stream utama
+                        if (i != c.Index && !cells[i].Suspend()) cells[i].StopLive();
+                    if (c.HasCamera)
+                    {
+                        c.Stash();   // substream area ini ikut ditahan, area menampilkan stream utama
+                        Assign(c.Index, c.NvrId, c.Channel, false);   // stream utama
+                    }
                 }
                 else
                 {
                     // kembali ke multiview: semua kamera jalan lagi (substream)
                     for (int i = 0; i < cells.Count; i++)
-                        if (cells[i].HasCamera) Assign(i, cells[i].NvrId, cells[i].Channel, false);
+                        if (cells[i].HasCamera && !cells[i].Unstash() && !cells[i].Resume()) Assign(i, cells[i].NvrId, cells[i].Channel, false);
                 }
             }
             if (MaximizedChanged != null) MaximizedChanged();

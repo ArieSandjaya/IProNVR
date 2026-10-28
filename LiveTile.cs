@@ -527,9 +527,13 @@ namespace IproNvrTool
             _prod = 0; _dropBusy = 0; _dropGap = 0; _diagTick = Environment.TickCount;
         }
 
+        /// <summary>Tile ditahan (area tersembunyi saat satu kamera diperbesar): koneksi RTSP tetap hidup, gambar tidak digambar. Lanjut seketika tanpa reconnect.</summary>
+        public volatile bool Suspended;
+
         void ShowJpeg(byte[] jpeg)
         {
             _lastTick = Environment.TickCount;
+            if (Suspended) { Interlocked.Increment(ref _frames); return; }
             _prod++;
             Diag();
             if (_busy)
