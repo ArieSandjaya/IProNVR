@@ -91,7 +91,6 @@ namespace IproNvrTool
         FfmpegPipe _ff;
         Thread _thread;
         volatile bool _stop;
-        volatile bool _busy;
         volatile string _comp;   // format yang terakhir di-START (untuk STOP); null bila sumber RTSP
         volatile string _srcLabel;
         volatile bool _forceSoftware;   // true setelah akselerasi GPU gagal: dekode CPU
@@ -180,6 +179,7 @@ namespace IproNvrTool
         {
             _stop = false;
             if (!_counted) { _counted = true; Interlocked.Increment(ref _active); }
+            PumpRegister(this);
             _lastTick = Environment.TickCount;
             _watch = new System.Threading.Timer(delegate { WatchTick(); }, null, 5000, 5000);
             _thread = new Thread(Run);
@@ -582,7 +582,7 @@ namespace IproNvrTool
             if (Suspended || _hiddenView) { Interlocked.Increment(ref _frames); return; }
             _prod++;
             Diag();
-            if (_busy)
+            if (_dirty)
             {
                 _dropBusy++;
                 Interlocked.Increment(ref _frames);
@@ -618,37 +618,79 @@ namespace IproNvrTool
                 }
                 catch (Exception ex) { Log.Write("CAM " + Cam + " filter frame: " + ex.Message); }
             }
-            _busy = true;
             _lastShowTick = Environment.TickCount;
-            string comp = _srcLabel ?? _comp;
-            Ui.Post(_pic, () =>
+            _liveComp = _srcLabel ?? _comp;
+            // frame terbaru diserahkan ke "pompa UI" (satu timer untuk semua tile) - tidak ada BeginInvoke per frame
+            Image dropped;
+            lock (_pendLock) { dropped = _pending; _pending = img; _dirty = true; }
+            if (dropped != null) { try { dropped.Dispose(); } catch { } }
+        }
+
+        // ---------- pompa UI: satu timer menggambar frame terbaru semua tile (banyak area/jendela tidak membanjiri antrian pesan UI) ----------
+
+        readonly object _pendLock = new object();
+        Image _pending;
+        volatile bool _dirty;
+        volatile string _liveComp;
+        string _lastLive;
+        static readonly List<LiveTile> _pumpTiles = new List<LiveTile>();
+        static System.Windows.Forms.Timer _pump;
+
+        static void PumpRegister(LiveTile t)
+        {
+            lock (_pumpTiles) { if (!_pumpTiles.Contains(t)) _pumpTiles.Add(t); }
+            if (_pump == null && System.Threading.SynchronizationContext.Current is WindowsFormsSynchronizationContext)
             {
-                try
+                _pump = new System.Windows.Forms.Timer();
+                _pump.Interval = 30;
+                _pump.Tick += delegate
                 {
-                    Image old = _pic.Image;
-                    _pic.Image = img;
-                    if (old != null) old.Dispose();
-                    _shown++;
-                    int el = unchecked(Environment.TickCount - _fpsTick);
-                    if (el >= 3000)
-                    {
-                        _fpsText = " " + (_shown * 1000 / el) + " fps";
-                        _shown = 0; _fpsTick = Environment.TickCount;
-                    }
-                    string live = Titled("CAM " + Cam + " - live (" + comp + _fpsText + ")");
-                    _lbl.Text = live;
-                    Action<LiveTile, string> h2 = StatusChanged;
-                    if (h2 != null) h2(this, live);
-                }
-                finally { _busy = false; }
-            });
-            if (!_pic.IsHandleCreated) { _busy = false; try { img.Dispose(); } catch { } }
+                    LiveTile[] arr;
+                    lock (_pumpTiles) arr = _pumpTiles.ToArray();
+                    foreach (LiveTile x in arr) { try { x.Present(); } catch { } }
+                };
+                _pump.Start();
+            }
+        }
+
+        static void PumpUnregister(LiveTile t)
+        {
+            lock (_pumpTiles) _pumpTiles.Remove(t);
+        }
+
+        /// <summary>Dipanggil di UI thread oleh pompa: pasang frame terbaru ke PictureBox dan perbarui teks status hanya bila berubah.</summary>
+        void Present()
+        {
+            if (!_dirty) return;
+            Image img;
+            lock (_pendLock) { img = _pending; _pending = null; _dirty = false; }
+            if (img == null) return;
+            if (_pic.IsDisposed) { img.Dispose(); return; }
+            Image old = _pic.Image;
+            _pic.Image = img;
+            if (old != null) old.Dispose();
+            _shown++;
+            int el = unchecked(Environment.TickCount - _fpsTick);
+            if (el >= 3000)
+            {
+                _fpsText = " " + (_shown * 1000 / el) + " fps";
+                _shown = 0; _fpsTick = Environment.TickCount;
+            }
+            string live = Titled("CAM " + Cam + " - live (" + _liveComp + _fpsText + ")");
+            if (live != _lastLive)
+            {
+                _lastLive = live;
+                _lbl.Text = live;
+                Action<LiveTile, string> h2 = StatusChanged;
+                if (h2 != null) h2(this, live);
+            }
         }
 
         /// <summary>Hentikan pembacaan lokal (cepat, aman dipanggil dari UI thread).</summary>
         public void Halt()
         {
             _stop = true;
+            PumpUnregister(this);
             if (_counted) { _counted = false; Interlocked.Decrement(ref _active); }
             try { if (_watch != null) { _watch.Dispose(); _watch = null; } } catch { }
             try { if (_req != null) _req.Abort(); } catch { }
@@ -676,6 +718,12 @@ namespace IproNvrTool
 
         protected override void Dispose(bool disposing)
         {
+            if (disposing)
+            {
+                PumpUnregister(this);
+                Image pd; lock (_pendLock) { pd = _pending; _pending = null; _dirty = false; }
+                if (pd != null) { try { pd.Dispose(); } catch { } }
+            }
             if (disposing && _pic != null && _pic.Image != null) _pic.Image.Dispose();
             base.Dispose(disposing);
         }
