@@ -100,6 +100,7 @@ namespace IproNvrTool
                         Log.Write("WATCHDOG: UI tidak merespons > 120 dtk, proses dimatikan untuk restart.");
                         Kill();
                     }
+                    LogHealth();
                     // batas memori (3 kali berturut-turut agar lonjakan sesaat tidak memicu)
                     if (s.MemLimitMb > 0)
                     {
@@ -136,6 +137,35 @@ namespace IproNvrTool
         static void Kill()
         {
             try { using (Process me = Process.GetCurrentProcess()) me.Kill(); } catch { Environment.Exit(9); }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern uint GetGuiResources(IntPtr hProcess, uint flags);
+        static DateTime _healthAt = DateTime.MinValue;
+
+        /// <summary>Tiap ~2 menit tulis ke log: memori privat/terkelola, jumlah GC, objek GDI/USER, handle, thread, proses ffmpeg dan CPU-nya.
+        /// Dipakai untuk melihat tren (mis. fps turun lama-lama / restart sendiri): apa yang naik terus.</summary>
+        static void LogHealth()
+        {
+            if ((DateTime.Now - _healthAt).TotalSeconds < 120) return;
+            _healthAt = DateTime.Now;
+            try
+            {
+                using (Process me = Process.GetCurrentProcess())
+                {
+                    int nf = 0; double fcpu = 0; long fmem = 0;
+                    foreach (Process f in Process.GetProcessesByName("ffmpeg"))
+                    {
+                        try { nf++; fcpu += f.TotalProcessorTime.TotalSeconds; fmem += f.WorkingSet64; } catch { }
+                        f.Dispose();
+                    }
+                    Log.Write("HEALTH: stream " + LiveTile.ActiveStreams + ", privat " + (me.PrivateMemorySize64 >> 20) + " MB, terkelola " + (GC.GetTotalMemory(false) >> 20)
+                        + " MB, GC " + GC.CollectionCount(0) + "/" + GC.CollectionCount(1) + "/" + GC.CollectionCount(2)
+                        + ", GDI " + GetGuiResources(me.Handle, 0) + ", USER " + GetGuiResources(me.Handle, 1)
+                        + ", handle " + me.HandleCount + ", thread " + me.Threads.Count
+                        + ", ffmpeg " + nf + " proses (" + (fmem >> 20) + " MB, CPU " + fcpu.ToString("0") + " dtk)");
+                }
+            }
+            catch { }
         }
 
         /// <summary>Restart aplikasi: logout sesi NVR, lalu keluar dengan kode 3 (supervisor menghidupkan lagi) atau jalankan proses baru.</summary>

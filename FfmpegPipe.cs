@@ -191,14 +191,16 @@ namespace IproNvrTool
         }
 
         /// <summary>Mode RTSP: ffmpeg membuka sendiri URL RTSP kamera (TCP) dan mendekodenya; codec dideteksi otomatis.</summary>
-        public static FfmpegPipe ForRtsp(string exe, string url, int width, string name, Action<byte[]> onJpeg, bool hw = false)
+        public static FfmpegPipe ForRtsp(string exe, string url, int width, string name, Action<byte[]> onJpeg, bool hw = false, int maxFps = 0)
         {
             var sb = new StringBuilder();
             sb.Append("-hide_banner -loglevel error -nostats -fflags nobuffer -flags low_delay ");
             if (hw) sb.Append(HwAccels.Args(AppSettings.Current.HwAccel, null));
             sb.Append("-rtsp_transport tcp -probesize 200000 -analyzeduration 1000000 ");
             sb.Append("-i \"" + url.Replace("\"", "%22") + "\" -an ");
-            if (width > 0) sb.Append("-vf scale=" + width + ":-2:flags=fast_bilinear ");
+            // batas fps DI ffmpeg (sebelum scale dan encode MJPEG): frame yang toh tidak ditampilkan tidak perlu di-skala/di-encode
+            string vf = (maxFps > 0 ? "fps=" + maxFps : "") + (width > 0 ? (maxFps > 0 ? "," : "") + "scale=" + width + ":-2:flags=fast_bilinear" : "");
+            if (vf.Length > 0) sb.Append("-vf " + vf + " ");
             sb.Append(VsyncArg());
             sb.Append("-pix_fmt yuvj420p -q:v 5 -flush_packets 1 -f image2pipe -vcodec mjpeg pipe:1");
             return new FfmpegPipe(exe, sb.ToString(), false, name, onJpeg);

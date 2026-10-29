@@ -395,7 +395,8 @@ namespace IproNvrTool
                 }
                 Log.Write("CAM " + Cam + ": membuka " + src.Label + " " + StreamSource.MaskUrl(src.Url));
                 SetTitle("CAM " + Cam + " - menghubungkan RTSP...");
-                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable);
+                _ffCap = FfmpegFpsCap();
+                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable, _ffCap);
                 _ff = ff;
                 while (!_stop && !ff.HasExited)
                 {
@@ -502,8 +503,22 @@ namespace IproNvrTool
         /// <summary>Batas fps tampilan: makin banyak stream aktif, makin rendah, supaya UI thread tidak jenuh (penyebab gambar patah-patah).</summary>
         /// <summary>Jeda minimum antar gambar yang ditampilkan. Tile besar (1 area / layar penuh: lebar dekode >= 1280) tidak dibatasi,
         /// 2-4 area dibatasi paling banyak ~30 fps; batas ketat hanya untuk dinding banyak area (itu yang membuat fps tampak kecil).</summary>
+        volatile int _ffCap;
+
+        /// <summary>fps maksimum yang diminta dari ffmpeg untuk area kecil saat banyak stream aktif (0 = tanpa batas).</summary>
+        int FfmpegFpsCap()
+        {
+            if (_decodeWidth == 0 || _decodeWidth >= 960) return 0;
+            int n = ActiveStreams;
+            if (n > 40) return 8;
+            if (n > 16) return 12;
+            if (n > 6) return 20;
+            return 0;
+        }
+
         int DisplayGapMs()
         {
+            if (_ffCap > 0) return 0;      // ffmpeg sudah membatasi fps: jangan buang lagi di sini (jitter bisa memotong fps jadi separuh)
             if (_decodeWidth == 0 || _decodeWidth >= 1280) return 0;
             int n = ActiveStreams;
             int g = 0;
@@ -623,7 +638,7 @@ namespace IproNvrTool
                 }
                 finally { _busy = false; }
             });
-            if (!_pic.IsHandleCreated) _busy = false;
+            if (!_pic.IsHandleCreated) { _busy = false; try { img.Dispose(); } catch { } }
         }
 
         /// <summary>Hentikan pembacaan lokal (cepat, aman dipanggil dari UI thread).</summary>
