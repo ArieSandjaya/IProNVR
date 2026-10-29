@@ -45,6 +45,17 @@ namespace IproNvrTool
         }
     }
 
+    /// <summary>MaximizedBounds untuk form tanpa bingkai. Lokasinya harus RELATIF terhadap sudut monitor tempat form berada
+    /// (bukan koordinat layar mutlak), kalau tidak, di monitor ke-2 jendela ter-maximize di luar layar (hilang).</summary>
+    public static class AsmScreen
+    {
+        public static Rectangle MaxBounds(Screen sc, bool full)
+        {
+            Rectangle area = full ? sc.Bounds : sc.WorkingArea;
+            return new Rectangle(area.X - sc.Bounds.X, area.Y - sc.Bounds.Y, area.Width, area.Height);
+        }
+    }
+
     /// <summary>Logo teks di kiri baris tab (ala "Video Surveillance Software / ASM300 Series").</summary>
     public class BrandLogo : Control
     {
@@ -210,7 +221,7 @@ namespace IproNvrTool
             Width = 1480;
             Height = 900;
             StartPosition = FormStartPosition.CenterScreen;
-            MaximizedBounds = Screen.FromPoint(Cursor.Position).WorkingArea;
+            MaximizedBounds = AsmScreen.MaxBounds(Screen.FromPoint(Cursor.Position), false);
             BackColor = Asm.Bg;
             KeyPreview = true;
             UiSmooth.Attach(this);
@@ -533,7 +544,7 @@ namespace IproNvrTool
 
         void ToggleMaximize()
         {
-            MaximizedBounds = Screen.FromControl(this).WorkingArea;
+            MaximizedBounds = AsmScreen.MaxBounds(Screen.FromControl(this), false);
             WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
             if (wMax != null) { wMax.K = WindowState == FormWindowState.Maximized ? WinButton.Kind.Restore : WinButton.Kind.Max; wMax.Invalidate(); }
         }
@@ -575,7 +586,7 @@ namespace IproNvrTool
             if (!fullScreen)
             {
                 fsBar.Visible = true; fsBar.BringToFront();
-                MaximizedBounds = Screen.FromControl(this).Bounds;
+                MaximizedBounds = AsmScreen.MaxBounds(Screen.FromControl(this), true);
                 topBar.Visible = false;
                 WindowState = FormWindowState.Normal;
                 WindowState = FormWindowState.Maximized;
@@ -585,7 +596,7 @@ namespace IproNvrTool
             {
                 fsBar.Visible = false;
                 topBar.Visible = true;
-                MaximizedBounds = Screen.FromControl(this).WorkingArea;
+                MaximizedBounds = AsmScreen.MaxBounds(Screen.FromControl(this), false);
                 WindowState = FormWindowState.Normal;
                 fullScreen = false;
             }
@@ -748,7 +759,7 @@ namespace IproNvrTool
 
         void ToggleMax()
         {
-            MaximizedBounds = Screen.FromControl(this).WorkingArea;
+            MaximizedBounds = AsmScreen.MaxBounds(Screen.FromControl(this), false);
             WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
             wMax.K = WindowState == FormWindowState.Maximized ? WinButton.Kind.Restore : WinButton.Kind.Max;
             wMax.Invalidate();
@@ -756,7 +767,7 @@ namespace IproNvrTool
 
         protected override void OnLoad(EventArgs e)
         {
-            MaximizedBounds = Screen.FromControl(this).WorkingArea;
+            MaximizedBounds = AsmScreen.MaxBounds(Screen.FromControl(this), false);
             base.OnLoad(e);
         }
 
