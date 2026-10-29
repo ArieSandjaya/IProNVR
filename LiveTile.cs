@@ -509,10 +509,12 @@ namespace IproNvrTool
         int FfmpegFpsCap()
         {
             if (_decodeWidth == 0 || _decodeWidth >= 960) return 0;
+            int manual = AppSettings.Current.WallFps;
+            if (manual > 0) return manual;
             int n = ActiveStreams;
-            if (n > 40) return 8;
-            if (n > 16) return 12;
-            if (n > 6) return 20;
+            if (n > 40) return 15;
+            if (n > 16) return 20;
+            if (n > 6) return 25;
             return 0;
         }
 
@@ -522,9 +524,11 @@ namespace IproNvrTool
             if (_decodeWidth == 0 || _decodeWidth >= 1280) return 0;
             int n = ActiveStreams;
             int g = 0;
-            if (n > 40) g = 120;        // ~8 fps
-            else if (n > 16) g = 80;    // ~12 fps
-            else if (n > 6) g = 50;     // ~20 fps
+            int man = AppSettings.Current.WallFps;
+            if (man > 0) g = 1000 / man;
+            else if (n > 40) g = 66;        // ~15 fps
+            else if (n > 16) g = 50;    // ~20 fps
+            else if (n > 6) g = 40;     // ~25 fps
             if (_decodeWidth >= 960) g = Math.Min(g, 33);
             return g;
         }

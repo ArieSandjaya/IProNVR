@@ -45,6 +45,7 @@ namespace IproNvrTool
         public bool ResumePlayback = true;      // lanjut playback saat ganti kamera
         public string AppTitle = "IPRONVR Series";                     // judul besar di pojok kiri atas (bebas diisi)
         public string AppSubtitle = "Video Surveillance Software";     // baris kecil di atas judul
+        public int WallFps = 0;                 // batas fps area kecil (multi-area); 0 = otomatis menurut jumlah stream aktif
         public int AutoLogoutMin = 0;           // 0 = mati
         public int QdPreSec = 5;                // quick download: mundur sekian detik
         public int QdMinutes = 10;              // quick download: lama (menit)
