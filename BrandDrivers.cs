@@ -425,6 +425,93 @@ namespace IproNvrTool
             return list;
         }
 
+        static string Describe(Exception ex)
+        {
+            var we = ex as WebException;
+            if (we != null && we.Response != null)
+            {
+                try
+                {
+                    var hr = (HttpWebResponse)we.Response;
+                    string body = "";
+                    using (var sr = new StreamReader(hr.GetResponseStream())) { body = sr.ReadToEnd(); }
+                    body = body.Replace("\r", " ").Replace("\n", " ").Trim();
+                    return "HTTP " + (int)hr.StatusCode + (body.Length > 0 ? " " + (body.Length > 100 ? body.Substring(0, 100) : body) : "");
+                }
+                catch { }
+            }
+            return ex.Message;
+        }
+
+        static string Md5Up(string t)
+        {
+            using (var m = System.Security.Cryptography.MD5.Create())
+            {
+                byte[] h = m.ComputeHash(Encoding.UTF8.GetBytes(t));
+                var sb = new StringBuilder();
+                foreach (byte b in h) sb.Append(b.ToString("X2"));
+                return sb.ToString();
+            }
+        }
+
+        /// <summary>Login sesi RPC2 (cara web UI Dahua; sebagian firmware XVR menolak Digest untuk unduh file). Mengembalikan id sesi atau null.</summary>
+        string RpcSession(NvrEndpoint ep, out string err)
+        {
+            err = "";
+            try
+            {
+                var js = new System.Web.Script.Serialization.JavaScriptSerializer();
+                string r1 = Post(ep, "/RPC2_Login", "{\"method\":\"global.login\",\"params\":{\"userName\":\"" + ep.Username.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",\"password\":\"\",\"clientType\":\"Web3.0\"},\"id\":1}", "application/json", 15000);
+                var d1 = js.DeserializeObject(r1) as Dictionary<string, object>;
+                if (d1 == null || !d1.ContainsKey("session")) { err = "RPC2: tanpa sesi"; return null; }
+                string sid = Convert.ToString(d1["session"]);
+                var pr = d1.ContainsKey("params") ? d1["params"] as Dictionary<string, object> : null;
+                string realm = pr != null && pr.ContainsKey("realm") ? Convert.ToString(pr["realm"]) : "";
+                string rnd = pr != null && pr.ContainsKey("random") ? Convert.ToString(pr["random"]) : "";
+                string a1 = Md5Up(ep.Username + ":" + realm + ":" + ep.Password);
+                string h = Md5Up(ep.Username + ":" + rnd + ":" + a1);
+                string body = "{\"method\":\"global.login\",\"session\":\"" + sid + "\",\"params\":{\"userName\":\"" + ep.Username.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",\"password\":\"" + h
+                    + "\",\"clientType\":\"Web3.0\",\"authorityType\":\"Default\",\"passwordType\":\"Default\"},\"id\":2}";
+                string r2 = Post(ep, "/RPC2_Login", body, "application/json", 15000);
+                if (r2.IndexOf("\"result\":true", StringComparison.OrdinalIgnoreCase) < 0 && r2.IndexOf("\"result\": true", StringComparison.OrdinalIgnoreCase) < 0) { err = "RPC2 login ditolak: " + (r2.Length > 100 ? r2.Substring(0, 100) : r2); return null; }
+                return sid;
+            }
+            catch (Exception ex) { err = "RPC2: " + Describe(ex); return null; }
+        }
+
+        /// <summary>Unduh satu file .dav. Urutan cara: RPC_Loadfile (Digest) -> RPC_Loadfile dengan sesi RPC2 -> loadfile.cgi per waktu. diag berisi alasan tiap cara yang gagal.</summary>
+        bool FetchFile(NvrEndpoint ep, string path, string startStamp, string dav, DownloadJob job, out string diag)
+        {
+            diag = "";
+            long before = job.Bytes;
+            try
+            {
+                SaveStream(NvrSession.CreateRequest(ep, "/cgi-bin/RPC_Loadfile" + path, 30000), dav, job);
+                if (job.Bytes - before >= 1024) return true;
+                diag += "Digest: data kosong; ";
+            }
+            catch (Exception ex) { if (job.Cancel) return false; diag += "Digest: " + Describe(ex) + "; "; }
+            job.Bytes = before;
+
+            string err;
+            string sid = RpcSession(ep, out err);
+            if (sid != null)
+            {
+                try
+                {
+                    HttpWebRequest rq = NvrSession.CreateRequest(ep, "/RPC_Loadfile" + path, 30000);
+                    rq.Headers["Cookie"] = "DhWebClientSessionID=" + sid;
+                    SaveStream(rq, dav, job);
+                    if (job.Bytes - before >= 1024) return true;
+                    diag += "Sesi RPC2: data kosong; ";
+                }
+                catch (Exception ex) { if (job.Cancel) return false; diag += "Sesi RPC2: " + Describe(ex) + "; "; }
+                job.Bytes = before;
+            }
+            else diag += err + "; ";
+            return false;
+        }
+
         protected override void DoDownload(NvrRecord nvr, int channel, DateTime startLocal, DateTime endLocal, string kind,
             string folder, DownloadJob job, Action<string> status)
         {
@@ -481,9 +568,14 @@ namespace IproNvrTool
                     string stamp = Regex.Replace(f.Value, @"[^0-9]", "");
                     string dav = Path.Combine(folder, Safe(nvr.Name + "_CH" + channel + "_" + (stamp.Length > 0 ? stamp : n.ToString())) + ".dav");
                     string path = f.Key.StartsWith("/") ? f.Key : "/" + f.Key;
-                    long before = job.Bytes;
-                    SaveStream(NvrSession.CreateRequest(ep, "/cgi-bin/RPC_Loadfile" + path, 30000), dav, job);
-                    if (job.Bytes - before < 1024) { try { File.Delete(dav); } catch { } job.Warn += "file " + n + " kosong (ditolak DVR). "; continue; }
+                    string diag;
+                    if (!FetchFile(ep, path, f.Value, dav, job, out diag))
+                    {
+                        try { File.Delete(dav); } catch { }
+                        job.Warn += "file " + n + " ditolak DVR [" + diag + "] ";
+                        Log.Write("Dahua download ditolak: " + diag);
+                        continue;
+                    }
                     job.Files++;
                     if (wantMp4 && ffmpeg != null && !job.Cancel)
                     {
@@ -493,7 +585,16 @@ namespace IproNvrTool
                         else job.Warn += "konversi mp4 gagal (file .dav disimpan): " + (err.Length > 120 ? err.Substring(0, 120) : err) + " ";
                     }
                 }
-                if (job.Files == 0 && !job.Cancel && job.Result.Length == 0) job.Result = "Download gagal: DVR tidak mengirim data. " + job.Warn;
+                if (job.Files == 0 && !job.Cancel && job.Result.Length == 0)
+                {
+                    // file ditemukan tetapi semua ditolak: terakhir coba lewat RTSP playback
+                    string why = job.Warn;
+                    job.Warn = "";
+                    if (status != null) status("Unduh file ditolak XVR, mencoba lewat RTSP...");
+                    RtspDownload(nvr, channel, startLocal, endLocal, folder, job, status);
+                    if (job.Files == 0) job.Result = "Download ditolak XVR. " + why + (job.Result.Length > 0 ? " | RTSP: " + job.Result : "");
+                    else job.Warn = "file asli ditolak, memakai RTSP (real-time). ";
+                }
             }
             catch (Exception ex)
             {
