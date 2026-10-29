@@ -45,6 +45,7 @@ namespace IproNvrTool
         public bool ResumePlayback = true;      // lanjut playback saat ganti kamera
         public string AppTitle = "IPRONVR Series";                     // judul besar di pojok kiri atas (bebas diisi)
         public string AppSubtitle = "Video Surveillance Software";     // baris kecil di atas judul
+        public string Go2RtcPath = "";           // go2rtc.exe untuk Wall web (kosong = Tools\\go2rtc\\go2rtc.exe di folder aplikasi)
         public int WallFps = 0;                 // batas fps area kecil (multi-area); 0 = otomatis menurut jumlah stream aktif
         public int AutoLogoutMin = 0;           // 0 = mati
         public int QdPreSec = 5;                // quick download: mundur sekian detik
