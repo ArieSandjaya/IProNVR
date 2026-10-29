@@ -527,13 +527,40 @@ namespace IproNvrTool
             _prod = 0; _dropBusy = 0; _dropGap = 0; _diagTick = Environment.TickCount;
         }
 
+        volatile bool _hiddenView;
+        bool _visHooked;
+
+        /// <summary>Area tidak terlihat (tab/jendela disembunyikan atau di-minimize, atau ukuran nol): gambar dilewati agar CPU/UI tidak dipakai percuma.
+        /// Dipasang sekali setelah handle ada; dihitung di UI thread, dibaca thread ffmpeg.</summary>
+        void HookVisibility()
+        {
+            if (_visHooked || !_pic.IsHandleCreated) return;
+            _visHooked = true;
+            Action upd = delegate
+            {
+                try
+                {
+                    Form f = _pic.FindForm();
+                    _hiddenView = !_pic.Visible || _pic.Width < 4 || _pic.Height < 4 || (f != null && f.WindowState == FormWindowState.Minimized);
+                }
+                catch { _hiddenView = false; }
+            };
+            _pic.VisibleChanged += delegate { upd(); };
+            _pic.SizeChanged += delegate { upd(); };
+            _pic.ParentChanged += delegate { upd(); };
+            Form form = _pic.FindForm();
+            if (form != null) form.Resize += delegate { upd(); };
+            upd();
+        }
+
         /// <summary>Tile ditahan (area tersembunyi saat satu kamera diperbesar): koneksi RTSP tetap hidup, gambar tidak digambar. Lanjut seketika tanpa reconnect.</summary>
         public volatile bool Suspended;
 
         void ShowJpeg(byte[] jpeg)
         {
             _lastTick = Environment.TickCount;
-            if (Suspended) { Interlocked.Increment(ref _frames); return; }
+            if (!_visHooked && _pic.IsHandleCreated) { try { _pic.BeginInvoke((Action)HookVisibility); } catch { } }
+            if (Suspended || _hiddenView) { Interlocked.Increment(ref _frames); return; }
             _prod++;
             Diag();
             if (_busy)
