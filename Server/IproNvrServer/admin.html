@@ -219,6 +219,7 @@ function listPage(r){
     var tr=document.createElement('tr'),cs=cellFor(r,row),h='';cs.forEach(function(x){h+='<td>'+x+'</td>'});h+='<td class="act"></td>';tr.innerHTML=h;
     var ac=tr.querySelector('.act');
     if(admin){
+      if(r=='nvrs')ac.appendChild(btn('Password','',function(){showNvrPass(row)}));
       if(r=='nvrs')ac.appendChild(btn('Deteksi kamera','p',function(){fetchCams(row.id)}));
       if(r=='nvrs')ac.appendChild(btn('Deteksi RTSP','i',function(){askDisc(row.id,[])}));
       if(r=='cameras')ac.appendChild(btn('Deteksi','i',function(){startDisc(row.nvr_id,[row.id],true)}));
@@ -228,6 +229,20 @@ function listPage(r){
     tb.appendChild(tr)});
   if(!rows.length)tb.innerHTML='<tr><td colspan="'+(HEADS[r].length+1)+'" class="empty">Belum ada data.</td></tr>';
   w.appendChild(card);return w}
+function showNvrPass(row){
+  var el=document.getElementById('modal');
+  el.innerHTML='<div class="m"><div class="mh"><h3>Login NVR - '+esc(row.name)+'</h3><button class="btn sm" id="mx">✕</button></div><div class="mb">'+
+    '<div><label>Alamat</label><input readonly value="'+esc(row.host+':'+row.port)+'"></div>'+
+    '<div><label>User</label><input readonly id="npu" value="'+esc(row.username)+'"></div>'+
+    '<div><label>Password</label><div style="display:flex;gap:6px"><input readonly id="npp" type="password" value="'+esc(row.password)+'" style="flex:1"><button class="btn sm" id="npv" type="button">Lihat</button><button class="btn sm" id="npc" type="button">Salin</button></div></div></div>'+
+    '<div class="mf"><button class="btn p" id="mc">Tutup</button></div></div>';
+  el.style.display='flex';
+  function close(){el.style.display='none';el.innerHTML=''}
+  el.querySelector('#mx').onclick=el.querySelector('#mc').onclick=close;
+  var pw=el.querySelector('#npp'),v=el.querySelector('#npv');
+  v.onclick=function(){var h=pw.type=='password';pw.type=h?'text':'password';v.textContent=h?'Sembunyikan':'Lihat'};
+  el.querySelector('#npc').onclick=function(){pw.select();try{document.execCommand('copy')}catch(e){}this.textContent='Tersalin';var b=this;setTimeout(function(){b.textContent='Salin'},1500)};
+}
 function btn(t,c,f){var b=document.createElement('button');b.className='btn sm '+c;b.textContent=t;b.style.marginLeft='4px';b.onclick=f;return b}
 
 
@@ -336,6 +351,10 @@ function edit(r,row){
   var el=document.getElementById('modal');
   el.innerHTML='<div class="m"><div class="mh"><h3>'+(isNew?'Tambah ':'Ubah ')+m.t+'</h3><button class="btn sm" id="mx">✕</button></div><div class="mb">'+f+'</div><div class="mf"><button class="btn" id="mc">Batal</button><button class="btn p" id="ms">Simpan</button></div></div>';
   el.style.display='flex';
+  [].forEach.call(el.querySelectorAll('input[type=password][data-k]'),function(i){
+    var w=document.createElement('div');w.style.cssText='display:flex;gap:6px;align-items:center';i.parentNode.insertBefore(w,i);w.appendChild(i);i.style.flex='1';
+    var b=document.createElement('button');b.type='button';b.className='btn sm';b.textContent='Lihat';
+    b.onclick=function(){var show=i.type=='password';i.type=show?'text':'password';b.textContent=show?'Sembunyikan':'Lihat'};w.appendChild(b)});
   function stopLive(){var im=el.querySelector('#pvbox img');if(im){im.src='';im.remove()}var b=el.querySelector('#pvbox'),ps=el.querySelector('#ps'),pv=el.querySelector('#pv');if(b)b.style.display='none';if(ps)ps.style.display='none';if(pv)pv.style.display=''}
   function close(){stopLive();el.style.display='none';el.innerHTML=''}
   if(r=='nvrs'){
