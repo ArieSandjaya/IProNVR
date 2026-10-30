@@ -24,6 +24,7 @@ namespace IproNvrTool
         public int PlaybackIntervalMs = 3000; // spec: kirim perintah minimal tiap 3 detik
         public string FfmpegPath = "";        // untuk dekode live H.264/H.265 (kosong = cari di folder aplikasi / PATH)
         public int LiveFormat = 2;            // 2 H.264, 3 H.265 (nilai lain, mis. dari versi lama, dianggap H.264)
+        public bool UseVlc = true;              // live RTSP lewat LibVLC (dekode GPU dalam proses); false = ffmpeg
         public bool UseBmpFrames = false;           // frame RTSP live dikirim ffmpeg sebagai BMP (tanpa kompresi JPEG): CPU lebih ringan
         public string HwAccel = "auto";       // akselerasi dekode GPU ffmpeg: auto, d3d11va, dxva2, cuda, qsv, none
         public int DecodeWidth = 640;         // lebar hasil dekode (px); 0 = ukuran asli

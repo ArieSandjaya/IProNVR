@@ -207,7 +207,7 @@ namespace IproNvrTool
         /// <summary>Byte frame -> JPEG untuk disimpan sebagai file (frame BMP dari ffmpeg dikonversi); JPEG dikembalikan apa adanya.</summary>
         public static byte[] ToJpegBytes(byte[] d)
         {
-            if (d == null || d.Length < 2 || d[0] != (byte)'B' || d[1] != (byte)'M') return d;
+            if (d == null || d.Length < 2 || (d[0] == 0xFF && d[1] == 0xD8)) return d;
             using (var img = DecodeImage(d))
             using (var ms = new System.IO.MemoryStream())
             {

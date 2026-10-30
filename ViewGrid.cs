@@ -541,6 +541,7 @@ namespace IproNvrTool
             else if (useSub) Tile.Sources = StreamPlan.ForMultiview(nvr, Dir.Cam(nvr.Id, channel));
             if (Fish != null && Fish.Enabled && Fish.CamStream) Tile.Sources = CamStreamSources(nvr, channel);
             Tile.FrameFilter = FilterFrame;
+            Tile.NeedsFrames = delegate { return FishFilter; };
             Tile.HideHeader();
             Tile.FillCell();
             Tile.Dock = DockStyle.Fill;

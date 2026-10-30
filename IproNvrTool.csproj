@@ -35,6 +35,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- LibVLC: dekoder live GPU. Di-restore otomatis oleh Visual Studio (butuh internet saat build pertama; library asli ~150 MB masuk ke folder libvlc di output). -->
+    <PackageReference Include="LibVLCSharp" Version="3.8.2" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.20" />
   </ItemGroup>
 
 </Project>

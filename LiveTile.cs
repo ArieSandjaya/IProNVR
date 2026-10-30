@@ -50,7 +50,31 @@ namespace IproNvrTool
     public class LiveTile : Panel
     {
         public int Cam { get; private set; }
-        public byte[] LastJpeg;
+        byte[] _lastJpeg;
+        /// <summary>Frame terakhir (JPEG/BMP/PNG). Mode LibVLC: diambil sebagai snapshot saat diminta.</summary>
+        public byte[] LastJpeg
+        {
+            get
+            {
+                VlcPlayer v = _vp;
+                if (v != null)
+                {
+                    try
+                    {
+                        string f = Path.Combine(Path.GetTempPath(), "iprosnap_" + Guid.NewGuid().ToString("N") + ".png");
+                        try { if (v.Snapshot(f) && File.Exists(f)) return File.ReadAllBytes(f); }
+                        finally { try { File.Delete(f); } catch { } }
+                    }
+                    catch { }
+                    return null;
+                }
+                return _lastJpeg;
+            }
+            set { _lastJpeg = value; }
+        }
+        /// <summary>Diisi pemilik tile: true bila tile butuh frame .NET (mis. dewarp fisheye) sehingga LibVLC tidak boleh dipakai.</summary>
+        public Func<bool> NeedsFrames;
+        volatile VlcPlayer _vp;
         /// <summary>Pengolah frame sebelum tampil (mis. dewarp fisheye); null/mengembalikan null = tampil apa adanya.</summary>
         public Func<Image, Image> FrameFilter;
         public event Action<LiveTile, PointF> ImageClicked;
@@ -84,7 +108,16 @@ namespace IproNvrTool
         public PictureBox Picture { get { return _pic; } }
 
         /// <summary>Gambar terakhir yang sedang tampil (salinan tidak dibuat).</summary>
-        public Image CurrentImage { get { return _pic.Image; } }
+        public Image CurrentImage
+        {
+            get
+            {
+                if (_pic.Image != null || _vp == null) return _pic.Image;
+                byte[] d = LastJpeg;
+                if (d == null) return null;
+                try { return Ui.DecodeImage(d); } catch { return null; }
+            }
+        }
 
         public bool HasPicture { get { return _frames > 0; } }
         HttpWebRequest _req;
@@ -377,6 +410,90 @@ namespace IproNvrTool
             return good;
         }
 
+        /// <summary>RTSP lewat LibVLC (dekode GPU dalam proses, gambar langsung ke jendela tile). false = tidak dipakai (ffmpeg menggantikan).</summary>
+        bool RunVlc(StreamSource src)
+        {
+            if (!AppSettings.Current.UseVlc || !Vlc.Available) return false;
+            Func<bool> nf = NeedsFrames;
+            if (nf != null && nf()) return false;
+            VlcPlayer vp = null;
+            bool opening = false;
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                for (int w = 0; w < 50 && !_stop && !_pic.IsHandleCreated && !_pic.IsDisposed; w++) Thread.Sleep(100);   // tunggu kontrol tampil
+                if (_stop || _pic.IsDisposed) return true;
+                if (!_pic.IsHandleCreated) return false;
+                IntPtr h = IntPtr.Zero;
+                _pic.Invoke(new Action(delegate
+                {
+                    if (_pic.Image != null) { Image o = _pic.Image; _pic.Image = null; o.Dispose(); }
+                    h = _pic.Handle;
+                }));
+                Log.Write("CAM " + Cam + ": membuka " + src.Label + " " + StreamSource.MaskUrl(src.Url) + " [LibVLC]");
+                SetTitle("CAM " + Cam + " - menghubungkan RTSP (VLC)...");
+                opening = true;
+                vp = VlcPlayer.Open(h, src.Url);
+                opening = false;
+                _vp = vp;
+                long lastT = -1;
+                int lastProg = Environment.TickCount;
+                int nextClick = 0;
+                bool announced = false;
+                while (!_stop)
+                {
+                    Thread.Sleep(250);
+                    string st = vp.State;
+                    if (st == "Error" || st == "Ended" || st == "Stopped")
+                    {
+                        if (!_stop) Log.Write("CAM " + Cam + ": LibVLC status " + st + " setelah " + (sw.ElapsedMilliseconds / 1000.0).ToString("0.0") + " dtk.");
+                        break;
+                    }
+                    int now = Environment.TickCount;
+                    long t = vp.Time;
+                    if (t != lastT)
+                    {
+                        lastT = t; lastProg = now; _lastTick = now;
+                        if (t > 0 && _frames < 3)
+                        {
+                            _frames = 3;
+                            if (!announced) { announced = true; SetTitle("CAM " + Cam + " - live (" + (src.Label ?? "RTSP") + ", VLC)"); }
+                        }
+                    }
+                    else if (unchecked(now - lastProg) > (_frames == 0 ? 15000 : 10000))
+                    {
+                        Log.Write("CAM " + Cam + ": LibVLC tidak ada kemajuan " + (_frames == 0 ? "15" : "10") + " dtk, menyambung ulang.");
+                        break;
+                    }
+                    if (unchecked(now - nextClick) >= 0) { vp.ClickThrough(); nextClick = now + (_frames < 3 ? 500 : 5000); }
+                    Func<bool> nf2 = NeedsFrames;
+                    if (nf2 != null && nf2())
+                    {
+                        Log.Write("CAM " + Cam + ": butuh frame .NET (fisheye/PTZ virtual), beralih ke ffmpeg.");
+                        return false;
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Exception e = ex is System.Reflection.TargetInvocationException && ex.InnerException != null ? ex.InnerException : ex;
+                if (_stop) return true;
+                if (opening) { Vlc.MarkBroken(e.GetType().Name + ": " + e.Message); return false; }
+                Log.Write("CAM " + Cam + ": LibVLC gagal: " + e.Message);
+                return true;
+            }
+            finally
+            {
+                _vp = null;
+                if (vp != null)
+                {
+                    VlcPlayer d = vp;
+                    Task.Run(delegate { try { d.Dispose(); } catch { } });
+                }
+            }
+        }
+
         /// <summary>RTSP langsung ke kamera: ffmpeg membuka URL, mendekode, dan menghasilkan gambar.
         /// Berakhir bila ffmpeg berhenti, tidak ada gambar dalam 15 detik, atau tile dihentikan.</summary>
         void RunRtsp(StreamSource src)
@@ -384,6 +501,7 @@ namespace IproNvrTool
             var sw = Stopwatch.StartNew();
             FfmpegPipe ff = null;
             _comp = null; // tidak ada STOP ke NVR untuk sumber RTSP
+            if (RunVlc(src)) return;
             try
             {
                 string exe = FfmpegPipe.FindExe();
@@ -709,6 +827,8 @@ namespace IproNvrTool
             {
                 try { ff.Dispose(); } catch { }
             }
+            VlcPlayer vp = _vp;
+            if (vp != null) { try { vp.Detach(); } catch { } }   // lepas dari jendela sebelum kontrol dihancurkan; Stop/Dispose di thread RTSP
         }
 
         /// <summary>Kirim push.cgi CMD=STOP ke NVR secara sinkron (panggil dari thread latar); tidak berefek untuk sumber RTSP.</summary>
