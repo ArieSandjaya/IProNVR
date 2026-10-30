@@ -396,7 +396,7 @@ namespace IproNvrTool
                 Log.Write("CAM " + Cam + ": membuka " + src.Label + " " + StreamSource.MaskUrl(src.Url));
                 SetTitle("CAM " + Cam + " - menghubungkan RTSP...");
                 _ffCap = FfmpegFpsCap();
-                _bmpMode = AppSettings.Current.FrameBmp && !_bmpFailed;
+                _bmpMode = AppSettings.Current.UseBmpFrames && !_bmpFailed;
                 ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable, _ffCap, _bmpMode);
                 _ff = ff;
                 while (!_stop && !ff.HasExited)
