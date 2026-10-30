@@ -177,6 +177,8 @@ namespace IproNvrTool
             public GroupRec Group; public ScreenLayout Lay; public Form Form; public LiveTile Tile;
             public List<Cell> Cells; public int W, H, Port; public string Exe; public string Backend;
             public volatile bool Stop;
+            public volatile string Status = "memulai...";
+            public volatile string Viewer = "";
             public Process Proc;
             public readonly List<string> Err = new List<string>();
             public Thread Worker;
@@ -186,6 +188,24 @@ namespace IproNvrTool
                 Stop = true;
                 try { if (Proc != null && !Proc.HasExited) Proc.Kill(); } catch { }
             }
+        }
+
+        static string LogPath
+        {
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "IproNvrTool", "mosaic_ffmpeg.log"); }
+        }
+        static readonly object fileLock = new object();
+        static void FileLog(string line)
+        {
+            try
+            {
+                lock (fileLock)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(LogPath));
+                    File.AppendAllText(LogPath, DateTime.Now.ToString("HH:mm:ss ") + MaskArgs(line) + "\r\n");
+                }
+            }
+            catch { }
         }
 
         static readonly List<Session> sessions = new List<Session>();
@@ -242,13 +262,18 @@ namespace IproNvrTool
                     if (cc.Url == null) { cc.Alive = false; continue; }
                     tasks.Add(System.Threading.Tasks.Task.Run(delegate { cc.Alive = Reachable(cc.Url); }));
                 }
+                s.Status = "memeriksa " + tasks.Count + " kamera...";
                 try { System.Threading.Tasks.Task.WaitAll(tasks.ToArray(), 8000); } catch { }
+                int alive = 0; foreach (Cell c in s.Cells) if (c.Alive) alive++;
+                s.Status = alive + " dari " + tasks.Count + " kamera terjangkau; membuka ffmpeg (" + (s.Backend == "nvidia" ? "NVIDIA" : "Intel") + ")...";
+                FileLog(s.Status);
                 string args = BuildArgs(s, s.Cells);
                 if (args == null) { Log.Write("Mosaic: tidak ada kamera yang terjangkau, coba lagi 15 dtk."); Sleep(s, 15000); continue; }
                 var sw = Stopwatch.StartNew();
                 try
                 {
                     Log.Write("Mosaic: ffmpeg " + MaskArgs(args));
+                    FileLog("CMD: " + args);
                     var psi = new ProcessStartInfo(s.Exe, args);
                     psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardError = true;
                     Process p = Process.Start(psi);
@@ -262,6 +287,8 @@ namespace IproNvrTool
                             {
                                 line = MaskArgs(line);
                                 lock (s.Err) { s.Err.Add(line); if (s.Err.Count > 40) s.Err.RemoveAt(0); }
+                                FileLog(line);
+                                s.Status = "ffmpeg: " + (line.Length > 110 ? line.Substring(0, 110) : line);
                                 if (!s.Stop) Log.Write("mosaic ffmpeg: " + line);
                             }
                         }
@@ -273,6 +300,7 @@ namespace IproNvrTool
                     while (!s.Stop && !p.HasExited)
                     {
                         Thread.Sleep(500);
+                        if (sw.Elapsed.TotalSeconds > 3 && s.Status.StartsWith("memeriksa") == false && s.Status.IndexOf("membuka ffmpeg") >= 0) s.Status = "ffmpeg berjalan, menunggu frame pertama (" + (int)sw.Elapsed.TotalSeconds + " dtk)...";
                         if (unchecked(Environment.TickCount - nextProbe) >= 0)
                         {
                             nextProbe = Environment.TickCount + 60000;
@@ -283,9 +311,11 @@ namespace IproNvrTool
                         }
                     }
                 }
-                catch (Exception ex) { Log.Write("Mosaic: " + ex.Message); }
+                catch (Exception ex) { Log.Write("Mosaic: " + ex.Message); FileLog("EXC: " + ex.Message); s.Status = "gagal: " + ex.Message; }
                 finally { try { if (s.Proc != null && !s.Proc.HasExited) s.Proc.Kill(); } catch { } }
                 if (s.Stop) return;
+                FileLog("ffmpeg berhenti setelah " + (int)sw.Elapsed.TotalSeconds + " dtk");
+                s.Status = "ffmpeg berhenti setelah " + (int)sw.Elapsed.TotalSeconds + " dtk, mengulang... (lihat mosaic_ffmpeg.log)";
                 fails = sw.Elapsed.TotalSeconds < 20 ? fails + 1 : 0;
                 if (fails >= 3)
                 {
@@ -367,6 +397,30 @@ namespace IproNvrTool
             tile.Sources = new List<StreamSource> { new StreamSource { Rtsp = true, Url = url, Label = "Mosaic GPU" } };
             s.Tile = tile;
             f.Controls.Add(tile);
+            try { File.WriteAllText(LogPath, ""); } catch { }
+
+            // status diagnosis di pojok kiri atas (hilang sendiri setelah video tampil)
+            var st = new Label();
+            st.AutoSize = true;
+            st.MaximumSize = new Size(Math.Max(300, b.Width - 40), 0);
+            st.ForeColor = Color.Yellow;
+            st.BackColor = Color.FromArgb(20, 20, 20);
+            st.Font = new Font("Segoe UI", 9f);
+            st.Location = new Point(8, 8);
+            st.Parent = tile.Picture;
+            st.Enabled = false;
+            tile.StatusChanged += delegate(LiveTile t, string text) { s.Viewer = text; };
+            var tm = new System.Windows.Forms.Timer();
+            tm.Interval = 1000;
+            tm.Tick += delegate
+            {
+                if (tile.HasPicture) { st.Visible = false; return; }
+                st.Visible = true;
+                st.Text = "Mosaic GPU: " + s.Status + "\nPemutar: " + s.Viewer + "\nLog: " + LogPath;
+                st.BringToFront();
+            };
+            tm.Start();
+            f.FormClosed += delegate { tm.Stop(); tm.Dispose(); };
 
             // nama kamera per kotak
             for (int i = 0; i < s.Cells.Count; i++)
