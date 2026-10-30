@@ -44,20 +44,46 @@ namespace IproNvrTool
         }
 
         /// <summary>Uji nyata: ffmpeg membuat satu frame kecil di GPU lalu meng-encode-nya. Berhasil = backend tersedia di PC ini.</summary>
+        // varian argumen Quick Sync yang dicoba berurutan (driver/build ffmpeg berbeda-beda soal perangkat anak d3d11/dxva2 dan opsi encoder)
+        static readonly string[][] QsvVariants = new string[][]
+        {
+            new string[] { "qsv=hw:hw_any,child_device_type=d3d11va", "-b:v 2M -look_ahead 0" },
+            new string[] { "qsv=hw:hw_any,child_device_type=dxva2", "-b:v 2M -look_ahead 0" },
+            new string[] { "qsv=hw", "-b:v 2M -look_ahead 0 -low_power 0" },
+            new string[] { "qsv=hw", "" },
+        };
+        static int qsvVariant;   // varian yang lolos uji
+
         static bool Probe(string exe, string which, out string log)
         {
             // uji seluruh rantai kecil: dua sumber -> upload GPU -> scale -> overlay -> encode (encoder QSV menolak gambar sangat kecil, jadi 320x240)
             string src = "-f lavfi -i color=c=black:s=320x240:r=15:d=1 -f lavfi -i color=c=gray:s=320x240:r=15:d=1 ";
-            string a;
-            if (which == "nvidia")
-                a = "-hide_banner -loglevel error -init_hw_device cuda=cu:0 -filter_hw_device cu " + src
-                  + "-filter_complex \"[0:v]format=nv12,hwupload_cuda[a];[1:v]format=nv12,hwupload_cuda,scale_cuda=160:120[b];[a][b]overlay_cuda=x=0:y=0\" -c:v h264_nvenc -f null -";
-            else
-                a = "-hide_banner -loglevel error -init_hw_device qsv=hw -filter_hw_device hw " + src
-                  + "-filter_complex \"[0:v]format=nv12,hwupload=extra_hw_frames=16[a];[1:v]format=nv12,hwupload=extra_hw_frames=16,scale_qsv=w=160:h=120[b];[a][b]overlay_qsv=x=0:y=0\" -c:v h264_qsv -f null -";
             int code;
-            log = Run(exe, a, 15000, out code);
-            return code == 0;
+            if (which == "nvidia")
+            {
+                string a = "-hide_banner -loglevel error -init_hw_device cuda=cu:0 -filter_hw_device cu " + src
+                  + "-filter_complex \"[0:v]format=nv12,hwupload_cuda[a];[1:v]format=nv12,hwupload_cuda,scale_cuda=160:120[b];[a][b]overlay_cuda=x=0:y=0\" -c:v h264_nvenc -f null -";
+                log = Run(exe, a, 15000, out code);
+                return code == 0;
+            }
+            var all = new StringBuilder();
+            for (int v = 0; v < QsvVariants.Length; v++)
+            {
+                string dev = QsvVariants[v][0], enc = QsvVariants[v][1];
+                string a = "-hide_banner -loglevel error -init_hw_device " + dev + " -filter_hw_device hw " + src
+                  + "-filter_complex \"[0:v]format=nv12,hwupload=extra_hw_frames=16[a];[1:v]format=nv12,hwupload=extra_hw_frames=16,scale_qsv=w=160:h=120[b];[a][b]overlay_qsv=x=0:y=0\" -c:v h264_qsv " + enc + " -f null -";
+                string l = Run(exe, a, 15000, out code);
+                if (code == 0) { qsvVariant = v; log = l; Log.Write("Mosaic GPU: Quick Sync varian #" + (v + 1) + " lolos (" + dev + ")."); return true; }
+                all.AppendLine("-- varian " + (v + 1) + " (" + dev + " " + enc + "):");
+                all.AppendLine(l.Trim());
+            }
+            // diagnosis: apakah encoder sendiri bisa (tanpa filter GPU)? membedakan masalah driver/encoder dengan masalah filter
+            string d = Run(exe, "-hide_banner -loglevel error -f lavfi -i color=c=black:s=320x240:r=15:d=1 -vf format=nv12 -c:v h264_qsv -f null -", 15000, out code);
+            all.AppendLine("-- encoder h264_qsv saja (tanpa filter GPU): " + (code == 0 ? "BERHASIL" : "GAGAL\n" + d.Trim()));
+            string d2 = Run(exe, "-hide_banner -loglevel error -init_hw_device qsv=hw -filter_hw_device hw -f lavfi -i color=c=black:s=320x240:r=15:d=1 -vf format=nv12,hwupload=extra_hw_frames=16,scale_qsv=w=160:h=120,hwdownload,format=nv12 -f null -", 15000, out code);
+            all.AppendLine("-- hwupload + scale_qsv saja (tanpa encoder): " + (code == 0 ? "BERHASIL" : "GAGAL\n" + d2.Trim()));
+            log = all.ToString();
+            return false;
         }
 
         /// <summary>"nvidia" / "intel" sesuai pengaturan (Otomatis = coba NVIDIA lalu Intel). Null + backendError bila tidak ada yang bisa dipakai.</summary>
@@ -77,7 +103,7 @@ namespace IproNvrTool
                 }
                 catch (Exception ex) { log = ex.Message; }
                 string t = (log ?? "").Trim();
-                if (t.Length > 400) t = t.Substring(t.Length - 400);
+                if (t.Length > 2500) t = t.Substring(t.Length - 2500);
                 sb.AppendLine("[" + (w == "nvidia" ? "NVIDIA (NVDEC/NVENC)" : "Intel (Quick Sync)") + "] tidak bisa dipakai:\n" + t + "\n");
                 Log.Write("Mosaic GPU: backend " + w + " gagal: " + t.Replace("\n", " | "));
             }
@@ -169,7 +195,7 @@ namespace IproNvrTool
             bool nv = s.Backend == "nvidia";
             var sb = new StringBuilder();
             sb.Append("-hide_banner -loglevel warning -nostats ");
-            sb.Append(nv ? "-init_hw_device cuda=cu:0 -filter_hw_device cu " : "-init_hw_device qsv=hw -filter_hw_device hw ");
+            sb.Append(nv ? "-init_hw_device cuda=cu:0 -filter_hw_device cu " : "-init_hw_device " + QsvVariants[qsvVariant][0] + " -filter_hw_device hw ");
             var fc = new StringBuilder();
             int idx = 0;
             var scaled = new List<string>();
@@ -198,7 +224,7 @@ namespace IproNvrTool
             sb.Append("-filter_complex \"" + fc + "\" -map \"[b" + scaled.Count + "]\" -an ");
             int mb = Math.Max(4, s.W * s.H / 250000);
             if (nv) sb.Append("-c:v h264_nvenc -preset p2 -tune ll -rc cbr -b:v " + mb + "M -g " + Fps + " -bf 0 ");
-            else sb.Append("-c:v h264_qsv -preset veryfast -b:v " + mb + "M -maxrate " + mb + "M -g " + Fps + " -bf 0 -look_ahead 0 ");
+            else sb.Append("-c:v h264_qsv -preset veryfast -b:v " + mb + "M -maxrate " + mb + "M -g " + Fps + " -bf 0 " + (QsvVariants[qsvVariant][1].Contains("-look_ahead") ? "-look_ahead 0 " : "") + (QsvVariants[qsvVariant][1].Contains("-low_power") ? "-low_power 0 " : ""));
             sb.Append("-f mpegts \"udp://127.0.0.1:" + s.Port + "?pkt_size=1316\"");
             return sb.ToString();
         }
@@ -296,7 +322,20 @@ namespace IproNvrTool
             var dt = System.Threading.Tasks.Task.Run(delegate { bk = Detect(exe); });
             while (!dt.IsCompleted) { Application.DoEvents(); Thread.Sleep(30); }
             be = bk;
-            if (be == null) return backendError;
+            if (be == null)
+            {
+                string msg = backendError ?? "Mosaic GPU tidak tersedia.";
+                try
+                {
+                    string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "IproNvrTool");
+                    Directory.CreateDirectory(dir);
+                    string f0 = Path.Combine(dir, "mosaic_diag.txt");
+                    File.WriteAllText(f0, msg);
+                    if (msg.Length > 1600) msg = msg.Substring(0, 1600) + "\n...\n(Lengkapnya ada di " + f0 + ")";
+                }
+                catch { }
+                return msg;
+            }
 
             ScreenLayout lay = ScreenLayout.ById(g.Layout);
             Rectangle b = screen.Bounds;
