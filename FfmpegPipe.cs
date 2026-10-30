@@ -191,19 +191,24 @@ namespace IproNvrTool
         }
 
         /// <summary>Mode RTSP: ffmpeg membuka sendiri URL RTSP kamera (TCP) dan mendekodenya; codec dideteksi otomatis.</summary>
-        public static FfmpegPipe ForRtsp(string exe, string url, int width, string name, Action<byte[]> onJpeg, bool hw = false, int maxFps = 0)
+        public static FfmpegPipe ForRtsp(string exe, string url, int width, string name, Action<byte[]> onJpeg, bool hw = false, int maxFps = 0, bool bmp = false)
         {
             var sb = new StringBuilder();
             sb.Append("-hide_banner -loglevel error -nostats -fflags nobuffer -flags low_delay ");
             if (hw) sb.Append(HwAccels.Args(AppSettings.Current.HwAccel, null));
+            // banyak stream kecil: satu thread dekode per proses (puluhan proses x banyak thread = rebutan CPU) dan loop filter dilewati (~8% lebih ringan)
+            if (maxFps > 0 && !hw) sb.Append("-threads 1 ");
+            if (maxFps > 0 && maxFps <= 20) sb.Append("-skip_loop_filter all ");
             sb.Append("-rtsp_transport tcp -probesize 200000 -analyzeduration 1000000 ");
             sb.Append("-i \"" + url.Replace("\"", "%22") + "\" -an ");
             // batas fps DI ffmpeg (sebelum scale dan encode MJPEG): frame yang toh tidak ditampilkan tidak perlu di-skala/di-encode
             string vf = (maxFps > 0 ? "fps=" + maxFps : "") + (width > 0 ? (maxFps > 0 ? "," : "") + "scale=" + width + ":-2:flags=fast_bilinear" : "");
             if (vf.Length > 0) sb.Append("-vf " + vf + " ");
             sb.Append(VsyncArg());
-            sb.Append("-pix_fmt yuvj420p -q:v 5 -flush_packets 1 -f image2pipe -vcodec mjpeg pipe:1");
-            return new FfmpegPipe(exe, sb.ToString(), false, name, onJpeg);
+            // bmp: tanpa kompresi -> ffmpeg tidak meng-encode JPEG dan aplikasi tidak men-decode JPEG (~30-40% lebih ringan per stream)
+            if (bmp) sb.Append("-pix_fmt bgr24 -flush_packets 1 -f image2pipe -vcodec bmp pipe:1");
+            else sb.Append("-pix_fmt yuvj420p -q:v 5 -flush_packets 1 -f image2pipe -vcodec mjpeg pipe:1");
+            return new FfmpegPipe(exe, sb.ToString(), false, name, onJpeg, bmp);
         }
 
         static string _vsync;
@@ -253,8 +258,11 @@ namespace IproNvrTool
             return sb.ToString();
         }
 
-        FfmpegPipe(string exe, string args, bool useStdin, string name, Action<byte[]> onJpeg)
+        readonly bool _bmp;
+
+        FfmpegPipe(string exe, string args, bool useStdin, string name, Action<byte[]> onJpeg, bool bmp = false)
         {
+            _bmp = bmp;
             _name = name;
             _onJpeg = onJpeg;
 
@@ -284,8 +292,49 @@ namespace IproNvrTool
             return -1;
         }
 
+        static bool ReadExact(Stream s, byte[] b, int off, int n)
+        {
+            while (n > 0)
+            {
+                int r = s.Read(b, off, n);
+                if (r <= 0) return false;
+                off += r; n -= r;
+            }
+            return true;
+        }
+
+        /// <summary>Mode BMP: panjang tiap frame ada di header ("BM" + ukuran file 4 byte), jadi dibaca persis tanpa mencari penanda.</summary>
+        void ReadBmpFrames()
+        {
+            try
+            {
+                Stream s = _p.StandardOutput.BaseStream;
+                var hdr = new byte[6];
+                while (!_closed)
+                {
+                    if (!ReadExact(s, hdr, 0, 2)) break;
+                    if (hdr[0] != (byte)'B' || hdr[1] != (byte)'M')
+                    {
+                        // tidak sinkron: geser satu byte sampai ketemu "BM"
+                        hdr[0] = hdr[1];
+                        if (!ReadExact(s, hdr, 1, 1)) break;
+                        if (hdr[0] != (byte)'B' || hdr[1] != (byte)'M') continue;
+                    }
+                    if (!ReadExact(s, hdr, 2, 4)) break;
+                    int size = hdr[2] | (hdr[3] << 8) | (hdr[4] << 16) | (hdr[5] << 24);
+                    if (size < 64 || size > 64 * 1024 * 1024) continue;
+                    var frame = new byte[size];
+                    Buffer.BlockCopy(hdr, 0, frame, 0, 6);
+                    if (!ReadExact(s, frame, 6, size - 6)) break;
+                    if (!_closed) _onJpeg(frame);
+                }
+            }
+            catch { }
+        }
+
         void ReadFrames()
         {
+            if (_bmp) { ReadBmpFrames(); return; }
             try
             {
                 Stream s = _p.StandardOutput.BaseStream;

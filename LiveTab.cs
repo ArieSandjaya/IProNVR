@@ -393,7 +393,7 @@ namespace IproNvrTool
             {
                 d.Filter = "JPEG|*.jpg";
                 d.FileName = "cam" + selected.Cam + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".jpg";
-                if (d.ShowDialog() == DialogResult.OK) File.WriteAllBytes(d.FileName, selected.LastJpeg);
+                if (d.ShowDialog() == DialogResult.OK) File.WriteAllBytes(d.FileName, Ui.ToJpegBytes(selected.LastJpeg));
             }
         }
 

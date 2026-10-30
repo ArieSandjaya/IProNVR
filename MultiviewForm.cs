@@ -883,7 +883,7 @@ namespace IproNvrTool
             {
                 d.Filter = "JPEG|*.jpg";
                 d.FileName = "snapshot_" + slots[i].NvrId + "_cam" + slots[i].Channel + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".jpg";
-                if (d.ShowDialog() == DialogResult.OK) File.WriteAllBytes(d.FileName, t.LastJpeg);
+                if (d.ShowDialog() == DialogResult.OK) File.WriteAllBytes(d.FileName, Ui.ToJpegBytes(t.LastJpeg));
             }
         }
 

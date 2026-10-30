@@ -204,6 +204,18 @@ namespace IproNvrTool
             catch (InvalidOperationException) { } // termasuk ObjectDisposedException
         }
 
+        /// <summary>Byte frame -> JPEG untuk disimpan sebagai file (frame BMP dari ffmpeg dikonversi); JPEG dikembalikan apa adanya.</summary>
+        public static byte[] ToJpegBytes(byte[] d)
+        {
+            if (d == null || d.Length < 2 || d[0] != (byte)'B' || d[1] != (byte)'M') return d;
+            using (var img = DecodeImage(d))
+            using (var ms = new System.IO.MemoryStream())
+            {
+                img.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
+                return ms.ToArray();
+            }
+        }
+
         public static Image DecodeImage(byte[] jpeg)
         {
             using (var ms = new System.IO.MemoryStream(jpeg))

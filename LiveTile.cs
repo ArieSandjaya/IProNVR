@@ -396,7 +396,8 @@ namespace IproNvrTool
                 Log.Write("CAM " + Cam + ": membuka " + src.Label + " " + StreamSource.MaskUrl(src.Url));
                 SetTitle("CAM " + Cam + " - menghubungkan RTSP...");
                 _ffCap = FfmpegFpsCap();
-                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable, _ffCap);
+                _bmpMode = AppSettings.Current.FrameBmp && !_bmpFailed;
+                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable, _ffCap, _bmpMode);
                 _ff = ff;
                 while (!_stop && !ff.HasExited)
                 {
@@ -575,6 +576,9 @@ namespace IproNvrTool
         /// <summary>Tile ditahan (area tersembunyi saat satu kamera diperbesar): koneksi RTSP tetap hidup, gambar tidak digambar. Lanjut seketika tanpa reconnect.</summary>
         public volatile bool Suspended;
 
+        bool _bmpMode;
+        static volatile bool _bmpFailed;   // BMP gagal didekode sekali -> seluruh aplikasi kembali ke JPEG
+
         void ShowJpeg(byte[] jpeg)
         {
             _lastTick = Environment.TickCount;
@@ -599,6 +603,12 @@ namespace IproNvrTool
             try { img = Ui.DecodeImage(jpeg); }
             catch (Exception ex)
             {
+                if (_bmpMode && !_bmpFailed)
+                {
+                    _bmpFailed = true;
+                    Log.Write("CAM " + Cam + ": frame BMP gagal didekode (" + ex.Message + "), beralih ke JPEG pada koneksi berikutnya.");
+                    try { _ff.Dispose(); } catch { }   // sambungan ulang otomatis memakai JPEG
+                }
                 if (!_warnedNoVideo)
                 {
                     _warnedNoVideo = true;
