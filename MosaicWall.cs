@@ -205,7 +205,7 @@ namespace IproNvrTool
                 if (c.Url == null || !c.Alive) continue;
                 if (nv) sb.Append("-hwaccel cuda -hwaccel_output_format cuda -hwaccel_device cu ");
                 else sb.Append("-hwaccel qsv -hwaccel_output_format qsv -hwaccel_device hw ");
-                sb.Append("-rtsp_transport tcp -fflags nobuffer -flags low_delay -probesize 200000 -analyzeduration 1000000 -rw_timeout 8000000 ");
+                sb.Append("-rtsp_transport tcp -fflags nobuffer -flags low_delay -probesize 200000 -analyzeduration 1000000 -timeout 8000000 ");
                 sb.Append("-i \"" + c.Url.Replace("\"", "%22") + "\" ");
                 fc.Append("[" + idx + ":v:0]" + (nv ? "scale_cuda=" + c.Px.Width + ":" + c.Px.Height : "scale_qsv=w=" + c.Px.Width + ":h=" + c.Px.Height) + "[s" + idx + "];");
                 scaled.Add("s" + idx);
@@ -260,6 +260,7 @@ namespace IproNvrTool
                             string line;
                             while ((line = p.StandardError.ReadLine()) != null)
                             {
+                                line = MaskArgs(line);
                                 lock (s.Err) { s.Err.Add(line); if (s.Err.Count > 40) s.Err.RemoveAt(0); }
                                 if (!s.Stop) Log.Write("mosaic ffmpeg: " + line);
                             }
