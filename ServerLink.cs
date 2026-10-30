@@ -40,6 +40,12 @@ namespace IproNvrTool
 
         static string Base { get { return AppSettings.Current.ServerUrl.Trim().TrimEnd('/'); } }
 
+        /// <summary>Ambil info relay RTSP dari server (dipanggil setelah sinkron; gagal = relay dianggap tidak ada).</summary>
+        static void RefreshRelay(string tok)
+        {
+            ServerRelay.Refresh(delegate(string path) { return Call("GET", path, null, tok, 5000); });
+        }
+
         // ---------- HTTP ----------
 
         static object Call(string method, string path, object body, string tok, int timeoutMs)
@@ -208,6 +214,7 @@ namespace IproNvrTool
                         {
                             Online = true; LastSync = DateTime.Now;
                             Status = "Terhubung ke server (versi " + sv + "), data sudah terbaru";
+                            RefreshRelay(tok);
                             return false;
                         }
                         var cfg = Call("GET", "/api/config", null, tok, Math.Max(timeoutMs, 20000)) as Dictionary<string, object>;
@@ -218,6 +225,7 @@ namespace IproNvrTool
                         Online = true; LastSync = DateTime.Now;
                         Status = "Sinkron dari server selesai (versi " + sv + ", " + Rows(cfg, "nvrs").Count + " NVR, " + Rows(cfg, "cameras").Count + " kamera)";
                         Log.Write(Status);
+                        RefreshRelay(tok);
                         Db.RaiseChanged();
                         return true;
                     }

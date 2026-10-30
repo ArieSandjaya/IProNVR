@@ -180,6 +180,13 @@ function home(){
   box('y',withUrl+' / '+cams.length,'Kamera dengan URL RTSP','▶','cameras');
   box('r',(data.groups||[]).length,'Group tampilan','▦','groups');
   w.appendChild(bx);
+  var rc=$('<div class="card nt"><div class="ct"><h3>Relay RTSP (MediaMTX)</h3></div><div class="cb" id="rly">Memuat...</div></div>');w.appendChild(rc);
+  api('GET','/api/relay').then(function(r){var e=document.getElementById('rly');if(!e)return;
+    e.innerHTML='<span class="badge '+(r.enabled?'ok':'warn')+'">'+(r.enabled?'Aktif':'Tidak aktif')+'</span> '+esc(r.status||'')
+      +(r.enabled?'<br><small>Client membaca lewat rtsp://SERVER:'+r.port+'/... dengan login baca-saja (dibuat otomatis, dibagikan ke client yang login).</small>':'')
+      +(me.is_admin==1&&r.enabled?' <button class="btn sm" id="rls">Sinkron ulang</button>':'');
+    var b=document.getElementById('rls');if(b)b.onclick=function(){api('POST','/api/relay').then(function(){e.textContent='Sinkron ulang dijadwalkan...'})}
+  }).catch(function(){var e=document.getElementById('rly');if(e)e.textContent='Status relay tidak tersedia.'});
   var c=$('<div class="card nt"><div class="ct"><h3>Ringkasan per NVR</h3></div><div class="cb"></div></div>');
   var t='<table><thead><tr><th>NVR</th><th>Alamat</th><th>Kamera</th><th>Dengan RTSP</th></tr></thead><tbody>';
   (data.nvrs||[]).forEach(function(n){var k=cams.filter(function(x){return x.nvr_id==n.id});var r=k.filter(function(x){return x.rtsp_url}).length;t+='<tr><td>'+esc(n.name)+'</td><td>'+esc(n.host)+':'+n.port+'</td><td>'+k.length+' / '+n.max_channels+'</td><td><span class="badge '+(k.length&&r==k.length?'ok':'warn')+'">'+r+' / '+k.length+'</span></td></tr>'});

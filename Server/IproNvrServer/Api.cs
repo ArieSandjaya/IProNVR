@@ -23,6 +23,7 @@ namespace IproNvrServer
     {
         readonly Store store;
         readonly ServerConfig cfg;
+        readonly MediaMtxRelay relay;
         HttpListener listener;
         Thread loop;
         volatile bool stop;
@@ -228,7 +229,7 @@ namespace IproNvrServer
         }
 
         readonly DiscoveryManager disc;
-        public ApiServer(Store s, ServerConfig c) { store = s; cfg = c; disc = new DiscoveryManager(s, c); }
+        public ApiServer(Store s, ServerConfig c, MediaMtxRelay relay) { store = s; cfg = c; this.relay = relay; disc = new DiscoveryManager(s, c); }
 
         public void Start()
         {
@@ -519,6 +520,19 @@ namespace IproNvrServer
                     return;
                 }
 
+                if (head == "relay")
+                {
+                    if (relay == null) { Json(rs, 200, new Dictionary<string, object> { { "enabled", false }, { "status", "Relay tidak aktif" } }); return; }
+                    if (rq.HttpMethod == "POST")
+                    {
+                        if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                        relay.Resync();
+                        Json(rs, 200, new Dictionary<string, object> { { "ok", true } });
+                        return;
+                    }
+                    Json(rs, 200, relay.Info(IsAdmin(s)));
+                    return;
+                }
                 if (head == "stream") { Stream(ctx); return; }
                 if (head == "preview")
                 {

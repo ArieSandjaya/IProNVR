@@ -16,6 +16,9 @@ namespace IproNvrServer
         public string DataDir = "";     // kosong = folder "data" di samping IproNvrServer.exe
         public int TokenDays = 30;
         public string FfmpegPath = "";   // kosong = ffmpeg.exe di samping server atau di PATH
+        public bool Relay = true;        // relay RTSP lewat MediaMTX (aktif bila mediamtx.exe ada di Tools\\mediamtx)
+        public int RelayPort = 8554;     // port RTSP relay untuk client
+        public string MediaMtxPath = ""; // kosong = Tools\\mediamtx\\mediamtx.exe di samping server
 
         public static string Dir { get { return AppDomain.CurrentDomain.BaseDirectory; } }
 
@@ -66,6 +69,7 @@ namespace IproNvrServer
     {
         Store store;
         ApiServer api;
+        MediaMtxRelay relay;
         public void Start()
         {
             ServerConfig cfg = ServerConfig.Load();
@@ -79,10 +83,12 @@ namespace IproNvrServer
                 Log.Write(note);
                 try { File.WriteAllText(Path.Combine(cfg.DataDir, "admin-awal.txt"), note + Environment.NewLine); } catch { }
             }
-            api = new ApiServer(store, cfg);
+            relay = new MediaMtxRelay(store, cfg);
+            relay.Start();
+            api = new ApiServer(store, cfg, relay);
             api.Start();
         }
-        public void Stop() { if (api != null) api.Stop(); Log.Write("Server berhenti."); }
+        public void Stop() { if (api != null) api.Stop(); if (relay != null) relay.Stop(); Log.Write("Server berhenti."); }
     }
 
     static class Program
@@ -126,6 +132,7 @@ namespace IproNvrServer
                     Run("sc", "description " + SvcName + " \"Server konfigurasi IPRO NVR (registrasi NVR/kamera, user, group)\"");
                     Run("sc", "failure " + SvcName + " reset= 86400 actions= restart/5000/restart/5000/restart/30000");
                     Run("netsh", "advfirewall firewall add rule name=\"IPRO NVR Server\" dir=in action=allow protocol=TCP localport=" + cfg.Port);
+                    Run("netsh", "advfirewall firewall add rule name=\"IPRO NVR Relay RTSP\" dir=in action=allow protocol=TCP localport=" + cfg.RelayPort);
                     Run("sc", "start " + SvcName);
                     return 0;
                 case "uninstall":
@@ -133,6 +140,7 @@ namespace IproNvrServer
                     Run("sc", "delete " + SvcName);
                     Run("netsh", "http delete urlacl url=http://+:" + cfg.Port + "/");
                     Run("netsh", "advfirewall firewall delete rule name=\"IPRO NVR Server\"");
+                    Run("netsh", "advfirewall firewall delete rule name=\"IPRO NVR Relay RTSP\"");
                     return 0;
                 case "setpass":
                     if (args.Length < 3) { Console.WriteLine("Pemakaian: IproNvrServer setpass NAMA PASSWORDBARU"); return 1; }

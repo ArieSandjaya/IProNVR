@@ -28,6 +28,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Tools\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="admin.html" LogicalName="IproNvrServer.admin.html" />
   </ItemGroup>
 
