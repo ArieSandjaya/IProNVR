@@ -413,7 +413,7 @@ namespace IproNvrTool
         /// <summary>RTSP lewat LibVLC (dekode GPU dalam proses, gambar langsung ke jendela tile). false = tidak dipakai (ffmpeg menggantikan).</summary>
         bool RunVlc(StreamSource src)
         {
-            if (!AppSettings.Current.UseVlc || !Vlc.Available) return false;
+            if (!AppSettings.Current.UseVlcDecoder || !Vlc.Available) return false;
             Func<bool> nf = NeedsFrames;
             if (nf != null && nf()) return false;
             VlcPlayer vp = null;
