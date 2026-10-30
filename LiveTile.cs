@@ -68,7 +68,19 @@ namespace IproNvrTool
                     catch { }
                     return null;
                 }
-                return _lastJpeg;
+                byte[] j = _lastJpeg;
+                if (j != null) return j;
+                try
+                {
+                    Image im = _pic.Image;
+                    if (im == null) return null;
+                    using (var ms = new MemoryStream())
+                    {
+                        im.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
+                        return ms.ToArray();
+                    }
+                }
+                catch { return null; }
             }
             set { _lastJpeg = value; }
         }
@@ -515,7 +527,7 @@ namespace IproNvrTool
                 SetTitle("CAM " + Cam + " - menghubungkan RTSP...");
                 _ffCap = FfmpegFpsCap();
                 _bmpMode = AppSettings.Current.UseBmpFrames && !_bmpFailed;
-                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable, _ffCap, _bmpMode);
+                ff = FfmpegPipe.ForRtsp(exe, src.Url, _decodeWidth, "CAM " + Cam, ShowJpeg, !_forceSoftware && HwAccels.Usable, _ffCap, _bmpMode, _bmpMode ? null : (Action<byte[], int, int>)ShowSpan);
                 _ff = ff;
                 while (!_stop && !ff.HasExited)
                 {
@@ -697,7 +709,9 @@ namespace IproNvrTool
         bool _bmpMode;
         static volatile bool _bmpFailed;   // BMP gagal didekode sekali -> seluruh aplikasi kembali ke JPEG
 
-        void ShowJpeg(byte[] jpeg)
+        void ShowJpeg(byte[] jpeg) { ShowSpan(jpeg, 0, jpeg.Length); }
+
+        void ShowSpan(byte[] buf, int off, int len)
         {
             _lastTick = Environment.TickCount;
             if (!_visHooked && _pic.IsHandleCreated) { try { _pic.BeginInvoke((Action)HookVisibility); } catch { } }
@@ -718,7 +732,7 @@ namespace IproNvrTool
                 return;
             }
             Image img;
-            try { img = Ui.DecodeImage(jpeg); }
+            try { img = Ui.DecodeImage(buf, off, len); }
             catch (Exception ex)
             {
                 if (_bmpMode && !_bmpFailed)
@@ -730,12 +744,15 @@ namespace IproNvrTool
                 if (!_warnedNoVideo)
                 {
                     _warnedNoVideo = true;
-                    Log.Write("CAM " + Cam + ": gagal decode JPEG (" + jpeg.Length + " byte): " + ex.Message);
+                    Log.Write("CAM " + Cam + ": gagal decode JPEG (" + len + " byte): " + ex.Message);
                 }
                 return;
             }
             Interlocked.Increment(ref _frames);
-            LastJpeg = jpeg;
+            // salinan frame mentah hanya bila dibutuhkan (dewarp fisheye / PTZ virtual); selain itu LastJpeg dibuat on-demand dari gambar yang tampil
+            Func<bool> nfr = NeedsFrames;
+            if (nfr != null && nfr()) { var raw = new byte[len]; Buffer.BlockCopy(buf, off, raw, 0, len); _lastJpeg = raw; }
+            else if (_lastJpeg != null) _lastJpeg = null;
             Func<Image, Image> flt = FrameFilter;
             if (flt != null)
             {

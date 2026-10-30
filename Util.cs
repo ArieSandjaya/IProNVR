@@ -216,6 +216,15 @@ namespace IproNvrTool
             }
         }
 
+        public static Image DecodeImage(byte[] buf, int offset, int count)
+        {
+            using (var ms = new System.IO.MemoryStream(buf, offset, count, false))
+            using (var tmp = Image.FromStream(ms))
+            {
+                return new Bitmap(tmp);
+            }
+        }
+
         public static Image DecodeImage(byte[] jpeg)
         {
             using (var ms = new System.IO.MemoryStream(jpeg))

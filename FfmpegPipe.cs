@@ -191,7 +191,7 @@ namespace IproNvrTool
         }
 
         /// <summary>Mode RTSP: ffmpeg membuka sendiri URL RTSP kamera (TCP) dan mendekodenya; codec dideteksi otomatis.</summary>
-        public static FfmpegPipe ForRtsp(string exe, string url, int width, string name, Action<byte[]> onJpeg, bool hw = false, int maxFps = 0, bool bmp = false)
+        public static FfmpegPipe ForRtsp(string exe, string url, int width, string name, Action<byte[]> onJpeg, bool hw = false, int maxFps = 0, bool bmp = false, Action<byte[], int, int> onSpan = null)
         {
             var sb = new StringBuilder();
             sb.Append("-hide_banner -loglevel error -nostats -fflags nobuffer -flags low_delay ");
@@ -208,7 +208,7 @@ namespace IproNvrTool
             // bmp: tanpa kompresi -> ffmpeg tidak meng-encode JPEG dan aplikasi tidak men-decode JPEG (~30-40% lebih ringan per stream)
             if (bmp) sb.Append("-pix_fmt bgr24 -flush_packets 1 -f image2pipe -vcodec bmp pipe:1");
             else sb.Append("-pix_fmt yuvj420p -q:v 5 -flush_packets 1 -f image2pipe -vcodec mjpeg pipe:1");
-            return new FfmpegPipe(exe, sb.ToString(), false, name, onJpeg, bmp);
+            return new FfmpegPipe(exe, sb.ToString(), false, name, onJpeg, bmp, onSpan);
         }
 
         static string _vsync;
@@ -259,10 +259,13 @@ namespace IproNvrTool
         }
 
         readonly bool _bmp;
+        /// <summary>Bila diisi: frame JPEG diserahkan sebagai potongan buffer baca (tanpa alokasi); penerima WAJIB selesai memakainya sebelum kembali (buffer dipakai ulang).</summary>
+        readonly Action<byte[], int, int> _onSpan;
 
-        FfmpegPipe(string exe, string args, bool useStdin, string name, Action<byte[]> onJpeg, bool bmp = false)
+        FfmpegPipe(string exe, string args, bool useStdin, string name, Action<byte[]> onJpeg, bool bmp = false, Action<byte[], int, int> onSpan = null)
         {
             _bmp = bmp;
+            _onSpan = onSpan;
             _name = name;
             _onJpeg = onJpeg;
 
@@ -356,10 +359,20 @@ namespace IproNvrTool
                         if (soi < 0) { pos = Math.Max(pos, len - 1); break; }
                         int eoi = IndexOf(acc, 0xFF, 0xD9, soi + 2, len);
                         if (eoi < 0) { pos = soi; break; }
-                        var jpg = new byte[eoi + 2 - soi];
-                        Buffer.BlockCopy(acc, soi, jpg, 0, jpg.Length);
-                        pos = eoi + 2;
-                        if (!_closed) _onJpeg(jpg);
+                        int flen = eoi + 2 - soi;
+                        if (_onSpan != null)
+                        {
+                            int at = soi;
+                            pos = eoi + 2;
+                            if (!_closed) _onSpan(acc, at, flen);
+                        }
+                        else
+                        {
+                            var jpg = new byte[flen];
+                            Buffer.BlockCopy(acc, soi, jpg, 0, flen);
+                            pos = eoi + 2;
+                            if (!_closed) _onJpeg(jpg);
+                        }
                     }
                     if (pos > 0)
                     {
