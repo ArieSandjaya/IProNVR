@@ -46,11 +46,15 @@ namespace IproNvrTool
         /// <summary>Uji nyata: ffmpeg membuat satu frame kecil di GPU lalu meng-encode-nya. Berhasil = backend tersedia di PC ini.</summary>
         static bool Probe(string exe, string which, out string log)
         {
+            // uji seluruh rantai kecil: dua sumber -> upload GPU -> scale -> overlay -> encode (encoder QSV menolak gambar sangat kecil, jadi 320x240)
+            string src = "-f lavfi -i color=c=black:s=320x240:r=15:d=1 -f lavfi -i color=c=gray:s=320x240:r=15:d=1 ";
             string a;
             if (which == "nvidia")
-                a = "-hide_banner -loglevel error -init_hw_device cuda=cu:0 -filter_hw_device cu -f lavfi -i color=c=black:s=128x128:r=15:d=0.5 -vf format=nv12,hwupload_cuda,scale_cuda=64:64 -c:v h264_nvenc -f null -";
+                a = "-hide_banner -loglevel error -init_hw_device cuda=cu:0 -filter_hw_device cu " + src
+                  + "-filter_complex \"[0:v]format=nv12,hwupload_cuda[a];[1:v]format=nv12,hwupload_cuda,scale_cuda=160:120[b];[a][b]overlay_cuda=x=0:y=0\" -c:v h264_nvenc -f null -";
             else
-                a = "-hide_banner -loglevel error -init_hw_device qsv=hw -filter_hw_device hw -f lavfi -i color=c=black:s=128x128:r=15:d=0.5 -vf format=nv12,hwupload=extra_hw_frames=8,scale_qsv=w=64:h=64 -c:v h264_qsv -f null -";
+                a = "-hide_banner -loglevel error -init_hw_device qsv=hw -filter_hw_device hw " + src
+                  + "-filter_complex \"[0:v]format=nv12,hwupload=extra_hw_frames=16[a];[1:v]format=nv12,hwupload=extra_hw_frames=16,scale_qsv=w=160:h=120[b];[a][b]overlay_qsv=x=0:y=0\" -c:v h264_qsv -f null -";
             int code;
             log = Run(exe, a, 15000, out code);
             return code == 0;
