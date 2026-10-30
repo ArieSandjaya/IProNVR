@@ -21,42 +21,67 @@ namespace IproNvrTool
 
         class Cell { public Rectangle Px; public CamRef Cam; public string Url; public bool Alive; }
 
-        // ---------- cek kemampuan ffmpeg ----------
+        // ---------- deteksi GPU/backend ----------
 
-        static string capError;
-        static bool capChecked;
+        static string backend, backendError;
+        static bool detected;
 
-        static string RunOut(string exe, string args)
+        static string Run(string exe, string args, int timeoutMs, out int code)
         {
             var psi = new ProcessStartInfo(exe, args);
             psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
             using (Process p = Process.Start(psi))
             {
-                string o = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(8000);
-                return o;
+                var err = new StringBuilder();
+                p.ErrorDataReceived += delegate(object o, DataReceivedEventArgs e) { if (e.Data != null) lock (err) err.AppendLine(e.Data); };
+                p.BeginErrorReadLine();
+                string o2 = p.StandardOutput.ReadToEnd();
+                if (!p.WaitForExit(timeoutMs)) { try { p.Kill(); } catch { } code = -1; return "timeout"; }
+                p.WaitForExit();
+                code = p.ExitCode;
+                lock (err) return err.ToString() + o2;
             }
         }
 
-        static string CheckFfmpeg(string exe)
+        /// <summary>Uji nyata: ffmpeg membuat satu frame kecil di GPU lalu meng-encode-nya. Berhasil = backend tersedia di PC ini.</summary>
+        static bool Probe(string exe, string which, out string log)
         {
-            if (capChecked) return capError;
-            string err = null;
-            try
-            {
-                string f = RunOut(exe, "-hide_banner -filters");
-                string e = RunOut(exe, "-hide_banner -encoders");
-                var miss = new List<string>();
-                if (f.IndexOf(" scale_cuda ", StringComparison.Ordinal) < 0) miss.Add("filter scale_cuda");
-                if (f.IndexOf(" overlay_cuda ", StringComparison.Ordinal) < 0) miss.Add("filter overlay_cuda");
-                if (e.IndexOf(" h264_nvenc ", StringComparison.Ordinal) < 0) miss.Add("encoder h264_nvenc");
-                if (miss.Count > 0)
-                    err = "ffmpeg.exe ini tidak punya: " + string.Join(", ", miss.ToArray()) + ".\nPakai ffmpeg build \"full\" (mis. gyan.dev: ffmpeg-release-full.7z) dan letakkan di folder aplikasi.";
-            }
-            catch (Exception ex) { err = "Gagal memeriksa ffmpeg: " + ex.Message; }
-            capError = err; capChecked = true;
-            return err;
+            string a;
+            if (which == "nvidia")
+                a = "-hide_banner -loglevel error -init_hw_device cuda=cu:0 -filter_hw_device cu -f lavfi -i color=c=black:s=128x128:r=15:d=0.5 -vf format=nv12,hwupload_cuda,scale_cuda=64:64 -c:v h264_nvenc -f null -";
+            else
+                a = "-hide_banner -loglevel error -init_hw_device qsv=hw -filter_hw_device hw -f lavfi -i color=c=black:s=128x128:r=15:d=0.5 -vf format=nv12,hwupload=extra_hw_frames=8,scale_qsv=w=64:h=64 -c:v h264_qsv -f null -";
+            int code;
+            log = Run(exe, a, 15000, out code);
+            return code == 0;
         }
+
+        /// <summary>"nvidia" / "intel" sesuai pengaturan (Otomatis = coba NVIDIA lalu Intel). Null + backendError bila tidak ada yang bisa dipakai.</summary>
+        static string Detect(string exe)
+        {
+            string pref = (AppSettings.Current.MosaicGpu ?? "auto").ToLowerInvariant();
+            if (detected && backendPref == pref) return backend;
+            detected = true; backendPref = pref; backend = null; backendError = null;
+            var sb = new StringBuilder();
+            string[] order = pref == "nvidia" ? new string[] { "nvidia" } : pref == "intel" ? new string[] { "intel" } : new string[] { "nvidia", "intel" };
+            foreach (string w in order)
+            {
+                string log;
+                try
+                {
+                    if (Probe(exe, w, out log)) { backend = w; Log.Write("Mosaic GPU: backend " + w + " tersedia."); return backend; }
+                }
+                catch (Exception ex) { log = ex.Message; }
+                string t = (log ?? "").Trim();
+                if (t.Length > 400) t = t.Substring(t.Length - 400);
+                sb.AppendLine("[" + (w == "nvidia" ? "NVIDIA (NVDEC/NVENC)" : "Intel (Quick Sync)") + "] tidak bisa dipakai:\n" + t + "\n");
+                Log.Write("Mosaic GPU: backend " + w + " gagal: " + t.Replace("\n", " | "));
+            }
+            backendError = "Tidak ada GPU yang bisa dipakai untuk mosaic.\n\n" + sb
+                + "Pastikan: ffmpeg build \"full\" (mis. gyan.dev), driver GPU terbaru, dan GPU yang dipilih di Setup > Dekode & stream > \"GPU mosaic\".";
+            return null;
+        }
+        static string backendPref;
 
         // ---------- util ----------
 
@@ -120,7 +145,7 @@ namespace IproNvrTool
         class Session : IDisposable
         {
             public GroupRec Group; public ScreenLayout Lay; public Form Form; public LiveTile Tile;
-            public List<Cell> Cells; public int W, H, Port; public string Exe;
+            public List<Cell> Cells; public int W, H, Port; public string Exe; public string Backend;
             public volatile bool Stop;
             public Process Proc;
             public readonly List<string> Err = new List<string>();
@@ -137,8 +162,10 @@ namespace IproNvrTool
 
         static string BuildArgs(Session s, List<Cell> cells)
         {
+            bool nv = s.Backend == "nvidia";
             var sb = new StringBuilder();
-            sb.Append("-hide_banner -loglevel warning -nostats -init_hw_device cuda=cu:0 -filter_hw_device cu ");
+            sb.Append("-hide_banner -loglevel warning -nostats ");
+            sb.Append(nv ? "-init_hw_device cuda=cu:0 -filter_hw_device cu " : "-init_hw_device qsv=hw -filter_hw_device hw ");
             var fc = new StringBuilder();
             int idx = 0;
             var scaled = new List<string>();
@@ -146,20 +173,28 @@ namespace IproNvrTool
             foreach (Cell c in cells)
             {
                 if (c.Url == null || !c.Alive) continue;
-                sb.Append("-hwaccel cuda -hwaccel_output_format cuda -hwaccel_device cu -rtsp_transport tcp -fflags nobuffer -flags low_delay -probesize 200000 -analyzeduration 1000000 -rw_timeout 8000000 ");
+                if (nv) sb.Append("-hwaccel cuda -hwaccel_output_format cuda -hwaccel_device cu ");
+                else sb.Append("-hwaccel qsv -hwaccel_output_format qsv -hwaccel_device hw ");
+                sb.Append("-rtsp_transport tcp -fflags nobuffer -flags low_delay -probesize 200000 -analyzeduration 1000000 -rw_timeout 8000000 ");
                 sb.Append("-i \"" + c.Url.Replace("\"", "%22") + "\" ");
-                fc.Append("[" + idx + ":v:0]scale_cuda=" + c.Px.Width + ":" + c.Px.Height + "[s" + idx + "];");
+                fc.Append("[" + idx + ":v:0]" + (nv ? "scale_cuda=" + c.Px.Width + ":" + c.Px.Height : "scale_qsv=w=" + c.Px.Width + ":h=" + c.Px.Height) + "[s" + idx + "];");
                 scaled.Add("s" + idx);
                 pos.Add(c.Px);
                 idx++;
             }
             if (idx == 0) return null;
             sb.Append("-f lavfi -i color=c=black:s=" + s.W + "x" + s.H + ":r=" + Fps + " ");
-            fc.Append("[" + idx + ":v]format=nv12,hwupload_cuda[b0];");
+            fc.Append("[" + idx + ":v]format=nv12," + (nv ? "hwupload_cuda" : "hwupload=extra_hw_frames=64") + "[b0];");
             for (int i = 0; i < scaled.Count; i++)
-                fc.Append("[b" + i + "][" + scaled[i] + "]overlay_cuda=x=" + pos[i].X + ":y=" + pos[i].Y + "[b" + (i + 1) + "]" + (i + 1 < scaled.Count ? ";" : ""));
+            {
+                string ov = nv ? "overlay_cuda=x=" + pos[i].X + ":y=" + pos[i].Y
+                               : "overlay_qsv=x=" + pos[i].X + ":y=" + pos[i].Y;
+                fc.Append("[b" + i + "][" + scaled[i] + "]" + ov + "[b" + (i + 1) + "]" + (i + 1 < scaled.Count ? ";" : ""));
+            }
             sb.Append("-filter_complex \"" + fc + "\" -map \"[b" + scaled.Count + "]\" -an ");
-            sb.Append("-c:v h264_nvenc -preset p2 -tune ll -rc cbr -b:v " + Math.Max(4, s.W * s.H / 250000) + "M -g " + Fps + " -bf 0 ");
+            int mb = Math.Max(4, s.W * s.H / 250000);
+            if (nv) sb.Append("-c:v h264_nvenc -preset p2 -tune ll -rc cbr -b:v " + mb + "M -g " + Fps + " -bf 0 ");
+            else sb.Append("-c:v h264_qsv -preset veryfast -b:v " + mb + "M -maxrate " + mb + "M -g " + Fps + " -bf 0 -look_ahead 0 ");
             sb.Append("-f mpegts \"udp://127.0.0.1:" + s.Port + "?pkt_size=1316\"");
             return sb.ToString();
         }
@@ -251,14 +286,19 @@ namespace IproNvrTool
         {
             string exe = FfmpegPipe.FindExe();
             if (exe == null) return "ffmpeg.exe tidak ditemukan.";
-            string cap = CheckFfmpeg(exe);
-            if (cap != null) return cap;
+            string be = null;
+            string bk = null;
+            // deteksi memakai proses uji (beberapa detik); jalankan di thread latar agar UI tidak macet
+            var dt = System.Threading.Tasks.Task.Run(delegate { bk = Detect(exe); });
+            while (!dt.IsCompleted) { Application.DoEvents(); Thread.Sleep(30); }
+            be = bk;
+            if (be == null) return backendError;
 
             ScreenLayout lay = ScreenLayout.ById(g.Layout);
             Rectangle b = screen.Bounds;
             int W = Math.Min(b.Width, 1920) & ~1, H = Math.Min(b.Height, 1080) & ~1;
             var s = new Session();
-            s.Group = g; s.Lay = lay; s.W = W; s.H = H; s.Exe = exe;
+            s.Group = g; s.Lay = lay; s.W = W; s.H = H; s.Exe = exe; s.Backend = be;
             s.Port = FreeUdpPort();
             s.Cells = Build(g, lay, W, H);
             int usable = 0;
@@ -266,7 +306,7 @@ namespace IproNvrTool
             if (usable == 0) return "Tidak ada kamera di group ini yang punya URL RTSP.";
 
             var f = new Form();
-            f.Text = "Mosaic GPU - " + g.Name;
+            f.Text = "Mosaic GPU (" + (be == "nvidia" ? "NVIDIA" : "Intel") + ") - " + g.Name;
             f.FormBorderStyle = FormBorderStyle.None;
             f.StartPosition = FormStartPosition.Manual;
             f.Bounds = b;

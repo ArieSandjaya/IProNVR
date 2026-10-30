@@ -505,7 +505,7 @@ namespace IproNvrTool
             Asm.Item(m, fullScreen ? "Keluar layar penuh (F11)" : "Full screen (F11)", delegate { ToggleFull(); });
             m.Items.Add(new ToolStripSeparator());
 
-            ToolStripMenuItem mz = new ToolStripMenuItem("Mosaic GPU (NVIDIA, uji coba)");
+            ToolStripMenuItem mz = new ToolStripMenuItem("Mosaic GPU (NVIDIA / Intel, uji coba)");
             List<GroupRec> mgroups;
             try { mgroups = AsmDb.ListGroups(); } catch { mgroups = new List<GroupRec>(); }
             Screen[] mscreens = Screen.AllScreens;
