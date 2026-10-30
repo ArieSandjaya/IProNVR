@@ -151,6 +151,18 @@ namespace IproNvrTool
             }
             if (url.Length > 0)
             {
+                // relay server (MediaMTX) lebih dulu bila aktif; kamera langsung tetap cadangan
+                if (AppSettings.Current.UseRelay && ServerRelay.Ready && cam != null
+                    && (NvrDrivers.For(nvr).BrandId == "ipro" || !string.IsNullOrWhiteSpace(cam.RtspUrl)))
+                {
+                    string ru = ServerRelay.Url(nvr, cam.Channel, false);
+                    if (!string.IsNullOrEmpty(ru))
+                    {
+                        var rs = new StreamSource();
+                        rs.Rtsp = true; rs.Url = ru; rs.Label = "Relay sub";
+                        list.Insert(0, rs);
+                    }
+                }
                 var s = new StreamSource();
                 s.Rtsp = true;
                 s.Url = url;
