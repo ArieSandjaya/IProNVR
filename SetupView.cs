@@ -819,7 +819,6 @@ namespace IproNvrTool
             p.Check("Lebar dekode otomatis menurut jumlah area", s.AutoDecodeWidth, delegate(bool v) { s.AutoDecodeWidth = v; }, null);
             p.Num("Lebar dekode manual (px)", 0, 3840, s.DecodeWidth, delegate(int v) { s.DecodeWidth = v; }, "Dipakai bila otomatis dimatikan. 0 = ukuran asli.");
             p.Check("Live via RTSP (semua kamera)", s.LiveAllRtsp, delegate(bool v) { s.LiveAllRtsp = v; }, "Live memakai RTSP langsung ke kamera: substream di multi-area, stream utama di 1 area. Bila URL RTSP belum diisi, stream NVR dipakai sebagai cadangan.");
-            p.Text("Path go2rtc.exe (Wall web)", s.Go2RtcPath, delegate(string v) { s.Go2RtcPath = v.Trim(); }, "Kosong = Tools\\go2rtc\\go2rtc.exe di folder aplikasi. Dipakai menu 'Wall web (go2rtc)'.");
             p.Num("Batas fps area kecil (0 = otomatis)", 0, 30, s.WallFps, delegate(int v) { s.WallFps = v; },
                 "Batas frame per detik tiap area saat banyak area/jendela. Otomatis: >40 stream 15 fps, >16 stream 20 fps, >6 stream 25 fps. Naikkan bila CPU masih longgar (lihat 'Stream .. CPU ..' di bawah), turunkan bila gambar patah-patah. Berlaku setelah stream dibuka ulang.");
             p.Check("Multi-area memakai substream", s.UseSubstreamMulti, delegate(bool v) { s.UseSubstreamMulti = v; }, "Urutan: substream NVR -> RTSP substream kamera -> stream utama.");

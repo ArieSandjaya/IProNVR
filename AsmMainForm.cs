@@ -340,16 +340,6 @@ namespace IproNvrTool
             UpdateUser();
         }
 
-        void OpenWall(GroupRec g, Screen sc)
-        {
-            System.Threading.Tasks.Task.Run(delegate { return WallWeb.Open(g, sc); })
-                .ContinueWith(t => OnUi(delegate
-                {
-                    string r = t.IsFaulted ? t.Exception.GetBaseException().Message : t.Result;
-                    if (!string.IsNullOrEmpty(r)) MessageBox.Show(r, "Wall web");
-                }));
-        }
-
         void OnUi(Action a)
         {
             if (IsDisposed) return;
@@ -506,28 +496,6 @@ namespace IproNvrTool
                 });
             Asm.Item(m, fullScreen ? "Keluar layar penuh (F11)" : "Full screen (F11)", delegate { ToggleFull(); });
             m.Items.Add(new ToolStripSeparator());
-
-            ToolStripMenuItem ww = new ToolStripMenuItem("Wall web (go2rtc, ringan CPU)");
-            List<GroupRec> wgroups;
-            try { wgroups = AsmDb.ListGroups(); } catch { wgroups = new List<GroupRec>(); }
-            Screen[] wscreens = Screen.AllScreens;
-            foreach (GroupRec wg in wgroups)
-            {
-                GroupRec g2 = wg;
-                if (wscreens.Length <= 1) Asm.Sub(ww, g2.Name, delegate { OpenWall(g2, Screen.PrimaryScreen); });
-                else
-                {
-                    var gm = new ToolStripMenuItem(g2.Name);
-                    for (int si = 0; si < wscreens.Length; si++)
-                    {
-                        Screen sc2 = wscreens[si];
-                        Asm.Sub(gm, "Layar " + (si + 1) + (sc2.Primary ? " (utama)" : ""), delegate { OpenWall(g2, sc2); });
-                    }
-                    ww.DropDownItems.Add(gm);
-                }
-            }
-            if (wgroups.Count == 0) Asm.Sub(ww, "(belum ada group)", delegate { });
-            m.Items.Add(ww);
 
             ToolStripMenuItem mv = new ToolStripMenuItem("Multiview (jendela terpisah)");
             Asm.Sub(mv, "Multiview baru...", delegate { MultiviewForm.CreateNew(); });
