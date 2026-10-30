@@ -1,0 +1,365 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Windows.Forms;
+
+namespace IproNvrTool
+{
+    /// <summary>Mosaic GPU: satu proses ffmpeg per layar mendekode N substream dengan NVDEC (GPU NVIDIA), mengecilkan dan menyusunnya
+    /// menjadi satu gambar di GPU (scale_cuda + overlay_cuda), lalu meng-encode dengan NVENC dan mengirimnya ke localhost (UDP).
+    /// Aplikasi hanya memutar SATU stream per layar, bukan N proses/JPEG/bitmap. Double-click kotak = kamera itu dalam stream utama.
+    /// Butuh ffmpeg build "full" (mis. gyan.dev) dengan scale_cuda, overlay_cuda, h264_nvenc dan driver NVIDIA.</summary>
+    public static class MosaicWall
+    {
+        const int Fps = 15;
+
+        class Cell { public Rectangle Px; public CamRef Cam; public string Url; public bool Alive; }
+
+        // ---------- cek kemampuan ffmpeg ----------
+
+        static string capError;
+        static bool capChecked;
+
+        static string RunOut(string exe, string args)
+        {
+            var psi = new ProcessStartInfo(exe, args);
+            psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
+            using (Process p = Process.Start(psi))
+            {
+                string o = p.StandardOutput.ReadToEnd();
+                p.WaitForExit(8000);
+                return o;
+            }
+        }
+
+        static string CheckFfmpeg(string exe)
+        {
+            if (capChecked) return capError;
+            string err = null;
+            try
+            {
+                string f = RunOut(exe, "-hide_banner -filters");
+                string e = RunOut(exe, "-hide_banner -encoders");
+                var miss = new List<string>();
+                if (f.IndexOf(" scale_cuda ", StringComparison.Ordinal) < 0) miss.Add("filter scale_cuda");
+                if (f.IndexOf(" overlay_cuda ", StringComparison.Ordinal) < 0) miss.Add("filter overlay_cuda");
+                if (e.IndexOf(" h264_nvenc ", StringComparison.Ordinal) < 0) miss.Add("encoder h264_nvenc");
+                if (miss.Count > 0)
+                    err = "ffmpeg.exe ini tidak punya: " + string.Join(", ", miss.ToArray()) + ".\nPakai ffmpeg build \"full\" (mis. gyan.dev: ffmpeg-release-full.7z) dan letakkan di folder aplikasi.";
+            }
+            catch (Exception ex) { err = "Gagal memeriksa ffmpeg: " + ex.Message; }
+            capError = err; capChecked = true;
+            return err;
+        }
+
+        // ---------- util ----------
+
+        static int FreeUdpPort()
+        {
+            var u = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+            int p = ((IPEndPoint)u.Client.LocalEndPoint).Port;
+            u.Close();
+            return p;
+        }
+
+        static string FirstRtsp(NvrRecord nvr, CameraRecord cam, bool sub)
+        {
+            foreach (StreamSource s in StreamPlan.ForLive(nvr, cam, sub))
+                if (s.Rtsp && !string.IsNullOrEmpty(s.Url)) return s.Url;
+            return null;
+        }
+
+        static bool Reachable(string url)
+        {
+            try
+            {
+                var u = new Uri(url);
+                using (var c = new TcpClient())
+                {
+                    IAsyncResult r = c.BeginConnect(u.Host, u.Port > 0 ? u.Port : 554, null, null);
+                    bool ok = r.AsyncWaitHandle.WaitOne(2000) && c.Connected;
+                    try { c.Close(); } catch { }
+                    return ok;
+                }
+            }
+            catch { return false; }
+        }
+
+        static List<Cell> Build(GroupRec g, ScreenLayout lay, int W, int H)
+        {
+            var cells = new List<Cell>();
+            for (int i = 0; i < lay.Count; i++)
+            {
+                Rectangle r = lay.Cells[i];
+                int x = (r.X * W / lay.Cols + 1) & ~1;
+                int y = (r.Y * H / lay.Rows + 1) & ~1;
+                int x2 = ((r.Right * W / lay.Cols) - 1) & ~1;
+                int y2 = ((r.Bottom * H / lay.Rows) - 1) & ~1;
+                var c = new Cell();
+                c.Px = new Rectangle(x, y, Math.Max(16, x2 - x), Math.Max(16, y2 - y));
+                c.Cam = i < g.Slots.Length ? g.Slots[i] : null;
+                if (c.Cam != null)
+                {
+                    NvrRecord nvr = Dir.Nvr(c.Cam.NvrId);
+                    CameraRecord cam = Dir.Cam(c.Cam.NvrId, c.Cam.Channel);
+                    if (nvr != null) c.Url = FirstRtsp(nvr, cam, lay.Count > 1);
+                }
+                cells.Add(c);
+            }
+            return cells;
+        }
+
+        // ---------- sesi mosaic (satu per layar) ----------
+
+        class Session : IDisposable
+        {
+            public GroupRec Group; public ScreenLayout Lay; public Form Form; public LiveTile Tile;
+            public List<Cell> Cells; public int W, H, Port; public string Exe;
+            public volatile bool Stop;
+            public Process Proc;
+            public readonly List<string> Err = new List<string>();
+            public Thread Worker;
+
+            public void Dispose()
+            {
+                Stop = true;
+                try { if (Proc != null && !Proc.HasExited) Proc.Kill(); } catch { }
+            }
+        }
+
+        static readonly List<Session> sessions = new List<Session>();
+
+        static string BuildArgs(Session s, List<Cell> cells)
+        {
+            var sb = new StringBuilder();
+            sb.Append("-hide_banner -loglevel warning -nostats -init_hw_device cuda=cu:0 -filter_hw_device cu ");
+            var fc = new StringBuilder();
+            int idx = 0;
+            var scaled = new List<string>();
+            var pos = new List<Rectangle>();
+            foreach (Cell c in cells)
+            {
+                if (c.Url == null || !c.Alive) continue;
+                sb.Append("-hwaccel cuda -hwaccel_output_format cuda -hwaccel_device cu -rtsp_transport tcp -fflags nobuffer -flags low_delay -probesize 200000 -analyzeduration 1000000 -rw_timeout 8000000 ");
+                sb.Append("-i \"" + c.Url.Replace("\"", "%22") + "\" ");
+                fc.Append("[" + idx + ":v:0]scale_cuda=" + c.Px.Width + ":" + c.Px.Height + "[s" + idx + "];");
+                scaled.Add("s" + idx);
+                pos.Add(c.Px);
+                idx++;
+            }
+            if (idx == 0) return null;
+            sb.Append("-f lavfi -i color=c=black:s=" + s.W + "x" + s.H + ":r=" + Fps + " ");
+            fc.Append("[" + idx + ":v]format=nv12,hwupload_cuda[b0];");
+            for (int i = 0; i < scaled.Count; i++)
+                fc.Append("[b" + i + "][" + scaled[i] + "]overlay_cuda=x=" + pos[i].X + ":y=" + pos[i].Y + "[b" + (i + 1) + "]" + (i + 1 < scaled.Count ? ";" : ""));
+            sb.Append("-filter_complex \"" + fc + "\" -map \"[b" + scaled.Count + "]\" -an ");
+            sb.Append("-c:v h264_nvenc -preset p2 -tune ll -rc cbr -b:v " + Math.Max(4, s.W * s.H / 250000) + "M -g " + Fps + " -bf 0 ");
+            sb.Append("-f mpegts \"udp://127.0.0.1:" + s.Port + "?pkt_size=1316\"");
+            return sb.ToString();
+        }
+
+        static void Work(Session s)
+        {
+            int fails = 0;
+            while (!s.Stop)
+            {
+                // kamera yang tidak terjangkau diganti hitam (satu input yang gagal membuka akan mematikan seluruh proses)
+                var tasks = new List<System.Threading.Tasks.Task>();
+                foreach (Cell c in s.Cells)
+                {
+                    Cell cc = c;
+                    if (cc.Url == null) { cc.Alive = false; continue; }
+                    tasks.Add(System.Threading.Tasks.Task.Run(delegate { cc.Alive = Reachable(cc.Url); }));
+                }
+                try { System.Threading.Tasks.Task.WaitAll(tasks.ToArray(), 8000); } catch { }
+                string args = BuildArgs(s, s.Cells);
+                if (args == null) { Log.Write("Mosaic: tidak ada kamera yang terjangkau, coba lagi 15 dtk."); Sleep(s, 15000); continue; }
+                var sw = Stopwatch.StartNew();
+                try
+                {
+                    Log.Write("Mosaic: ffmpeg " + MaskArgs(args));
+                    var psi = new ProcessStartInfo(s.Exe, args);
+                    psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardError = true;
+                    Process p = Process.Start(psi);
+                    s.Proc = p;
+                    var t = new Thread(delegate()
+                    {
+                        try
+                        {
+                            string line;
+                            while ((line = p.StandardError.ReadLine()) != null)
+                            {
+                                lock (s.Err) { s.Err.Add(line); if (s.Err.Count > 40) s.Err.RemoveAt(0); }
+                                if (!s.Stop) Log.Write("mosaic ffmpeg: " + line);
+                            }
+                        }
+                        catch { }
+                    });
+                    t.IsBackground = true; t.Start();
+                    // hidupkan ulang bila ada kamera yang tadinya mati sudah hidup kembali (cek tiap 60 dtk)
+                    int nextProbe = Environment.TickCount + 60000;
+                    while (!s.Stop && !p.HasExited)
+                    {
+                        Thread.Sleep(500);
+                        if (unchecked(Environment.TickCount - nextProbe) >= 0)
+                        {
+                            nextProbe = Environment.TickCount + 60000;
+                            bool changed = false;
+                            foreach (Cell c in s.Cells)
+                                if (c.Url != null && !c.Alive && Reachable(c.Url)) changed = true;
+                            if (changed) { Log.Write("Mosaic: ada kamera yang pulih, menyusun ulang."); break; }
+                        }
+                    }
+                }
+                catch (Exception ex) { Log.Write("Mosaic: " + ex.Message); }
+                finally { try { if (s.Proc != null && !s.Proc.HasExited) s.Proc.Kill(); } catch { } }
+                if (s.Stop) return;
+                fails = sw.Elapsed.TotalSeconds < 20 ? fails + 1 : 0;
+                if (fails >= 3)
+                {
+                    string last; lock (s.Err) last = string.Join("\n", s.Err.ToArray());
+                    Form f = s.Form;
+                    try
+                    {
+                        f.BeginInvoke((Action)delegate
+                        {
+                            MessageBox.Show(f, "Mosaic GPU gagal berulang. Keluaran ffmpeg:\n\n" + (last.Length > 1500 ? last.Substring(last.Length - 1500) : last), "Mosaic GPU");
+                            f.Close();
+                        });
+                    }
+                    catch { }
+                    return;
+                }
+                Sleep(s, 3000);
+            }
+        }
+
+        static void Sleep(Session s, int ms) { for (int t = 0; t < ms && !s.Stop; t += 200) Thread.Sleep(200); }
+
+        static string MaskArgs(string a) { return System.Text.RegularExpressions.Regex.Replace(a, @"(rtsp://[^:/@\s]+):[^@\s]*@", "$1:***@"); }
+
+        // ---------- buka ----------
+
+        /// <summary>Buka mosaic GPU untuk satu group di monitor tertentu (panggil dari UI thread). Mengembalikan pesan error atau null.</summary>
+        public static string Open(GroupRec g, Screen screen)
+        {
+            string exe = FfmpegPipe.FindExe();
+            if (exe == null) return "ffmpeg.exe tidak ditemukan.";
+            string cap = CheckFfmpeg(exe);
+            if (cap != null) return cap;
+
+            ScreenLayout lay = ScreenLayout.ById(g.Layout);
+            Rectangle b = screen.Bounds;
+            int W = Math.Min(b.Width, 1920) & ~1, H = Math.Min(b.Height, 1080) & ~1;
+            var s = new Session();
+            s.Group = g; s.Lay = lay; s.W = W; s.H = H; s.Exe = exe;
+            s.Port = FreeUdpPort();
+            s.Cells = Build(g, lay, W, H);
+            int usable = 0;
+            foreach (Cell c in s.Cells) if (c.Url != null) usable++;
+            if (usable == 0) return "Tidak ada kamera di group ini yang punya URL RTSP.";
+
+            var f = new Form();
+            f.Text = "Mosaic GPU - " + g.Name;
+            f.FormBorderStyle = FormBorderStyle.None;
+            f.StartPosition = FormStartPosition.Manual;
+            f.Bounds = b;
+            f.BackColor = Color.Black;
+            f.KeyPreview = true;
+            s.Form = f;
+
+            var tile = new LiveTile(0, null, LiveFormat.H264, 0);
+            tile.Dock = DockStyle.Fill;
+            tile.HideHeader();
+            tile.FillCell();
+            tile.BackColor = Color.Black;
+            string url = "udp://127.0.0.1:" + s.Port + "?fifo_size=2000000&overrun_nonfatal=1";
+            tile.Sources = new List<StreamSource> { new StreamSource { Rtsp = true, Url = url, Label = "Mosaic GPU" } };
+            s.Tile = tile;
+            f.Controls.Add(tile);
+
+            // nama kamera per kotak
+            for (int i = 0; i < s.Cells.Count; i++)
+            {
+                Cell c = s.Cells[i];
+                if (c.Cam == null) continue;
+                var l = new Label();
+                l.AutoSize = true;
+                l.Text = Dir.Title(c.Cam.NvrId, c.Cam.Channel) + (c.Url == null ? " - RTSP tidak tersedia" : "");
+                l.ForeColor = Color.Gainsboro;
+                l.BackColor = Color.FromArgb(30, 30, 30);
+                l.Font = new Font("Segoe UI", 8.5f);
+                l.Tag = c;
+                l.Parent = tile.Picture;
+                l.Enabled = false;
+            }
+            Action layoutLabels = delegate
+            {
+                int pw = Math.Max(1, tile.Picture.Width), ph = Math.Max(1, tile.Picture.Height);
+                foreach (Control l in tile.Picture.Controls)
+                {
+                    Cell c = l.Tag as Cell;
+                    if (c == null) continue;
+                    l.Location = new Point(c.Px.X * pw / s.W + 4, (c.Px.Bottom * ph / s.H) - l.Height - 3);
+                }
+            };
+            tile.Picture.SizeChanged += delegate { layoutLabels(); };
+            f.Shown += delegate { layoutLabels(); };
+
+            tile.DoubleClicked += delegate(LiveTile t)
+            {
+                Point p = tile.Picture.PointToClient(Control.MousePosition);
+                double fx = (double)p.X / Math.Max(1, tile.Picture.Width) * s.W, fy = (double)p.Y / Math.Max(1, tile.Picture.Height) * s.H;
+                foreach (Cell c in s.Cells)
+                    if (c.Cam != null && c.Px.Contains((int)fx, (int)fy)) { OpenMain(f, c); break; }
+            };
+            f.KeyDown += delegate(object o, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) f.Close(); };
+            f.FormClosed += delegate
+            {
+                try { tile.Halt(); } catch { }
+                s.Dispose();
+                lock (sessions) sessions.Remove(s);
+            };
+            lock (sessions) sessions.Add(s);
+            Application.ApplicationExit += delegate { s.Dispose(); };
+
+            s.Worker = new Thread(delegate() { Work(s); });
+            s.Worker.IsBackground = true;
+            s.Worker.Start();
+            f.Show();
+            tile.Start(1500);
+            return null;
+        }
+
+        static void OpenMain(Form owner, Cell c)
+        {
+            NvrRecord nvr = Dir.Nvr(c.Cam.NvrId);
+            CameraRecord cam = Dir.Cam(c.Cam.NvrId, c.Cam.Channel);
+            if (nvr == null) return;
+            var f = new Form();
+            f.Text = Dir.Title(c.Cam.NvrId, c.Cam.Channel);
+            f.StartPosition = FormStartPosition.CenterParent;
+            f.ClientSize = new Size(1280, 720);
+            f.BackColor = Color.Black;
+            f.KeyPreview = true;
+            var t = new LiveTile(c.Cam.Channel, null, LiveFormat.H264, 0);
+            t.Dock = DockStyle.Fill;
+            t.HideHeader();
+            t.FillCell();
+            t.Sources = StreamPlan.ForLive(nvr, cam, false);
+            t.Caption = f.Text;
+            f.Controls.Add(t);
+            f.KeyDown += delegate(object o, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) f.Close(); };
+            t.DoubleClicked += delegate { f.Close(); };
+            f.FormClosed += delegate { try { t.Halt(); } catch { } };
+            f.Shown += delegate { t.Start(0); };
+            f.Show(owner);
+        }
+    }
+}

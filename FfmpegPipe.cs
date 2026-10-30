@@ -199,7 +199,7 @@ namespace IproNvrTool
             // banyak stream kecil: satu thread dekode per proses (puluhan proses x banyak thread = rebutan CPU) dan loop filter dilewati (~8% lebih ringan)
             if (maxFps > 0 && !hw) sb.Append("-threads 1 ");
             if (maxFps > 0 && maxFps <= 20) sb.Append("-skip_loop_filter all ");
-            sb.Append("-rtsp_transport tcp -probesize 200000 -analyzeduration 1000000 ");
+            sb.Append((url.StartsWith("rtsp", StringComparison.OrdinalIgnoreCase) ? "-rtsp_transport tcp " : "") + "-probesize 200000 -analyzeduration 1000000 ");
             sb.Append("-i \"" + url.Replace("\"", "%22") + "\" -an ");
             // batas fps DI ffmpeg (sebelum scale dan encode MJPEG): frame yang toh tidak ditampilkan tidak perlu di-skala/di-encode
             string vf = (maxFps > 0 ? "fps=" + maxFps : "") + (width > 0 ? (maxFps > 0 ? "," : "") + "scale=" + width + ":-2:flags=fast_bilinear" : "");

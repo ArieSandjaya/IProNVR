@@ -340,6 +340,14 @@ namespace IproNvrTool
             UpdateUser();
         }
 
+        void OpenMosaic(GroupRec g, Screen sc)
+        {
+            string r = null;
+            try { r = MosaicWall.Open(g, sc); }
+            catch (Exception ex) { r = ex.Message; Log.Write("Mosaic GPU: " + ex); }
+            if (!string.IsNullOrEmpty(r)) MessageBox.Show(this, r, "Mosaic GPU");
+        }
+
         void OnUi(Action a)
         {
             if (IsDisposed) return;
@@ -496,6 +504,28 @@ namespace IproNvrTool
                 });
             Asm.Item(m, fullScreen ? "Keluar layar penuh (F11)" : "Full screen (F11)", delegate { ToggleFull(); });
             m.Items.Add(new ToolStripSeparator());
+
+            ToolStripMenuItem mz = new ToolStripMenuItem("Mosaic GPU (NVIDIA, uji coba)");
+            List<GroupRec> mgroups;
+            try { mgroups = AsmDb.ListGroups(); } catch { mgroups = new List<GroupRec>(); }
+            Screen[] mscreens = Screen.AllScreens;
+            foreach (GroupRec mg in mgroups)
+            {
+                GroupRec g3 = mg;
+                if (mscreens.Length <= 1) Asm.Sub(mz, g3.Name, delegate { OpenMosaic(g3, Screen.PrimaryScreen); });
+                else
+                {
+                    var gm = new ToolStripMenuItem(g3.Name);
+                    for (int si = 0; si < mscreens.Length; si++)
+                    {
+                        Screen sc3 = mscreens[si];
+                        Asm.Sub(gm, "Layar " + (si + 1) + (sc3.Primary ? " (utama)" : ""), delegate { OpenMosaic(g3, sc3); });
+                    }
+                    mz.DropDownItems.Add(gm);
+                }
+            }
+            if (mgroups.Count == 0) Asm.Sub(mz, "(belum ada group)", delegate { });
+            m.Items.Add(mz);
 
             ToolStripMenuItem mv = new ToolStripMenuItem("Multiview (jendela terpisah)");
             Asm.Sub(mv, "Multiview baru...", delegate { MultiviewForm.CreateNew(); });
