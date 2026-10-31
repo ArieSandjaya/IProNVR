@@ -19,6 +19,14 @@ namespace IproNvrServer
         public bool Relay = true;        // relay RTSP lewat MediaMTX (aktif bila mediamtx.exe ada di Tools\\mediamtx)
         public int RelayPort = 8554;     // port RTSP relay untuk client
         public string MediaMtxPath = ""; // kosong = Tools\\mediamtx\\mediamtx.exe di samping server
+        // MediaMTX di MESIN LAIN (server tidak menjalankannya sendiri): isi alamat API-nya, mis. "http://192.168.1.20:9997". Di mesin itu: api: yes, apiAddress, dan login
+        // baca-saja (RelayUser/RelayPass) yang sama dengan di bawah, serta user API bila API memakai autentikasi.
+        public string MediaMtxApi = "";
+        public string MediaMtxApiUser = "";
+        public string MediaMtxApiPass = "";
+        public string RelayHost = "";     // host/IP relay yang dilihat client (kosong = host server ini; wajib diisi untuk MediaMTX di mesin lain bila client tak bisa memakai host server)
+        public string RelayUser = "";     // login baca-saja untuk mode MediaMTX eksternal
+        public string RelayPass = "";
 
         public static string Dir { get { return AppDomain.CurrentDomain.BaseDirectory; } }
 

@@ -11,6 +11,7 @@ namespace IproNvrTool
         static int port;
         static string user = "", pass = "";
         static string host = "";
+        static string apiHost = "";   // host relay dari server (RelayHost di server.json), kosong = host server
         static int lastTick;
 
         public static bool Ready { get { return ready; } }
@@ -31,10 +32,30 @@ namespace IproNvrTool
                 user = Convert.ToString(d["user"]); pass = Convert.ToString(d["pass"]);
                 string u = AppSettings.Current.ServerUrl ?? "";
                 host = new Uri(u.Trim().Contains("://") ? u.Trim() : "http://" + u.Trim()).Host;
-                ready = port > 0 && user.Length > 0 && host.Length > 0;
-                Status = ready ? "relay aktif (" + host + ":" + port + ", " + Convert.ToString(d["paths"]) + " path)" : "info relay tidak lengkap";
+                apiHost = d.ContainsKey("host") ? (Convert.ToString(d["host"]) ?? "").Trim() : "";
+                string h; int p;
+                Endpoint(out h, out p);
+                ready = p > 0 && user.Length > 0 && h.Length > 0;
+                Status = ready ? "relay aktif (" + h + ":" + p + ", " + Convert.ToString(d["paths"]) + " path)" : "info relay tidak lengkap";
             }
             catch (Exception ex) { ready = false; Status = "gagal: " + ex.Message; }
+        }
+
+        /// <summary>Alamat relay yang dipakai: isian di Setup (host / host:port / rtsp://host:port) > RelayHost dari server > host server.</summary>
+        static void Endpoint(out string h, out int p)
+        {
+            h = apiHost.Length > 0 ? apiHost : host;
+            p = port;
+            string o = (AppSettings.Current.RelayAddress ?? "").Trim();
+            if (o.Length == 0) return;
+            if (o.IndexOf("://", StringComparison.Ordinal) < 0) o = "rtsp://" + o;
+            try
+            {
+                var uri = new Uri(o);
+                if (!string.IsNullOrEmpty(uri.Host)) h = uri.Host;
+                if (!uri.IsDefaultPort && uri.Port > 0) p = uri.Port;
+            }
+            catch { }
         }
 
         public static string PathName(string nvrHost, int nvrPort, int channel, bool main)
@@ -45,7 +66,9 @@ namespace IproNvrTool
         public static string Url(NvrRecord nvr, int channel, bool main)
         {
             if (!ready || nvr == null) return null;
-            return "rtsp://" + Uri.EscapeDataString(user) + ":" + Uri.EscapeDataString(pass) + "@" + host + ":" + port + "/" + PathName(nvr.Host, nvr.Port, channel, main);
+            string h; int p;
+            Endpoint(out h, out p);
+            return "rtsp://" + Uri.EscapeDataString(user) + ":" + Uri.EscapeDataString(pass) + "@" + h + ":" + p + "/" + PathName(nvr.Host, nvr.Port, channel, main);
         }
     }
 }

@@ -26,6 +26,7 @@ namespace IproNvrTool
         public int LiveFormat = 2;            // 2 H.264, 3 H.265 (nilai lain, mis. dari versi lama, dianggap H.264)
         public bool UseVlcDecoder = false;             // live RTSP lewat LibVLC (dekode GPU dalam proses); false = ffmpeg
         public string MosaicGpu = "auto";       // GPU untuk Mosaic GPU: auto (NVIDIA lalu Intel), nvidia, intel
+        public string RelayAddress = "";        // opsional: alamat relay MediaMTX bila di mesin lain, mis. 192.168.1.20 atau 192.168.1.20:8554 (kosong = ikut server)
         public bool UseRelay = false;           // live lewat relay RTSP di server (MediaMTX); cadangan: kamera langsung
         public bool UseBmpFrames = false;           // frame RTSP live dikirim ffmpeg sebagai BMP (tanpa kompresi JPEG): CPU lebih ringan
         public string HwAccel = "auto";       // akselerasi dekode GPU ffmpeg: auto, d3d11va, dxva2, cuda, qsv, none

@@ -32,6 +32,8 @@ namespace IproNvrServer
         public string ViewUser, ViewPass;
         public int RtspPort = 8554;
         const int ApiPort = 9997;
+        bool External { get { return !string.IsNullOrWhiteSpace(cfg.MediaMtxApi); } }
+        string ApiBase { get { return External ? cfg.MediaMtxApi.Trim().TrimEnd('/') : "http://127.0.0.1:" + ApiPort; } }
 
         public MediaMtxRelay(Store s, ServerConfig c) { store = s; cfg = c; }
 
@@ -53,6 +55,16 @@ namespace IproNvrServer
         public void Start()
         {
             if (!cfg.Relay) { Status = "Relay dimatikan (server.json: Relay=false)"; return; }
+            if (External)
+            {
+                RtspPort = cfg.RelayPort > 0 ? cfg.RelayPort : 8554;
+                ViewUser = cfg.RelayUser; ViewPass = cfg.RelayPass;
+                if (string.IsNullOrEmpty(ViewUser) || string.IsNullOrEmpty(ViewPass)) { Status = "MediaMTX eksternal: isi RelayUser dan RelayPass di server.json (login baca-saja yang sama dengan di mesin MediaMTX)"; Log.Write("Relay: " + Status); return; }
+                worker = new Thread(LoopExternal);
+                worker.IsBackground = true;
+                worker.Start();
+                return;
+            }
             string exe = FindExe();
             if (exe == null) { Status = "mediamtx.exe tidak ditemukan (letakkan di Tools\\mediamtx di samping IproNvrServer.exe)"; Log.Write("Relay: " + Status); return; }
             RtspPort = cfg.RelayPort > 0 ? cfg.RelayPort : 8554;
@@ -121,6 +133,40 @@ namespace IproNvrServer
             return sb.ToString();
         }
 
+        /// <summary>MediaMTX di mesin lain: server hanya mendaftarkan path lewat API-nya. Bila MediaMTX di sana restart (path hilang), pendaftaran diulang.</summary>
+        void LoopExternal()
+        {
+            bool wasUp = false;
+            int tick = 0;
+            while (!stop)
+            {
+                try
+                {
+                    bool up = ApiUp();
+                    if (!up) { if (wasUp) Log.Write("Relay: API MediaMTX " + cfg.MediaMtxApi + " tidak terjangkau."); wasUp = false; Running = false; Status = "MediaMTX eksternal tidak terjangkau: " + cfg.MediaMtxApi; }
+                    else
+                    {
+                        if (!wasUp) { lock (lk) applied.Clear(); lastVersion = -1; Log.Write("Relay: tersambung ke MediaMTX eksternal " + cfg.MediaMtxApi); }
+                        wasUp = true; Running = true;
+                        // MediaMTX di sana mungkin restart tanpa terdeteksi: jumlah path lebih sedikit dari yang terdaftar -> daftarkan ulang
+                        if (++tick % 6 == 0)
+                        {
+                            int code; string r = Api("GET", "/v3/config/paths/list?itemsPerPage=1", null, out code);
+                            if (code == 200)
+                            {
+                                var o = js.DeserializeObject(r) as Dictionary<string, object>;
+                                int n = o != null && o.ContainsKey("itemCount") ? Convert.ToInt32(o["itemCount"]) : -1;
+                                if (n >= 0 && n < Paths) { lock (lk) applied.Clear(); lastVersion = -1; }
+                            }
+                        }
+                        SyncPaths();
+                    }
+                }
+                catch (Exception ex) { Running = false; Status = "Relay eksternal gagal: " + ex.Message; }
+                for (int i = 0; i < 20 && !stop; i++) Thread.Sleep(500);
+            }
+        }
+
         void Loop(string exe)
         {
             int fails = 0;
@@ -172,7 +218,9 @@ namespace IproNvrServer
 
         string Api(string method, string path, object body, out int code)
         {
-            var rq = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + ApiPort + path);
+            var rq = (HttpWebRequest)WebRequest.Create(ApiBase + path);
+            if (External && !string.IsNullOrEmpty(cfg.MediaMtxApiUser))
+                rq.Headers["Authorization"] = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes(cfg.MediaMtxApiUser + ":" + cfg.MediaMtxApiPass));
             rq.Method = method;
             rq.Timeout = 8000;
             rq.Proxy = null;
@@ -293,7 +341,7 @@ namespace IproNvrServer
                 lock (lk) applied[kv.Key] = kv.Value; add++;
             }
             lastVersion = ver;
-            Status = "Relay aktif: " + Paths + " path (RTSP port " + RtspPort + ")";
+            Status = "Relay aktif" + (External ? " (MediaMTX eksternal)" : "") + ": " + Paths + " path (RTSP port " + RtspPort + ")";
             if (add > 0 || del > 0) Log.Write("Relay: " + add + " path didaftarkan/diubah, " + del + " dihapus.");
         }
 
@@ -305,6 +353,7 @@ namespace IproNvrServer
             var o = new Dictionary<string, object>();
             o["enabled"] = Running;
             o["port"] = RtspPort;
+            o["host"] = cfg.RelayHost ?? "";
             o["user"] = Running ? ViewUser : "";
             o["pass"] = Running ? ViewPass : "";
             o["paths"] = Paths;
