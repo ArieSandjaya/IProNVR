@@ -65,8 +65,7 @@ namespace IproNvrTool
             List<StreamSource> list = ForLiveDirect(nvr, cam, sub);
             // relay server (MediaMTX): hanya untuk kamera yang URL-nya juga bisa disusun server (ada IP + URL/template); kamera langsung tetap sebagai cadangan
             if (AppSettings.Current.UseRelay && ServerRelay.Ready && cam != null && nvr != null
-                && (NvrDrivers.For(nvr).BrandId == "ipro" || !string.IsNullOrWhiteSpace(cam.RtspUrl))
-                && CameraRtspUrl(nvr, cam, !sub).Length > 0)
+                && (NvrDrivers.For(nvr).BrandId != "ipro" || CameraRtspUrl(nvr, cam, !sub).Length > 0))   // XVR/DVR: server menyusun URL lewat perangkatnya
             {
                 string ru = ServerRelay.Url(nvr, cam.Channel, !sub);
                 if (!string.IsNullOrEmpty(ru))

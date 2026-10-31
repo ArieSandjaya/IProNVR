@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Web.Script.Serialization;
+using IproNvrTool;
 
 namespace IproNvrServer
 {
@@ -296,13 +297,23 @@ namespace IproNvrServer
             {
                 Row n;
                 if (!nvrs.TryGetValue(L(c, "nvr_id"), out n)) continue;
-                // hanya kamera yang URL-nya bisa disusun server (IP kamera + URL/template). Selain itu client tetap memakai jalurnya sendiri.
-                string brand = S(n, "brand");
-                if (brand.Length > 0 && brand != "ipro" && S(c, "rtsp_url").Trim().Length == 0) continue;
+                string brand = BrandCgi.Norm(S(n, "brand"));
                 string host = S(n, "host");
                 int port = (int)L(n, "port");
                 int ch = (int)L(c, "channel");
-                string us = CamUrl(n, c, false), um = CamUrl(n, c, true);
+                string us, um;
+                if (brand != BrandCgi.Ipro && S(c, "rtsp_url").Trim().Length == 0)
+                {
+                    // XVR/DVR Hikvision/Dahua (kamera analog / tanpa IP): RTSP lewat perangkat itu sendiri, sama dengan driver di client
+                    string b = "rtsp://" + Uri.EscapeDataString(S(n, "username")) + ":" + Uri.EscapeDataString(S(n, "password")) + "@" + host + ":554";
+                    us = b + BrandCgi.ViaRtspPath(brand, ch, true);
+                    um = b + BrandCgi.ViaRtspPath(brand, ch, false);
+                }
+                else
+                {
+                    // kamera IP: URL hasil deteksi / template + IP kamera. Tanpa URL yang bisa disusun, client tetap memakai jalurnya sendiri.
+                    us = CamUrl(n, c, false); um = CamUrl(n, c, true);
+                }
                 if (us.Length == 0) continue;
                 d[PathName(host, port, ch, false)] = us;
                 d[PathName(host, port, ch, true)] = um.Length > 0 ? um : us;
