@@ -348,6 +348,14 @@ namespace IproNvrTool
             if (!string.IsNullOrEmpty(r)) MessageBox.Show(this, r, "Mosaic GPU");
         }
 
+        void OpenD3d(GroupRec g, Screen sc)
+        {
+            string r = null;
+            try { r = D3dWall.Open(g, sc); }
+            catch (Exception ex) { r = ex.Message; Log.Write("Wall Direct3D: " + ex); }
+            if (!string.IsNullOrEmpty(r)) MessageBox.Show(this, r, "Wall Direct3D");
+        }
+
         void OnUi(Action a)
         {
             if (IsDisposed) return;
@@ -526,6 +534,25 @@ namespace IproNvrTool
             }
             if (mgroups.Count == 0) Asm.Sub(mz, "(belum ada group)", delegate { });
             m.Items.Add(mz);
+
+            ToolStripMenuItem md = new ToolStripMenuItem("Wall Direct3D (dekode GPU, uji coba)");
+            foreach (GroupRec mg in mgroups)
+            {
+                GroupRec g4 = mg;
+                if (mscreens.Length <= 1) Asm.Sub(md, g4.Name, delegate { OpenD3d(g4, Screen.PrimaryScreen); });
+                else
+                {
+                    var gd = new ToolStripMenuItem(g4.Name);
+                    for (int si = 0; si < mscreens.Length; si++)
+                    {
+                        Screen sc4 = mscreens[si];
+                        Asm.Sub(gd, "Layar " + (si + 1) + (sc4.Primary ? " (utama)" : ""), delegate { OpenD3d(g4, sc4); });
+                    }
+                    md.DropDownItems.Add(gd);
+                }
+            }
+            if (mgroups.Count == 0) Asm.Sub(md, "(belum ada group)", delegate { });
+            m.Items.Add(md);
 
             ToolStripMenuItem mv = new ToolStripMenuItem("Multiview (jendela terpisah)");
             Asm.Sub(mv, "Multiview baru...", delegate { MultiviewForm.CreateNew(); });

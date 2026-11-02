@@ -25,6 +25,9 @@ namespace IproNvrTool
         public string FfmpegPath = "";        // untuk dekode live H.264/H.265 (kosong = cari di folder aplikasi / PATH)
         public int LiveFormat = 2;            // 2 H.264, 3 H.265 (nilai lain, mis. dari versi lama, dianggap H.264)
         public bool UseVlcDecoder = false;             // live RTSP lewat LibVLC (dekode GPU dalam proses); false = ffmpeg
+        public string D3dFfmpegDir = "";        // folder DLL ffmpeg 9 shared (avcodec-63.dll dst) untuk Wall Direct3D; kosong = cari otomatis
+        public int D3dMaxStreams = 4;           // batas jumlah stream Wall Direct3D (naikkan bertahap)
+        public int D3dFps = 15;                 // fps gambar Wall Direct3D
         public string MosaicGpu = "auto";       // GPU untuk Mosaic GPU: auto (NVIDIA lalu Intel), nvidia, intel
         public string RelayAddress = "";        // opsional: alamat relay MediaMTX bila di mesin lain, mis. 192.168.1.20 atau 192.168.1.20:8554 (kosong = ikut server)
         public bool UseRelay = false;           // live lewat relay RTSP di server (MediaMTX); cadangan: kamera langsung

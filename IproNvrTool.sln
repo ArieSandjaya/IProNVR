@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.37628.2 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IproNvrTool", "IproNvrTool.csproj", "{91E601C0-2338-010A-08B0-E7435681EDAA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IproD3D", "IproD3D\IproD3D.csproj", "{7D3B5A10-52C4-4E0B-9F0A-1D3D11A0B001}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{91E601C0-2338-010A-08B0-E7435681EDAA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{91E601C0-2338-010A-08B0-E7435681EDAA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{91E601C0-2338-010A-08B0-E7435681EDAA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D3B5A10-52C4-4E0B-9F0A-1D3D11A0B001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D3B5A10-52C4-4E0B-9F0A-1D3D11A0B001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D3B5A10-52C4-4E0B-9F0A-1D3D11A0B001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D3B5A10-52C4-4E0B-9F0A-1D3D11A0B001}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

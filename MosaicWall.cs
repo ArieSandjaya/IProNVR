@@ -123,7 +123,7 @@ namespace IproNvrTool
             return p;
         }
 
-        static string FirstRtsp(NvrRecord nvr, CameraRecord cam, bool sub)
+        internal static string FirstRtsp(NvrRecord nvr, CameraRecord cam, bool sub)
         {
             foreach (StreamSource s in StreamPlan.ForLive(nvr, cam, sub))
                 if (s.Rtsp && !string.IsNullOrEmpty(s.Url)) return s.Url;
