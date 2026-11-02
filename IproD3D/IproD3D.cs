@@ -159,7 +159,7 @@ namespace IproD3D
         public int DecW, DecH;
         public bool Failed;
         // variasi bind flag tekstur NV12 untuk input Video Processor (driver berbeda-beda); dicoba berurutan sampai input view berhasil
-        public static volatile int Variant;
+        public static volatile int Variant = 1;
         public static readonly D3D.BindFlags[] Variants = new D3D.BindFlags[] {
             D3D.BindFlags.ShaderResource,
             D3D.BindFlags.ShaderResource | D3D.BindFlags.RenderTarget,
@@ -168,6 +168,8 @@ namespace IproD3D
             D3D.BindFlags.Decoder,
             D3D.BindFlags.Decoder | D3D.BindFlags.ShaderResource };
         public int TexVar;
+        bool _sw;
+        byte[] _nv;
 
         // cache video processor (diurus render thread)
         public D3D.VideoProcessorEnumerator VEnum;
@@ -295,17 +297,25 @@ namespace IproD3D
                 cc = ffmpeg.avcodec_alloc_context3(codec);
                 e = ffmpeg.avcodec_parameters_to_context(cc, par);
                 if (e < 0) throw new Exception("params: " + Err(e));
-                cc->hw_device_ctx = ffmpeg.av_buffer_ref(G.HwDev);
-                cc->get_format = new AVCodecContext_get_format_func { Pointer = Marshal.GetFunctionPointerForDelegate(_fmt) };
-                cc->extra_hw_frames = 2;
-                cc->thread_count = 1;
+                // codec yang tidak punya dekoder D3D11VA (MJPEG, MPEG-4, dll) didekode software lalu diunggah ke GPU
+                var cid = par->codec_id;
+                _sw = !(cid == AVCodecID.AV_CODEC_ID_H264 || cid == AVCodecID.AV_CODEC_ID_HEVC || cid == AVCodecID.AV_CODEC_ID_VP9 ||
+                        cid == AVCodecID.AV_CODEC_ID_AV1 || cid == AVCodecID.AV_CODEC_ID_MPEG2VIDEO);
+                if (!_sw)
+                {
+                    cc->hw_device_ctx = ffmpeg.av_buffer_ref(G.HwDev);
+                    cc->get_format = new AVCodecContext_get_format_func { Pointer = Marshal.GetFunctionPointerForDelegate(_fmt) };
+                    cc->extra_hw_frames = 2;
+                    cc->thread_count = 1;
+                }
+                else cc->thread_count = 2;
                 cc->flags |= ffmpeg.AV_CODEC_FLAG_LOW_DELAY;
                 e = ffmpeg.avcodec_open2(cc, codec, null);
                 if (e < 0) throw new Exception("open codec: " + Err(e));
                 DecW = par->width; DecH = par->height;
                 pkt = ffmpeg.av_packet_alloc();
                 fr = ffmpeg.av_frame_alloc();
-                Say("terhubung " + par->codec_id + " " + par->width + "x" + par->height + (UseMain ? " (utama)" : " (sub)"));
+                Say("terhubung " + par->codec_id + (_sw ? " [software]" : " [GPU]") + " " + par->width + "x" + par->height + (UseMain ? " (utama)" : " (sub)"));
                 Status = "Menunggu frame...";
                 bool main0 = UseMain;
                 long lastCopy = 0;
@@ -329,9 +339,13 @@ namespace IproD3D
                         if (Visible && now - lastCopy >= minTicks)
                         {
                             lastCopy = now;
-                            if (fr->format != (int)AVPixelFormat.AV_PIX_FMT_D3D11)
-                                throw new Exception("frame bukan D3D11 (format " + fr->format + "): dekode GPU tidak aktif");
-                            Copy(fr);
+                            if (_sw) CopySw(fr);
+                            else
+                            {
+                                if (fr->format != (int)AVPixelFormat.AV_PIX_FMT_D3D11)
+                                    throw new Exception("frame bukan D3D11 (format " + fr->format + "): dekode GPU tidak aktif");
+                                Copy(fr);
+                            }
                         }
                         ffmpeg.av_frame_unref(fr);
                     }
@@ -346,6 +360,63 @@ namespace IproD3D
                 if (opt != null) ffmpeg.av_dict_free(&opt);
                 lock (Lk) { ReleaseSrc(); }
             }
+        }
+
+        void CopySw(AVFrame* fr)
+        {
+            var pf = (AVPixelFormat)fr->format;
+            if (pf != AVPixelFormat.AV_PIX_FMT_YUV420P && pf != AVPixelFormat.AV_PIX_FMT_YUVJ420P)
+                throw new Exception("format software " + pf + " belum didukung (butuh yuv420p)");
+            int w = fr->width & ~1, h = fr->height & ~1;
+            int need = w * h * 3 / 2;
+            if (_nv == null || _nv.Length != need) _nv = new byte[need];
+            int ls0 = fr->linesize[0], ls1 = fr->linesize[1], ls2 = fr->linesize[2];
+            fixed (byte* dst = _nv)
+            {
+                for (int y = 0; y < h; y++)
+                {
+                    byte* sp = fr->data[0] + (long)y * ls0;
+                    byte* dp = dst + y * w;
+                    for (int x = 0; x < w; x++) dp[x] = sp[x];
+                }
+                byte* uvd = dst + w * h;
+                int cw = w / 2;
+                for (int y = 0; y < h / 2; y++)
+                {
+                    byte* up = fr->data[1] + (long)y * ls1;
+                    byte* vp = fr->data[2] + (long)y * ls2;
+                    byte* dp = uvd + y * w;
+                    for (int x = 0; x < cw; x++) { dp[2 * x] = up[x]; dp[2 * x + 1] = vp[x]; }
+                }
+                lock (Lk)
+                {
+                    if (Tex == null || TexW != w || TexH != h || TexVar != Variant)
+                    {
+                        if (Tex != null) { Tex.Dispose(); Tex = null; }
+                        var d = new D3D.Texture2DDescription
+                        {
+                            Width = w, Height = h, MipLevels = 1, ArraySize = 1,
+                            Format = DX.Format.NV12,
+                            SampleDescription = new DX.SampleDescription(1, 0),
+                            Usage = D3D.ResourceUsage.Default,
+                            BindFlags = Variants[Variant],
+                            CpuAccessFlags = D3D.CpuAccessFlags.None,
+                            OptionFlags = D3D.ResourceOptionFlags.None
+                        };
+                        Tex = new D3D.Texture2D(G.Dev, d);
+                        TexW = w; TexH = h; TexVar = Variant;
+                        Say("tekstur NV12 (software) bind=" + d.BindFlags);
+                    }
+                    G.Ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)dst, w, need), Tex, 0);
+                    M709 = fr->colorspace == AVColorSpace.AVCOL_SPC_BT709 || (fr->colorspace == AVColorSpace.AVCOL_SPC_UNSPECIFIED && h >= 720);
+                    FullRange = pf == AVPixelFormat.AV_PIX_FMT_YUVJ420P || fr->color_range == AVColorRange.AVCOL_RANGE_JPEG;
+                    if (!HasFrame) Say("frame pertama (software) " + w + "x" + h + " " + pf);
+                    HasFrame = true;
+                    Copied++;
+                    Status = null;
+                }
+            }
+            DecW = w; DecH = h;
         }
 
         void Copy(AVFrame* fr)
