@@ -18,6 +18,24 @@ using DX = SharpDX.DXGI;
 
 namespace IproD3D
 {
+    static class FLog
+    {
+        static readonly object L = new object();
+        public static string Path0 = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "IproNvrTool", "d3d.log");
+        public static void W(string m)
+        {
+            try
+            {
+                lock (L)
+                {
+                    Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path0));
+                    File.AppendAllText(Path0, DateTime.Now.ToString("HH:mm:ss.fff") + " " + m + "\r\n");
+                }
+            }
+            catch { }
+        }
+    }
+
     public static class Entry
     {
         const int NeedAvcodecMajor = 63;
@@ -55,6 +73,8 @@ namespace IproD3D
         public static Form Open(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
             Rectangle bounds, string deviceName, string ffmpegDir, int maxStreams, int fps, Action<string> log)
         {
+            try { File.WriteAllText(FLog.Path0, ""); } catch { }
+            FLog.W("Open " + title + " layar=" + deviceName + " tile=" + urls.Length + " dir=" + ffmpegDir);
             Init(ffmpegDir);
             return new Wall(title, urls, mainUrls, names, rects, bounds, deviceName, maxStreams, fps, log);
         }
@@ -180,7 +200,7 @@ namespace IproD3D
             return s;
         }
 
-        void Say(string m) { var l = Log; if (l != null) { try { l(Name + ": " + m); } catch { } } }
+        void Say(string m) { FLog.W(Name + ": " + m); var l = Log; if (l != null) { try { l(Name + ": " + m); } catch { } } }
 
         int Intr(void* p)
         {
@@ -348,6 +368,7 @@ namespace IproD3D
                 M709 = fr->colorspace == AVColorSpace.AVCOL_SPC_BT709 ||
                        (fr->colorspace != AVColorSpace.AVCOL_SPC_BT470BG && fr->colorspace != AVColorSpace.AVCOL_SPC_SMPTE170M && h >= 720);
                 FullRange = fr->color_range == AVColorRange.AVCOL_RANGE_JPEG;
+                if (!HasFrame) Say("frame pertama disalin " + w + "x" + h + " fmt=" + _srcWrap.Description.Format + " slice=" + slice + " m709=" + M709);
                 HasFrame = true;
                 Copied++;
                 Status = null;
@@ -397,6 +418,7 @@ namespace IproD3D
         readonly Font _fName = new Font("Segoe UI", 9f, FontStyle.Bold);
         readonly Font _fSmall = new Font("Segoe UI", 8f);
         long _frames, _lastStat;
+        bool _presentLogged;
         readonly string _title;
 
         public Wall(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
@@ -438,7 +460,7 @@ namespace IproD3D
             Say("jendela " + bounds.Width + "x" + bounds.Height + ", " + started + " stream, " + _fps + " fps");
         }
 
-        void Say(string m) { if (_log != null) { try { _log("[D3D] " + m); } catch { } } }
+        void Say(string m) { FLog.W("[wall] " + m); if (_log != null) { try { _log("[D3D] " + m); } catch { } } }
 
         void CreateSwap()
         {
@@ -497,7 +519,7 @@ namespace IproD3D
         void Render()
         {
             var ctx = _g.Ctx;
-            ctx.ClearRenderTargetView(_rtv, new RawColor4(0f, 0f, 0f, 1f));
+            ctx.ClearRenderTargetView(_rtv, new RawColor4(0.06f, 0.08f, 0.16f, 1f));
             foreach (var t in _tiles)
             {
                 var rc = RectOf(t);
@@ -505,21 +527,23 @@ namespace IproD3D
                 lock (t.Lk)
                 {
                     if (!t.HasFrame || t.Tex == null) continue;
-                    try { Blt(t, rc); t.Shown++; }
-                    catch (Exception ex) { t.Status = "Render: " + ex.Message; t.DisposeVp(); }
+                    try { bool first = t.Shown == 0; Blt(t, rc); t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); }
+                    catch (Exception ex) { t.Status = "Render: " + ex.Message; Say("Blt galat " + t.Name + ": " + ex); t.DisposeVp(); }
                 }
             }
             if (_gdiOk) Overlay();
             var r = _sc.TryPresent(1, DX.PresentFlags.None);
+            if (_frames == 0 || (r.Failure && !_presentLogged)) { _presentLogged = r.Failure; Say("Present: " + r); }
             _frames++;
             long now = Stopwatch.GetTimestamp();
-            if (now - _lastStat > 30 * Stopwatch.Frequency)
+            if (now - _lastStat > 5 * Stopwatch.Frequency)
             {
                 _lastStat = now;
                 var sb = new StringBuilder("HEALTH ");
                 int ok = 0, dec = 0;
                 foreach (var t in _tiles) { if (t.HasFrame) ok++; if (!t.Failed) dec++; }
                 Say("HEALTH tile hidup " + ok + "/" + dec + ", frame render " + _frames);
+                foreach (var t in _tiles) Say("  " + t.Name + " dec=" + t.Decoded + " salin=" + t.Copied + " tampil=" + t.Shown + " has=" + t.HasFrame + " st=" + t.Status);
             }
         }
 
@@ -577,6 +601,8 @@ namespace IproD3D
                 using (var g = Graphics.FromHdc(hdc))
                 {
                     g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                    int alive = 0; foreach (var t0 in _tiles) if (t0.HasFrame) alive++;
+                    g.DrawString("D3D " + _g.Name + "  render " + _frames + "  tile gambar " + alive + "/" + _tiles.Length + "  (log: " + FLog.Path0 + ")", _fSmall, Brushes.Yellow, 4, _ch - 18);
                     using (var bar = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
                     using (var fg = new SolidBrush(Color.White))
                     using (var dim = new SolidBrush(Color.FromArgb(200, 200, 200)))
