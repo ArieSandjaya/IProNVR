@@ -176,14 +176,20 @@ namespace IproD3D
             D3D.BindFlags.Decoder,
             D3D.BindFlags.Decoder | D3D.BindFlags.ShaderResource };
         public int TexVar;
-        public int InY = -1, ProbeN, KeyCs = -1;
+        public int InY = -1, ProbeN, KeyCs = -1, ProbeFrames;
+        // mode langsung: Video Processor membaca tekstur dekoder (array slice) tanpa salinan; frame ditahan (ref) sampai diganti
+        public static volatile bool Direct;
+        public bool IsDirect;
+        public int ArrW, ArrH, HeldW, HeldH, HeldSlice;
+        AVFrame* _held;
+        public D3D.Texture2D ArrTex { get { return _srcWrap; } }
+        public readonly Dictionary<int, D3D.VideoProcessorInputView> Views = new Dictionary<int, D3D.VideoProcessorInputView>();
         bool _sw;
         byte[] _nv;
 
         // cache video processor (diurus render thread)
         public D3D.VideoProcessorEnumerator VEnum;
         public D3D.VideoProcessor Vp;
-        public D3D.VideoProcessorInputView InView;
         public D3D.VideoProcessorOutputView OutView;
         public int KeyIw, KeyIh, KeyOw, KeyOh;
         public D3D.Texture2D KeyTex;
@@ -265,6 +271,7 @@ namespace IproD3D
 
         void ReleaseSrc()
         {
+            if (_held != null) { AVFrame* hh = _held; ffmpeg.av_frame_free(&hh); _held = null; }
             if (_srcWrap != null) { try { _srcWrap.Dispose(); } catch { } _srcWrap = null; _srcPtr = IntPtr.Zero; }
         }
 
@@ -314,7 +321,7 @@ namespace IproD3D
                 {
                     cc->hw_device_ctx = ffmpeg.av_buffer_ref(G.HwDev);
                     cc->get_format = new AVCodecContext_get_format_func { Pointer = Marshal.GetFunctionPointerForDelegate(_fmt) };
-                    cc->extra_hw_frames = 2;
+                    cc->extra_hw_frames = 4;
                     cc->thread_count = 1;
                 }
                 else cc->thread_count = 2;
@@ -353,7 +360,7 @@ namespace IproD3D
                             {
                                 if (fr->format != (int)AVPixelFormat.AV_PIX_FMT_D3D11)
                                     throw new Exception("frame bukan D3D11 (format " + fr->format + "): dekode GPU tidak aktif");
-                                Copy(fr);
+                                if (Direct) Hold(fr); else Copy(fr);
                             }
                         }
                         ffmpeg.av_frame_unref(fr);
@@ -372,16 +379,19 @@ namespace IproD3D
         }
 
         // diagnostik: baca balik beberapa byte dari tekstur hasil salin (hanya 3 frame pertama)
-        void ProbeTex(int w, int h)
+        void ProbeTex(D3D.Resource src, int sub, int w, int h)
         {
             try
             {
-                var d = Tex.Description;
-                d.Usage = D3D.ResourceUsage.Staging; d.BindFlags = D3D.BindFlags.None;
-                d.CpuAccessFlags = D3D.CpuAccessFlags.Read; d.OptionFlags = D3D.ResourceOptionFlags.None;
+                var d = new D3D.Texture2DDescription
+                {
+                    Width = w, Height = h, MipLevels = 1, ArraySize = 1, Format = DX.Format.NV12,
+                    SampleDescription = new DX.SampleDescription(1, 0), Usage = D3D.ResourceUsage.Staging,
+                    BindFlags = D3D.BindFlags.None, CpuAccessFlags = D3D.CpuAccessFlags.Read, OptionFlags = D3D.ResourceOptionFlags.None
+                };
                 using (var st = new D3D.Texture2D(G.Dev, d))
                 {
-                    G.Ctx.CopyResource(Tex, st);
+                    G.Ctx.CopySubresourceRegion(src, sub, new D3D.ResourceRegion(0, 0, 0, w, h, 1), st, 0, 0, 0, 0);
                     var box = G.Ctx.MapSubresource(st, 0, D3D.MapMode.Read, D3D.MapFlags.None);
                     try
                     {
@@ -456,6 +466,40 @@ namespace IproD3D
             DecW = w; DecH = h;
         }
 
+        // mode langsung: tahan frame (ref) dan biarkan Video Processor membaca tekstur dekoder
+        void Hold(AVFrame* fr)
+        {
+            IntPtr arr = (IntPtr)fr->data[0];
+            int slice = (int)(IntPtr)fr->data[1];
+            int w = fr->width & ~1, h = fr->height & ~1;
+            lock (Lk)
+            {
+                if (_srcPtr != arr)
+                {
+                    if (_held != null) { AVFrame* hh = _held; ffmpeg.av_frame_free(&hh); _held = null; }
+                    ReleaseSrc();
+                    Marshal.AddRef(arr);
+                    _srcWrap = new D3D.Texture2D(arr);
+                    _srcPtr = arr;
+                    var ad = _srcWrap.Description;
+                    ArrW = ad.Width; ArrH = ad.Height;
+                    Say("mode langsung: tekstur dekoder " + ArrW + "x" + ArrH + " array=" + ad.ArraySize + " bind=" + ad.BindFlags);
+                }
+                if (_held == null) _held = ffmpeg.av_frame_alloc(); else ffmpeg.av_frame_unref(_held);
+                ffmpeg.av_frame_ref(_held, fr);
+                HeldSlice = slice; HeldW = w; HeldH = h;
+                M709 = fr->colorspace == AVColorSpace.AVCOL_SPC_BT709 ||
+                       (fr->colorspace != AVColorSpace.AVCOL_SPC_BT470BG && fr->colorspace != AVColorSpace.AVCOL_SPC_SMPTE170M && h >= 720);
+                FullRange = fr->color_range == AVColorRange.AVCOL_RANGE_JPEG;
+                IsDirect = true;
+                if (ProbeFrames++ < 3) lock (G.Sync) { ProbeTex(_srcWrap, slice, w, h); }
+                HasFrame = true;
+                Copied++;
+                Status = null;
+            }
+            DecW = w; DecH = h;
+        }
+
         void Copy(AVFrame* fr)
         {
             IntPtr arr = (IntPtr)fr->data[0];
@@ -482,10 +526,11 @@ namespace IproD3D
                     Tex = new D3D.Texture2D(G.Dev, d);
                     TexW = w; TexH = h;
                 }
+                IsDirect = false;
                 lock (G.Sync)
                 {
                     G.Ctx.CopySubresourceRegion(_srcWrap, slice, new D3D.ResourceRegion(0, 0, 0, w, h, 1), Tex, 0, 0, 0, 0);
-                    if (Copied < 3) ProbeTex(w, h);
+                    if (ProbeFrames++ < 3) ProbeTex(Tex, 0, w, h);
                 }
                 M709 = fr->colorspace == AVColorSpace.AVCOL_SPC_BT709 ||
                        (fr->colorspace != AVColorSpace.AVCOL_SPC_BT470BG && fr->colorspace != AVColorSpace.AVCOL_SPC_SMPTE170M && h >= 720);
@@ -501,7 +546,8 @@ namespace IproD3D
         // dipanggil render thread (di bawah Lk)
         public void DisposeVp()
         {
-            if (InView != null) { InView.Dispose(); InView = null; }
+            foreach (var kv in Views) { try { kv.Value.Dispose(); } catch { } }
+            Views.Clear();
             if (OutView != null) { OutView.Dispose(); OutView = null; }
             if (Vp != null) { Vp.Dispose(); Vp = null; }
             if (VEnum != null) { VEnum.Dispose(); VEnum = null; }
@@ -689,14 +735,19 @@ namespace IproD3D
 
         void Blt(Tile t, Rectangle rc)
         {
-            int iw = t.TexW, ih = t.TexH;
+            bool dir = t.IsDirect;
+            D3D.Texture2D src = dir ? t.ArrTex : t.Tex;
+            int iw = dir ? t.ArrW : t.TexW, ih = dir ? t.ArrH : t.TexH;
+            int vw = dir ? t.HeldW : t.TexW, vh = dir ? t.HeldH : t.TexH;
+            int slice = dir ? t.HeldSlice : 0;
+            if (src == null) return;
             // letterbox
-            double ar = (double)iw / ih;
+            double ar = (double)vw / vh;
             int dw = rc.Width, dh = (int)(dw / ar);
             if (dh > rc.Height) { dh = rc.Height; dw = (int)(dh * ar); }
             int dx = rc.X + (rc.Width - dw) / 2, dy = rc.Y + (rc.Height - dh) / 2;
 
-            if (t.Vp == null || t.KeyCs != CsVar || t.KeyTex != t.Tex || t.KeyIw != iw || t.KeyIh != ih || t.KeyOw != _cw || t.KeyOh != _ch)
+            if (t.Vp == null || t.KeyCs != CsVar || t.KeyTex != src || t.KeyIw != iw || t.KeyIh != ih || t.KeyOw != _cw || t.KeyOh != _ch)
             {
                 t.DisposeVp();
                 var cd = new D3D.VideoProcessorContentDescription
@@ -718,13 +769,10 @@ namespace IproD3D
                     Say("VP caps: " + t.VEnum.VideoProcessorCaps.FeatureCaps);
                 }
                 _g.VDev.CreateVideoProcessor(t.VEnum, 0, out t.Vp);
-                var ivd = new D3D.VideoProcessorInputViewDescription { FourCC = 0, Dimension = D3D.VpivDimension.Texture2D };
-                ivd.Texture2D.MipSlice = 0; ivd.Texture2D.ArraySlice = 0;
-                _g.VDev.CreateVideoProcessorInputView(t.Tex, t.VEnum, ivd, out t.InView);
                 var ovd = new D3D.VideoProcessorOutputViewDescription { Dimension = D3D.VpovDimension.Texture2D };
                 ovd.Texture2D.MipSlice = 0;
                 _g.VDev.CreateVideoProcessorOutputView(_back, t.VEnum, ovd, out t.OutView);
-                t.KeyCs = CsVar; t.KeyTex = t.Tex; t.KeyIw = iw; t.KeyIh = ih; t.KeyOw = _cw; t.KeyOh = _ch;
+                t.KeyCs = CsVar; t.KeyTex = src; t.KeyIw = iw; t.KeyIh = ih; t.KeyOw = _cw; t.KeyOh = _ch;
                 _g.VCtx.VideoProcessorSetStreamAutoProcessingMode(t.Vp, 0, false);
                 _g.VCtx.VideoProcessorSetStreamFrameFormat(t.Vp, 0, D3D.VideoFrameFormat.Progressive);
                 if (CsVar != 5)
@@ -732,6 +780,14 @@ namespace IproD3D
                     var ocs = new D3D.VideoProcessorColorSpace { Usage = false, RgbRange = false, YCbCrMatrix = true, YCbCrXvYCC = false, NominalRange = 0 };
                     _g.VCtx.VideoProcessorSetOutputColorSpace(t.Vp, ocs);
                 }
+            }
+            D3D.VideoProcessorInputView iv;
+            if (!t.Views.TryGetValue(slice, out iv))
+            {
+                var ivd = new D3D.VideoProcessorInputViewDescription { FourCC = 0, Dimension = D3D.VpivDimension.Texture2D };
+                ivd.Texture2D.MipSlice = 0; ivd.Texture2D.ArraySlice = slice;
+                _g.VDev.CreateVideoProcessorInputView(src, t.VEnum, ivd, out iv);
+                t.Views[slice] = iv;
             }
             var vc = _g.VCtx;
             if (CsVar != 5)
@@ -742,10 +798,10 @@ namespace IproD3D
                 var cs = new D3D.VideoProcessorColorSpace { Usage = false, RgbRange = false, YCbCrMatrix = mx, YCbCrXvYCC = false, NominalRange = nom };
                 vc.VideoProcessorSetStreamColorSpace(t.Vp, 0, cs);
             }
-            vc.VideoProcessorSetStreamSourceRect(t.Vp, 0, true, new RawRectangle(0, 0, iw, ih));
+            vc.VideoProcessorSetStreamSourceRect(t.Vp, 0, true, new RawRectangle(0, 0, vw, vh));
             vc.VideoProcessorSetStreamDestRect(t.Vp, 0, true, new RawRectangle(dx, dy, dx + dw, dy + dh));
             vc.VideoProcessorSetOutputTargetRect(t.Vp, true, new RawRectangle(rc.X, rc.Y, rc.Right, rc.Bottom));
-            var st = new D3D.VideoProcessorStream { Enable = true, InputFrameOrField = 0, PInputSurface = t.InView };
+            var st = new D3D.VideoProcessorStream { Enable = true, InputFrameOrField = 0, PInputSurface = iv };
             vc.VideoProcessorBlt(t.Vp, t.OutView, 0, 1, new[] { st });
         }
 
@@ -786,12 +842,21 @@ namespace IproD3D
                 finally { _g.Ctx.UnmapSubresource(_stg, 0); }
             }
             long now = Stopwatch.GetTimestamp();
-            if (bad && CsVar < CsNames.Length - 1 && now - _csChangedAt > Stopwatch.Frequency / 2)
+            if (bad && now - _csChangedAt > Stopwatch.Frequency / 2)
             {
-                CsVar++;
-                _csChangedAt = now;
-                Say("hasil hitam -> coba color space: " + CsNames[CsVar]);
-                foreach (var t in _tiles) t.ProbeN = 0;
+                if (!Tile.Direct && CsVar >= 1)
+                {
+                    Tile.Direct = true; CsVar = 0; _csChangedAt = now;
+                    Say("hasil tetap hitam -> mode langsung (VP membaca tekstur dekoder tanpa salinan)");
+                    foreach (var t in _tiles) { t.ProbeN = 0; t.InY = -1; t.ProbeFrames = 0; }
+                }
+                else if (CsVar < CsNames.Length - 1)
+                {
+                    CsVar++;
+                    _csChangedAt = now;
+                    Say("hasil hitam -> coba color space: " + CsNames[CsVar]);
+                    foreach (var t in _tiles) t.ProbeN = 0;
+                }
             }
         }
 
