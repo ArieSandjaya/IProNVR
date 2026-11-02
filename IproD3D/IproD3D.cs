@@ -158,6 +158,16 @@ namespace IproD3D
         public long Decoded, Copied, Shown;
         public int DecW, DecH;
         public bool Failed;
+        // variasi bind flag tekstur NV12 untuk input Video Processor (driver berbeda-beda); dicoba berurutan sampai input view berhasil
+        public static volatile int Variant;
+        public static readonly D3D.BindFlags[] Variants = new D3D.BindFlags[] {
+            D3D.BindFlags.ShaderResource,
+            D3D.BindFlags.ShaderResource | D3D.BindFlags.RenderTarget,
+            D3D.BindFlags.RenderTarget,
+            D3D.BindFlags.None,
+            D3D.BindFlags.Decoder,
+            D3D.BindFlags.Decoder | D3D.BindFlags.ShaderResource };
+        public int TexVar;
 
         // cache video processor (diurus render thread)
         public D3D.VideoProcessorEnumerator VEnum;
@@ -352,13 +362,13 @@ namespace IproD3D
                     _srcWrap = new D3D.Texture2D(arr);
                     _srcPtr = arr;
                 }
-                if (Tex == null || TexW != w || TexH != h)
+                if (Tex == null || TexW != w || TexH != h || TexVar != Variant)
                 {
                     if (Tex != null) { Tex.Dispose(); Tex = null; }
                     var d = _srcWrap.Description;
                     d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1;
                     d.Usage = D3D.ResourceUsage.Default;
-                    d.BindFlags = D3D.BindFlags.ShaderResource;
+                    d.BindFlags = Variants[Variant]; TexVar = Variant; Say("tekstur NV12 bind=" + d.BindFlags);
                     d.CpuAccessFlags = D3D.CpuAccessFlags.None;
                     d.OptionFlags = D3D.ResourceOptionFlags.None;
                     Tex = new D3D.Texture2D(G.Dev, d);
@@ -419,6 +429,7 @@ namespace IproD3D
         readonly Font _fSmall = new Font("Segoe UI", 8f);
         long _frames, _lastStat;
         bool _presentLogged;
+        static bool _fmtLogged;
         readonly string _title;
 
         public Wall(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
@@ -528,7 +539,18 @@ namespace IproD3D
                 {
                     if (!t.HasFrame || t.Tex == null) continue;
                     try { bool first = t.Shown == 0; Blt(t, rc); t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); }
-                    catch (Exception ex) { t.Status = "Render: " + ex.Message; Say("Blt galat " + t.Name + ": " + ex); t.DisposeVp(); }
+                    catch (Exception ex)
+                    {
+                        t.Status = "Render: " + ex.Message;
+                        Say("Blt galat " + t.Name + " (bind=" + Tile.Variants[t.TexVar] + "): " + ex.Message.Split('\n')[0]);
+                        t.DisposeVp();
+                        if (ex.Message.Contains("E_INVALIDARG") && t.TexVar == Tile.Variant && Tile.Variant < Tile.Variants.Length - 1)
+                        {
+                            Tile.Variant++;
+                            Say("coba variasi bind berikutnya: " + Tile.Variants[Tile.Variant]);
+                            t.HasFrame = false;
+                        }
+                    }
                 }
             }
             if (_gdiOk) Overlay();
@@ -569,6 +591,14 @@ namespace IproD3D
                     Usage = D3D.VideoUsage.PlaybackNormal
                 };
                 _g.VDev.CreateVideoProcessorEnumerator(ref cd, out t.VEnum);
+                if (!_fmtLogged)
+                {
+                    _fmtLogged = true;
+                    int fl;
+                    t.VEnum.CheckVideoProcessorFormat(DX.Format.NV12, out fl);
+                    Say("VP NV12 flags=0x" + fl.ToString("x") + " (1=input, 2=output)");
+                    Say("VP caps: " + t.VEnum.VideoProcessorCaps.FeatureCaps);
+                }
                 _g.VDev.CreateVideoProcessor(t.VEnum, 0, out t.Vp);
                 var ivd = new D3D.VideoProcessorInputViewDescription { FourCC = 0, Dimension = D3D.VpivDimension.Texture2D };
                 ivd.Texture2D.MipSlice = 0; ivd.Texture2D.ArraySlice = 0;
