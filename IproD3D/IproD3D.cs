@@ -90,6 +90,11 @@ namespace IproD3D
         public D3D.VideoContext VCtx;
         public AVBufferRef* HwDev;
         public string Name;
+        // satu kunci untuk semua akses immediate context: dipakai ffmpeg (lewat hwctx->lock) dan kode kita,
+        // supaya perintah salin/gambar tidak menyelip di antara BeginFrame/EndFrame dekoder lain.
+        public readonly object Sync = new object();
+        static readonly AVD3D11VADeviceContext_lock LockCb = delegate(void* c) { System.Threading.Monitor.Enter(((Gpu)GCHandle.FromIntPtr((IntPtr)c).Target).Sync); };
+        static readonly AVD3D11VADeviceContext_unlock UnlockCb = delegate(void* c) { System.Threading.Monitor.Exit(((Gpu)GCHandle.FromIntPtr((IntPtr)c).Target).Sync); };
         static readonly Dictionary<long, Gpu> Map = new Dictionary<long, Gpu>();
 
         public static Gpu For(string deviceName)
@@ -128,6 +133,9 @@ namespace IproD3D
                     hc->device = (ID3D11Device*)g.Dev.NativePointer.ToPointer();
                     Marshal.AddRef(g.Ctx.NativePointer);
                     hc->device_context = (ID3D11DeviceContext*)g.Ctx.NativePointer.ToPointer();
+                    hc->@lock = new AVD3D11VADeviceContext_lock_func { Pointer = Marshal.GetFunctionPointerForDelegate(LockCb) };
+                    hc->unlock = new AVD3D11VADeviceContext_unlock_func { Pointer = Marshal.GetFunctionPointerForDelegate(UnlockCb) };
+                    hc->lock_ctx = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(g));
                     int e = ffmpeg.av_hwdevice_ctx_init(r);
                     if (e < 0) throw new InvalidOperationException("av_hwdevice_ctx_init: " + Tile.Err(e));
                     g.HwDev = r;
@@ -362,6 +370,33 @@ namespace IproD3D
             }
         }
 
+        // diagnostik: baca balik beberapa byte dari tekstur hasil salin (hanya 3 frame pertama)
+        void ProbeTex(int w, int h)
+        {
+            try
+            {
+                var d = Tex.Description;
+                d.Usage = D3D.ResourceUsage.Staging; d.BindFlags = D3D.BindFlags.None;
+                d.CpuAccessFlags = D3D.CpuAccessFlags.Read; d.OptionFlags = D3D.ResourceOptionFlags.None;
+                using (var st = new D3D.Texture2D(G.Dev, d))
+                {
+                    G.Ctx.CopyResource(Tex, st);
+                    var box = G.Ctx.MapSubresource(st, 0, D3D.MapMode.Read, D3D.MapFlags.None);
+                    try
+                    {
+                        byte* b = (byte*)box.DataPointer;
+                        int pitch = box.RowPitch;
+                        int ys = 0, n = 0;
+                        for (int y = h / 2; y < h / 2 + 4; y++) for (int x = w / 2; x < w / 2 + 4; x++) { ys += b[y * pitch + x]; n++; }
+                        byte* uv = b + h * pitch + (h / 4) * pitch + (w / 2 & ~1);
+                        Say("probe salinan #" + (Copied + 1) + ": Y~" + (ys / n) + " U=" + uv[0] + " V=" + uv[1] + " pitch=" + pitch);
+                    }
+                    finally { G.Ctx.UnmapSubresource(st, 0); }
+                }
+            }
+            catch (Exception ex) { Say("probe gagal: " + ex.Message.Split('\n')[0]); }
+        }
+
         void CopySw(AVFrame* fr)
         {
             var pf = (AVPixelFormat)fr->format;
@@ -407,7 +442,7 @@ namespace IproD3D
                         TexW = w; TexH = h; TexVar = Variant;
                         Say("tekstur NV12 (software) bind=" + d.BindFlags);
                     }
-                    G.Ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)dst, w, need), Tex, 0);
+                    lock (G.Sync) { G.Ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)dst, w, need), Tex, 0); }
                     M709 = fr->colorspace == AVColorSpace.AVCOL_SPC_BT709 || (fr->colorspace == AVColorSpace.AVCOL_SPC_UNSPECIFIED && h >= 720);
                     FullRange = pf == AVPixelFormat.AV_PIX_FMT_YUVJ420P || fr->color_range == AVColorRange.AVCOL_RANGE_JPEG;
                     if (!HasFrame) Say("frame pertama (software) " + w + "x" + h + " " + pf);
@@ -445,7 +480,11 @@ namespace IproD3D
                     Tex = new D3D.Texture2D(G.Dev, d);
                     TexW = w; TexH = h;
                 }
-                G.Ctx.CopySubresourceRegion(_srcWrap, slice, new D3D.ResourceRegion(0, 0, 0, w, h, 1), Tex, 0, 0, 0, 0);
+                lock (G.Sync)
+                {
+                    G.Ctx.CopySubresourceRegion(_srcWrap, slice, new D3D.ResourceRegion(0, 0, 0, w, h, 1), Tex, 0, 0, 0, 0);
+                    if (Copied < 3) ProbeTex(w, h);
+                }
                 M709 = fr->colorspace == AVColorSpace.AVCOL_SPC_BT709 ||
                        (fr->colorspace != AVColorSpace.AVCOL_SPC_BT470BG && fr->colorspace != AVColorSpace.AVCOL_SPC_SMPTE170M && h >= 720);
                 FullRange = fr->color_range == AVColorRange.AVCOL_RANGE_JPEG;
@@ -601,7 +640,7 @@ namespace IproD3D
         void Render()
         {
             var ctx = _g.Ctx;
-            ctx.ClearRenderTargetView(_rtv, new RawColor4(0.06f, 0.08f, 0.16f, 1f));
+            lock (_g.Sync) { ctx.ClearRenderTargetView(_rtv, new RawColor4(0.06f, 0.08f, 0.16f, 1f)); }
             foreach (var t in _tiles)
             {
                 var rc = RectOf(t);
@@ -609,7 +648,7 @@ namespace IproD3D
                 lock (t.Lk)
                 {
                     if (!t.HasFrame || t.Tex == null) continue;
-                    try { bool first = t.Shown == 0; Blt(t, rc); t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); }
+                    try { bool first = t.Shown == 0; lock (_g.Sync) { Blt(t, rc); } t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); }
                     catch (Exception ex)
                     {
                         t.Status = "Render: " + ex.Message;
