@@ -90,6 +90,93 @@ namespace IproD3D
         public D3D.VideoContext VCtx;
         public AVBufferRef* HwDev;
         public string Name;
+        // pipeline shader NV12 -> RGB (cara mpv: salin frame dekoder ke tekstur sendiri lalu sampling Y dan UV)
+        public D3D.VertexShader Vs;
+        public D3D.PixelShader Ps;
+        public D3D.Buffer Cb;
+        public D3D.SamplerState Smp;
+        public string ShaderErr;
+
+        const string Hlsl =
+@"cbuffer cb : register(b0) { float4 p; };
+Texture2D ty : register(t0);
+Texture2D tuv : register(t1);
+SamplerState sm : register(s0);
+struct VSO { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
+VSO vs(uint id : SV_VertexID)
+{
+    VSO o;
+    float2 uv = float2((id << 1) & 2, id & 2);
+    o.uv = uv;
+    o.pos = float4(uv * float2(2, -2) + float2(-1, 1), 0, 1);
+    return o;
+}
+float4 ps(VSO i) : SV_Target
+{
+    float y = ty.Sample(sm, i.uv).r;
+    float2 c = tuv.Sample(sm, i.uv).rg - 0.5;
+    if (p.y < 0.5) { y = (y - 16.0 / 255.0) * (255.0 / 219.0); c = c * (255.0 / 224.0); }
+    float3 rgb;
+    if (p.x > 0.5) rgb = float3(y + 1.5748 * c.y, y - 0.1873 * c.x - 0.4681 * c.y, y + 1.8556 * c.x);
+    else rgb = float3(y + 1.402 * c.y, y - 0.3441 * c.x - 0.7141 * c.y, y + 1.772 * c.x);
+    return float4(saturate(rgb), 1);
+}";
+
+        [DllImport("d3dcompiler_47.dll", CallingConvention = CallingConvention.StdCall)]
+        static extern int D3DCompile([MarshalAs(UnmanagedType.LPArray)] byte[] src, UIntPtr len, [MarshalAs(UnmanagedType.LPStr)] string name,
+            IntPtr defines, IntPtr include, [MarshalAs(UnmanagedType.LPStr)] string entry, [MarshalAs(UnmanagedType.LPStr)] string target,
+            uint f1, uint f2, out IntPtr code, out IntPtr err);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate IntPtr BlobFn(IntPtr self);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int RelFn(IntPtr self);
+
+        static IntPtr VtFn(IntPtr obj, int idx) { return Marshal.ReadIntPtr(Marshal.ReadIntPtr(obj), idx * IntPtr.Size); }
+        static byte[] BlobBytes(IntPtr blob)
+        {
+            var gp = (BlobFn)Marshal.GetDelegateForFunctionPointer(VtFn(blob, 3), typeof(BlobFn));
+            var gs = (BlobFn)Marshal.GetDelegateForFunctionPointer(VtFn(blob, 4), typeof(BlobFn));
+            IntPtr ptr = gp(blob); int n = (int)gs(blob);
+            var b = new byte[n]; Marshal.Copy(ptr, b, 0, n);
+            return b;
+        }
+        static void BlobRelease(IntPtr blob) { if (blob != IntPtr.Zero) ((RelFn)Marshal.GetDelegateForFunctionPointer(VtFn(blob, 2), typeof(RelFn)))(blob); }
+        static byte[] Compile(string entry, string target)
+        {
+            byte[] src = Encoding.ASCII.GetBytes(Hlsl);
+            IntPtr code, err;
+            int hr = D3DCompile(src, (UIntPtr)(uint)src.Length, "ipro.hlsl", IntPtr.Zero, IntPtr.Zero, entry, target, 0, 0, out code, out err);
+            if (hr < 0 || code == IntPtr.Zero)
+            {
+                string m = "";
+                if (err != IntPtr.Zero) { m = Encoding.ASCII.GetString(BlobBytes(err)); BlobRelease(err); }
+                throw new InvalidOperationException("D3DCompile " + entry + " hr=0x" + hr.ToString("x") + " " + m);
+            }
+            byte[] r = BlobBytes(code);
+            BlobRelease(code); BlobRelease(err);
+            return r;
+        }
+
+        void InitShaders()
+        {
+            try
+            {
+                Vs = new D3D.VertexShader(Dev, Compile("vs", "vs_4_0"), null);
+                Ps = new D3D.PixelShader(Dev, Compile("ps", "ps_4_0"), null);
+                Cb = new D3D.Buffer(Dev, 16, D3D.ResourceUsage.Default, D3D.BindFlags.ConstantBuffer, D3D.CpuAccessFlags.None, D3D.ResourceOptionFlags.None, 0);
+                Smp = new D3D.SamplerState(Dev, new D3D.SamplerStateDescription
+                {
+                    Filter = D3D.Filter.MinMagMipLinear,
+                    AddressU = D3D.TextureAddressMode.Clamp, AddressV = D3D.TextureAddressMode.Clamp, AddressW = D3D.TextureAddressMode.Clamp,
+                    MaximumAnisotropy = 1, ComparisonFunction = D3D.Comparison.Never, MinimumLod = 0, MaximumLod = float.MaxValue
+                });
+                FLog.W("shader NV12->RGB siap");
+            }
+            catch (Exception ex)
+            {
+                ShaderErr = ex.Message;
+                Vs = null; Ps = null;
+                FLog.W("shader gagal, pakai Video Processor: " + ex.Message);
+            }
+        }
         // satu kunci untuk semua akses immediate context: dipakai ffmpeg (lewat hwctx->lock) dan kode kita,
         // supaya perintah salin/gambar tidak menyelip di antara BeginFrame/EndFrame dekoder lain.
         public readonly object Sync = new object();
@@ -124,6 +211,7 @@ namespace IproD3D
                     g.Ctx = g.Dev.ImmediateContext;
                     g.VDev = g.Dev.QueryInterface<D3D.VideoDevice>();
                     g.VCtx = g.Ctx.QueryInterface<D3D.VideoContext>();
+                    g.InitShaders();
 
                     AVBufferRef* r = ffmpeg.av_hwdevice_ctx_alloc(AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA);
                     if (r == null) throw new InvalidOperationException("av_hwdevice_ctx_alloc gagal");
@@ -191,6 +279,8 @@ namespace IproD3D
         public D3D.VideoProcessorEnumerator VEnum;
         public D3D.VideoProcessor Vp;
         public D3D.VideoProcessorOutputView OutView;
+        public D3D.ShaderResourceView SrvY, SrvUV;
+        public D3D.Texture2D SrvTex;
         public int KeyIw, KeyIh, KeyOw, KeyOh;
         public D3D.Texture2D KeyTex;
 
@@ -481,10 +571,10 @@ namespace IproD3D
                     Marshal.AddRef(arr);
                     _srcWrap = new D3D.Texture2D(arr);
                     _srcPtr = arr;
-                    var ad = _srcWrap.Description;
-                    ArrW = ad.Width; ArrH = ad.Height;
-                    Say("mode langsung: tekstur dekoder " + ArrW + "x" + ArrH + " array=" + ad.ArraySize + " bind=" + ad.BindFlags);
+                    Say("mode langsung: tekstur dekoder baru");
                 }
+                if (ArrW == 0 || _srcPtr != arr)
+                { var ad = _srcWrap.Description; ArrW = ad.Width; ArrH = ad.Height; }
                 if (_held == null) _held = ffmpeg.av_frame_alloc(); else ffmpeg.av_frame_unref(_held);
                 ffmpeg.av_frame_ref(_held, fr);
                 HeldSlice = slice; HeldW = w; HeldH = h;
@@ -548,6 +638,9 @@ namespace IproD3D
         {
             foreach (var kv in Views) { try { kv.Value.Dispose(); } catch { } }
             Views.Clear();
+            if (SrvY != null) { SrvY.Dispose(); SrvY = null; }
+            if (SrvUV != null) { SrvUV.Dispose(); SrvUV = null; }
+            SrvTex = null;
             if (OutView != null) { OutView.Dispose(); OutView = null; }
             if (Vp != null) { Vp.Dispose(); Vp = null; }
             if (VEnum != null) { VEnum.Dispose(); VEnum = null; }
@@ -589,6 +682,7 @@ namespace IproD3D
         bool _presentLogged;
         static bool _fmtLogged;
         static volatile int CsVar;
+        bool _useShader;
         D3D.Texture2D _stg;
         long _csChangedAt;
         static readonly string[] CsNames = { "deteksi", "rentang penuh 0-255", "rentang tak ditentukan", "rentang dibalik", "matriks dibalik", "tanpa color space" };
@@ -626,6 +720,8 @@ namespace IproD3D
             }
             var h = Handle;   // paksa handle dibuat
             CreateSwap();
+            _useShader = _g.Vs != null && _g.Ps != null;
+            Say(_useShader ? "render: shader NV12->RGB" : "render: Video Processor (shader gagal: " + _g.ShaderErr + ")");
             int started = 0;
             foreach (var t in _tiles) if (!t.Failed) { t.Start(started * 120); started++; }
             _rt = new Thread(RenderLoop) { IsBackground = true, Name = "d3d-render" };
@@ -701,13 +797,14 @@ namespace IproD3D
                 lock (t.Lk)
                 {
                     if (!t.HasFrame || t.Tex == null) continue;
-                    try { bool first = t.Shown == 0; lock (_g.Sync) { Blt(t, rc); } t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); if (t.ProbeN < 4 && t.InY >= 0 && t.Shown >= 2) probes.Add(new KeyValuePair<Tile, Rectangle>(t, rc)); }
+                    try { bool first = t.Shown == 0; lock (_g.Sync) { if (_useShader) DrawShader(t, rc); else Blt(t, rc); } t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); if (t.ProbeN < 4 && t.InY >= 0 && t.Shown >= 2) probes.Add(new KeyValuePair<Tile, Rectangle>(t, rc)); }
                     catch (Exception ex)
                     {
                         t.Status = "Render: " + ex.Message;
                         Say("Blt galat " + t.Name + " (bind=" + Tile.Variants[t.TexVar] + "): " + ex.Message.Split('\n')[0]);
                         t.DisposeVp();
-                        if (ex.Message.Contains("E_INVALIDARG") && t.TexVar == Tile.Variant && Tile.Variant < Tile.Variants.Length - 1)
+                        if (_useShader) { _useShader = false; Say("shader gagal -> kembali ke Video Processor"); }
+                        else if (ex.Message.Contains("E_INVALIDARG") && !t.IsDirect && t.TexVar == Tile.Variant && Tile.Variant < Tile.Variants.Length - 1)
                         {
                             Tile.Variant++;
                             Say("coba variasi bind berikutnya: " + Tile.Variants[Tile.Variant]);
@@ -731,6 +828,42 @@ namespace IproD3D
                 Say("HEALTH tile hidup " + ok + "/" + dec + ", frame render " + _frames);
                 foreach (var t in _tiles) Say("  " + t.Name + " dec=" + t.Decoded + " salin=" + t.Copied + " tampil=" + t.Shown + " has=" + t.HasFrame + " st=" + t.Status);
             }
+        }
+
+        void DrawShader(Tile t, Rectangle rc)
+        {
+            var tex = t.Tex;
+            if (tex == null) return;
+            int vw = t.TexW, vh = t.TexH;
+            double ar = (double)vw / vh;
+            int dw = rc.Width, dh = (int)(dw / ar);
+            if (dh > rc.Height) { dh = rc.Height; dw = (int)(dh * ar); }
+            int dx = rc.X + (rc.Width - dw) / 2, dy = rc.Y + (rc.Height - dh) / 2;
+            if (t.SrvTex != tex)
+            {
+                t.DisposeVp();
+                var d1 = new D3D.ShaderResourceViewDescription { Format = DX.Format.R8_UNorm, Dimension = SharpDX.Direct3D.ShaderResourceViewDimension.Texture2D };
+                d1.Texture2D.MipLevels = 1; d1.Texture2D.MostDetailedMip = 0;
+                var d2 = new D3D.ShaderResourceViewDescription { Format = DX.Format.R8G8_UNorm, Dimension = SharpDX.Direct3D.ShaderResourceViewDimension.Texture2D };
+                d2.Texture2D.MipLevels = 1; d2.Texture2D.MostDetailedMip = 0;
+                t.SrvY = new D3D.ShaderResourceView(_g.Dev, tex, d1);
+                t.SrvUV = new D3D.ShaderResourceView(_g.Dev, tex, d2);
+                t.SrvTex = tex;
+            }
+            var ctx = _g.Ctx;
+            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, 0f, 0f };
+            unsafe { fixed (float* pcb = cb) ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)pcb, 16, 16), _g.Cb, 0); }
+            ctx.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
+            ctx.VertexShader.Set(_g.Vs);
+            ctx.PixelShader.Set(_g.Ps);
+            ctx.PixelShader.SetConstantBuffer(0, _g.Cb);
+            ctx.PixelShader.SetSampler(0, _g.Smp);
+            ctx.PixelShader.SetShaderResources(0, new D3D.ShaderResourceView[] { t.SrvY, t.SrvUV });
+            ctx.Rasterizer.SetViewport(dx, dy, dw, dh, 0f, 1f);
+            ctx.OutputMerger.SetRenderTargets(_rtv);
+            ctx.Draw(3, 0);
+            ctx.PixelShader.SetShaderResources(0, new D3D.ShaderResourceView[2]);
+            ctx.OutputMerger.ResetTargets();
         }
 
         void Blt(Tile t, Rectangle rc)
@@ -836,7 +969,7 @@ namespace IproD3D
                         t.ProbeN++;
                         bool dark = outY < 20 && t.InY > 50;
                         Say("probe tampil " + t.Name + ": luma keluar=" + outY + " masuk Y=" + t.InY + " cs=" + CsNames[CsVar] + (dark ? " HITAM" : " ok"));
-                        if (dark) bad = true; else t.ProbeN = 99;
+                        if (dark && !_useShader) bad = true; else if (!dark) t.ProbeN = 99; else t.ProbeN = 99;
                     }
                 }
                 finally { _g.Ctx.UnmapSubresource(_stg, 0); }
