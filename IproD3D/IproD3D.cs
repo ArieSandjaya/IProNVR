@@ -176,6 +176,7 @@ namespace IproD3D
             D3D.BindFlags.Decoder,
             D3D.BindFlags.Decoder | D3D.BindFlags.ShaderResource };
         public int TexVar;
+        public int InY = -1, ProbeN, KeyCs = -1;
         bool _sw;
         byte[] _nv;
 
@@ -389,7 +390,7 @@ namespace IproD3D
                         int ys = 0, n = 0;
                         for (int y = h / 2; y < h / 2 + 4; y++) for (int x = w / 2; x < w / 2 + 4; x++) { ys += b[y * pitch + x]; n++; }
                         byte* uv = b + h * pitch + (h / 4) * pitch + (w / 2 & ~1);
-                        Say("probe salinan #" + (Copied + 1) + ": Y~" + (ys / n) + " U=" + uv[0] + " V=" + uv[1] + " pitch=" + pitch);
+                        InY = ys / n; Say("probe salinan #" + (Copied + 1) + ": Y~" + (ys / n) + " U=" + uv[0] + " V=" + uv[1] + " pitch=" + pitch);
                     }
                     finally { G.Ctx.UnmapSubresource(st, 0); }
                 }
@@ -423,6 +424,7 @@ namespace IproD3D
                     byte* dp = uvd + y * w;
                     for (int x = 0; x < cw; x++) { dp[2 * x] = up[x]; dp[2 * x + 1] = vp[x]; }
                 }
+                { int ysum = 0; for (int y = h / 2; y < h / 2 + 4; y++) for (int x = w / 2; x < w / 2 + 4; x++) ysum += dst[y * w + x]; InY = ysum / 16; }
                 lock (Lk)
                 {
                     if (Tex == null || TexW != w || TexH != h || TexVar != Variant)
@@ -540,6 +542,10 @@ namespace IproD3D
         long _frames, _lastStat;
         bool _presentLogged;
         static bool _fmtLogged;
+        static volatile int CsVar;
+        D3D.Texture2D _stg;
+        long _csChangedAt;
+        static readonly string[] CsNames = { "deteksi", "rentang penuh 0-255", "rentang tak ditentukan", "rentang dibalik", "matriks dibalik", "tanpa color space" };
         readonly string _title;
 
         public Wall(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
@@ -641,6 +647,7 @@ namespace IproD3D
         {
             var ctx = _g.Ctx;
             lock (_g.Sync) { ctx.ClearRenderTargetView(_rtv, new RawColor4(0.06f, 0.08f, 0.16f, 1f)); }
+            var probes = new List<KeyValuePair<Tile, Rectangle>>();
             foreach (var t in _tiles)
             {
                 var rc = RectOf(t);
@@ -648,7 +655,7 @@ namespace IproD3D
                 lock (t.Lk)
                 {
                     if (!t.HasFrame || t.Tex == null) continue;
-                    try { bool first = t.Shown == 0; lock (_g.Sync) { Blt(t, rc); } t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); }
+                    try { bool first = t.Shown == 0; lock (_g.Sync) { Blt(t, rc); } t.Shown++; if (first) Say("Blt pertama OK " + t.Name + " rect=" + rc); if (t.ProbeN < 4 && t.InY >= 0 && t.Shown >= 2) probes.Add(new KeyValuePair<Tile, Rectangle>(t, rc)); }
                     catch (Exception ex)
                     {
                         t.Status = "Render: " + ex.Message;
@@ -663,6 +670,7 @@ namespace IproD3D
                     }
                 }
             }
+            if (probes.Count > 0) { try { ProbeOut(probes); } catch (Exception ex) { Say("probe tampil gagal: " + ex.Message.Split('\n')[0]); foreach (var kv in probes) kv.Key.ProbeN = 99; } }
             if (_gdiOk) Overlay();
             var r = _sc.TryPresent(1, DX.PresentFlags.None);
             if (_frames == 0 || (r.Failure && !_presentLogged)) { _presentLogged = r.Failure; Say("Present: " + r); }
@@ -688,7 +696,7 @@ namespace IproD3D
             if (dh > rc.Height) { dh = rc.Height; dw = (int)(dh * ar); }
             int dx = rc.X + (rc.Width - dw) / 2, dy = rc.Y + (rc.Height - dh) / 2;
 
-            if (t.Vp == null || t.KeyTex != t.Tex || t.KeyIw != iw || t.KeyIh != ih || t.KeyOw != _cw || t.KeyOh != _ch)
+            if (t.Vp == null || t.KeyCs != CsVar || t.KeyTex != t.Tex || t.KeyIw != iw || t.KeyIh != ih || t.KeyOw != _cw || t.KeyOh != _ch)
             {
                 t.DisposeVp();
                 var cd = new D3D.VideoProcessorContentDescription
@@ -716,20 +724,75 @@ namespace IproD3D
                 var ovd = new D3D.VideoProcessorOutputViewDescription { Dimension = D3D.VpovDimension.Texture2D };
                 ovd.Texture2D.MipSlice = 0;
                 _g.VDev.CreateVideoProcessorOutputView(_back, t.VEnum, ovd, out t.OutView);
-                t.KeyTex = t.Tex; t.KeyIw = iw; t.KeyIh = ih; t.KeyOw = _cw; t.KeyOh = _ch;
+                t.KeyCs = CsVar; t.KeyTex = t.Tex; t.KeyIw = iw; t.KeyIh = ih; t.KeyOw = _cw; t.KeyOh = _ch;
                 _g.VCtx.VideoProcessorSetStreamAutoProcessingMode(t.Vp, 0, false);
                 _g.VCtx.VideoProcessorSetStreamFrameFormat(t.Vp, 0, D3D.VideoFrameFormat.Progressive);
-                var ocs = new D3D.VideoProcessorColorSpace { Usage = false, RgbRange = false, YCbCrMatrix = true, YCbCrXvYCC = false, NominalRange = 0 };
-                _g.VCtx.VideoProcessorSetOutputColorSpace(t.Vp, ocs);
+                if (CsVar != 5)
+                {
+                    var ocs = new D3D.VideoProcessorColorSpace { Usage = false, RgbRange = false, YCbCrMatrix = true, YCbCrXvYCC = false, NominalRange = 0 };
+                    _g.VCtx.VideoProcessorSetOutputColorSpace(t.Vp, ocs);
+                }
             }
-            var cs = new D3D.VideoProcessorColorSpace { Usage = false, RgbRange = false, YCbCrMatrix = t.M709, YCbCrXvYCC = false, NominalRange = t.FullRange ? 2 : 1 };
             var vc = _g.VCtx;
-            vc.VideoProcessorSetStreamColorSpace(t.Vp, 0, cs);
+            if (CsVar != 5)
+            {
+                int nom = t.FullRange ? 2 : 1;
+                bool mx = t.M709;
+                switch (CsVar) { case 1: nom = 2; break; case 2: nom = 0; break; case 3: nom = t.FullRange ? 1 : 2; break; case 4: mx = !mx; break; }
+                var cs = new D3D.VideoProcessorColorSpace { Usage = false, RgbRange = false, YCbCrMatrix = mx, YCbCrXvYCC = false, NominalRange = nom };
+                vc.VideoProcessorSetStreamColorSpace(t.Vp, 0, cs);
+            }
             vc.VideoProcessorSetStreamSourceRect(t.Vp, 0, true, new RawRectangle(0, 0, iw, ih));
             vc.VideoProcessorSetStreamDestRect(t.Vp, 0, true, new RawRectangle(dx, dy, dx + dw, dy + dh));
             vc.VideoProcessorSetOutputTargetRect(t.Vp, true, new RawRectangle(rc.X, rc.Y, rc.Right, rc.Bottom));
             var st = new D3D.VideoProcessorStream { Enable = true, InputFrameOrField = 0, PInputSurface = t.InView };
             vc.VideoProcessorBlt(t.Vp, t.OutView, 0, 1, new[] { st });
+        }
+
+        // kalibrasi: baca satu piksel hasil gambar; bila hitam padahal isi tekstur terang, ganti pengaturan color space
+        void ProbeOut(List<KeyValuePair<Tile, Rectangle>> list)
+        {
+            if (_stg == null)
+                _stg = new D3D.Texture2D(_g.Dev, new D3D.Texture2DDescription
+                {
+                    Width = _cw, Height = _ch, MipLevels = 1, ArraySize = 1, Format = DX.Format.B8G8R8A8_UNorm,
+                    SampleDescription = new DX.SampleDescription(1, 0), Usage = D3D.ResourceUsage.Staging,
+                    BindFlags = D3D.BindFlags.None, CpuAccessFlags = D3D.CpuAccessFlags.Read, OptionFlags = D3D.ResourceOptionFlags.None
+                });
+            bool bad = false;
+            lock (_g.Sync)
+            {
+                _g.Ctx.CopyResource(_back, _stg);
+                var box = _g.Ctx.MapSubresource(_stg, 0, D3D.MapMode.Read, D3D.MapFlags.None);
+                try
+                {
+                    foreach (var kv in list)
+                    {
+                        var t = kv.Key; var rc = kv.Value;
+                        int cx = rc.X + rc.Width / 2 - 2, cy = rc.Y + rc.Height / 2 - 2, sum = 0;
+                        unsafe
+                        {
+                            byte* b = (byte*)box.DataPointer;
+                            for (int y = cy; y < cy + 4; y++) for (int x = cx; x < cx + 4; x++)
+                            { byte* px = b + y * box.RowPitch + x * 4; sum += (px[0] + px[1] + px[2]) / 3; }
+                        }
+                        int outY = sum / 16;
+                        t.ProbeN++;
+                        bool dark = outY < 20 && t.InY > 50;
+                        Say("probe tampil " + t.Name + ": luma keluar=" + outY + " masuk Y=" + t.InY + " cs=" + CsNames[CsVar] + (dark ? " HITAM" : " ok"));
+                        if (dark) bad = true; else t.ProbeN = 99;
+                    }
+                }
+                finally { _g.Ctx.UnmapSubresource(_stg, 0); }
+            }
+            long now = Stopwatch.GetTimestamp();
+            if (bad && CsVar < CsNames.Length - 1 && now - _csChangedAt > Stopwatch.Frequency / 2)
+            {
+                CsVar++;
+                _csChangedAt = now;
+                Say("hasil hitam -> coba color space: " + CsNames[CsVar]);
+                foreach (var t in _tiles) t.ProbeN = 0;
+            }
         }
 
         void Overlay()
@@ -834,6 +897,7 @@ namespace IproD3D
             try { if (_rt != null) _rt.Join(2000); } catch { }
             foreach (var t in _tiles) t.Join();
             foreach (var t in _tiles) { try { t.DisposeAll(); } catch { } }
+            try { if (_stg != null) _stg.Dispose(); } catch { }
             try { if (_surf != null) _surf.Dispose(); } catch { }
             try { if (_rtv != null) _rtv.Dispose(); } catch { }
             try { if (_back != null) _back.Dispose(); } catch { }
