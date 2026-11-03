@@ -17,6 +17,8 @@ namespace IproNvrTool
         /// <summary>true saat aplikasi keluar: jendela yang tertutup tetap tercatat supaya dipulihkan pada start berikutnya.</summary>
         public static volatile bool Exiting;
 
+        static readonly SerialWorker PtzWorker = new SerialWorker(150);
+
         static string Key(GroupRec g, Screen s) { return g.Id + "|" + s.DeviceName; }
 
         static void Remember(GroupRec g, Screen s, bool add)
@@ -126,6 +128,18 @@ namespace IproNvrTool
             if (urls.Count == 0) return "Tidak ada kamera di group ini yang punya URL RTSP.";
 
             Action<string> log = delegate(string m) { try { Log.Write(m); } catch { } };
+            Action<int, int, int, int> ptz = delegate(int i, int pan, int tilt, int zoom)
+            {
+                if (i < 0 || i >= recNvr.Count || !AsmApp.Can(Perm.Camera)) return;
+                NvrRecord nv = Dir.Nvr(recNvr[i]); int ch = recCh[i];
+                if (nv == null) return;
+                PtzWorker.Post(delegate
+                {
+                    NvrSession ss = Pool.Control(nv);
+                    ss.EnsureLogin();
+                    ss.Cmd("directctrl.cgi", "CH=" + ch + "&PAN=" + pan + "&TILT=" + tilt + "&ZOOM=" + zoom + "&PC=AS60");
+                });
+            };
             Func<int, bool> isRec = delegate(int i) { return i >= 0 && i < recNvr.Count && Dir.IsRecording(recNvr[i], recCh[i]); };
             Form f;
             try
@@ -133,7 +147,7 @@ namespace IproNvrTool
                 var s = AppSettings.Current;
                 f = (Form)entry.GetMethod("Open").Invoke(null, new object[] {
                     "Wall Direct3D - " + g.Name, urls.ToArray(), mains.ToArray(), names.ToArray(), rects.ToArray(),
-                    screen.Bounds, screen.DeviceName, dir, Math.Max(1, s.D3dMaxStreams), s.D3dFps <= 0 ? 15 : s.D3dFps, log, isRec });
+                    screen.Bounds, screen.DeviceName, dir, Math.Max(1, s.D3dMaxStreams), s.D3dFps <= 0 ? 15 : s.D3dFps, log, isRec, ptz });
             }
             catch (Exception ex)
             {

@@ -71,12 +71,12 @@ namespace IproD3D
 
         /// <summary>Buka jendela wall untuk satu layar. rects = (x,y,w,h) ternormalisasi per kamera.</summary>
         public static Form Open(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
-            Rectangle bounds, string deviceName, string ffmpegDir, int maxStreams, int fps, Action<string> log, Func<int, bool> isRec)
+            Rectangle bounds, string deviceName, string ffmpegDir, int maxStreams, int fps, Action<string> log, Func<int, bool> isRec, Action<int, int, int, int> ptz)
         {
             try { File.WriteAllText(FLog.Path0, ""); } catch { }
             FLog.W("Open " + title + " layar=" + deviceName + " tile=" + urls.Length + " dir=" + ffmpegDir);
             Init(ffmpegDir);
-            return new Wall(title, urls, mainUrls, names, rects, bounds, deviceName, maxStreams, fps, log, isRec);
+            return new Wall(title, urls, mainUrls, names, rects, bounds, deviceName, maxStreams, fps, log, isRec, ptz);
         }
     }
 
@@ -763,6 +763,88 @@ float4 ps(VSO i) : SV_Target
         Tile _zoom;
         bool _info;
         readonly Func<int, bool> _isRec;
+        // PTZ: klik memilih kamera, roda mouse = zoom in/out, panah = geser, PgUp/PgDn atau +/- = zoom (tahan)
+        readonly Action<int, int, int, int> _ptz;   // (indeks tile, pan, tilt, zoom); 0,0,0 = berhenti
+        int _sel = -1;
+        int _hPan, _hTilt, _hZoom;
+        System.Windows.Forms.Timer _holdTimer, _wheelTimer;
+        const int PtzSpeed = 8;
+
+        void PtzSend(int pan, int tilt, int zoom)
+        {
+            if (_ptz == null || _sel < 0 || _sel >= _tiles.Length) return;
+            try { _ptz(_sel, pan, tilt, zoom); } catch (Exception ex) { Say("PTZ galat: " + ex.Message); }
+        }
+
+        void PtzHoldStart(int pan, int tilt, int zoom)
+        {
+            if (_sel < 0) return;
+            if (_hPan == pan && _hTilt == tilt && _hZoom == zoom) return;
+            _hPan = pan; _hTilt = tilt; _hZoom = zoom;
+            PtzSend(pan, tilt, zoom);
+            if (_holdTimer == null)
+            {
+                _holdTimer = new System.Windows.Forms.Timer { Interval = 350 };
+                _holdTimer.Tick += delegate { if (_hPan != 0 || _hTilt != 0 || _hZoom != 0) PtzSend(_hPan, _hTilt, _hZoom); };
+            }
+            _holdTimer.Start();
+        }
+
+        void PtzHoldStop()
+        {
+            if (_holdTimer != null) _holdTimer.Stop();
+            bool was = _hPan != 0 || _hTilt != 0 || _hZoom != 0;
+            _hPan = _hTilt = _hZoom = 0;
+            if (was) PtzSend(0, 0, 0);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button != MouseButtons.Left) return;
+            Focus();
+            int hit = -1;
+            for (int i = 0; i < _tiles.Length; i++)
+            {
+                var rc = RectOf(_tiles[i]);
+                if (!rc.IsEmpty && rc.Contains(e.Location)) { hit = i; break; }
+            }
+            if (hit != _sel) { PtzHoldStop(); _sel = hit; }
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            if (_sel < 0 || _ptz == null) return;
+            int dz = e.Delta > 0 ? PtzSpeed : -PtzSpeed;   // roda ke depan = zoom in
+            PtzSend(0, 0, dz);
+            if (_wheelTimer == null)
+            {
+                _wheelTimer = new System.Windows.Forms.Timer { Interval = 300 };
+                _wheelTimer.Tick += delegate { _wheelTimer.Stop(); PtzSend(0, 0, 0); };
+            }
+            _wheelTimer.Stop(); _wheelTimer.Start();
+        }
+
+        protected override bool IsInputKey(Keys keyData)
+        {
+            switch (keyData & Keys.KeyCode)
+            {
+                case Keys.Left: case Keys.Right: case Keys.Up: case Keys.Down: return true;   // panah dipakai untuk PTZ, bukan pindah fokus
+            }
+            return base.IsInputKey(keyData);
+        }
+
+        protected override void OnKeyUp(KeyEventArgs e)
+        {
+            base.OnKeyUp(e);
+            switch (e.KeyCode)
+            {
+                case Keys.Left: case Keys.Right: case Keys.Up: case Keys.Down:
+                case Keys.PageUp: case Keys.PageDown: case Keys.Add: case Keys.Subtract: case Keys.Oemplus: case Keys.OemMinus:
+                    PtzHoldStop(); break;
+            }
+        }
         long _lastRecPoll;
         float _dpi = 96f;
         int BarH { get { return (int)(18 * _dpi / 96f); } }   // tinggi bilah nama, sama dengan sel multiview utama
@@ -784,9 +866,9 @@ float4 ps(VSO i) : SV_Target
         readonly string _title;
 
         public Wall(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
-            Rectangle bounds, string deviceName, int maxStreams, int fps, Action<string> log, Func<int, bool> isRec)
+            Rectangle bounds, string deviceName, int maxStreams, int fps, Action<string> log, Func<int, bool> isRec, Action<int, int, int, int> ptz)
         {
-            _isRec = isRec;
+            _isRec = isRec; _ptz = ptz;
             _title = title; _log = log; _fps = fps < 5 ? 5 : fps > 30 ? 30 : fps;
             Text = title;
             FormBorderStyle = FormBorderStyle.None;
@@ -1117,6 +1199,8 @@ float4 ps(VSO i) : SV_Target
                         {
                             var rc = RectOf(t);
                             if (rc.IsEmpty) continue;
+                            if (_sel >= 0 && _sel < _tiles.Length && _tiles[_sel] == t)
+                                using (var sp = new Pen(Color.FromArgb(255, 160, 0), 3)) g.DrawRectangle(sp, rc.X + 1, rc.Y + 1, rc.Width - 3, rc.Height - 3);
                             int bh = BarH;
                             var barR = new Rectangle(rc.X, rc.Y, rc.Width, bh);
                             g.FillRectangle(barBack, barR);
@@ -1160,6 +1244,15 @@ float4 ps(VSO i) : SV_Target
         {
             if (e.KeyCode == Keys.Escape) { Close(); return; }
             if (e.KeyCode == Keys.I) _info = !_info;
+            switch (e.KeyCode)
+            {
+                case Keys.Left: PtzHoldStart(-PtzSpeed, 0, 0); e.Handled = true; break;
+                case Keys.Right: PtzHoldStart(PtzSpeed, 0, 0); e.Handled = true; break;
+                case Keys.Up: PtzHoldStart(0, -PtzSpeed, 0); e.Handled = true; break;
+                case Keys.Down: PtzHoldStart(0, PtzSpeed, 0); e.Handled = true; break;
+                case Keys.PageUp: case Keys.Add: case Keys.Oemplus: PtzHoldStart(0, 0, PtzSpeed); e.Handled = true; break;
+                case Keys.PageDown: case Keys.Subtract: case Keys.OemMinus: PtzHoldStart(0, 0, -PtzSpeed); e.Handled = true; break;
+            }
             base.OnKeyDown(e);
         }
 
