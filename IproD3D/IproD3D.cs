@@ -334,6 +334,101 @@ float4 ps(VSO i) : SV_Target
             return AVPixelFormat.AV_PIX_FMT_NONE;
         }
 
+        // ---- buffer pemutaran (jitter buffer): frame diantre lalu ditampilkan menurut PTS + tunda, supaya gerak halus walau paket datang bergerombol
+        public static int DelayMs = 250;
+        struct QItem { public IntPtr F; public long Due; }
+        readonly object _q = new object();
+        readonly List<QItem> _qi = new List<QItem>();
+        double _minTr = double.MaxValue, _lastP = double.NaN, _lastKeptP = double.NaN, _lastArr = double.NaN, _emaIv = 0.1;
+        volatile string _copyErr;
+
+        public int QCount { get { lock (_q) return _qi.Count; } }
+
+        void ClearQ()
+        {
+            lock (_q)
+            {
+                foreach (var it in _qi) { AVFrame* f = (AVFrame*)it.F; ffmpeg.av_frame_free(&f); }
+                _qi.Clear();
+            }
+            _minTr = double.MaxValue; _lastP = double.NaN; _lastKeptP = double.NaN; _lastArr = double.NaN; _emaIv = 0.1;
+        }
+
+        void Enqueue(AVFrame* fr, double tb)
+        {
+            double a = (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+            double p;
+            long bp = fr->best_effort_timestamp;
+            if (bp != long.MinValue && tb > 0) p = bp * tb;
+            else
+            {
+                if (!double.IsNaN(_lastArr)) { double iv = a - _lastArr; if (iv < 0.02) iv = 0.02; if (iv > 0.5) iv = 0.5; _emaIv = _emaIv * 0.9 + iv * 0.1; }
+                p = double.IsNaN(_lastP) ? a : _lastP + _emaIv;
+            }
+            _lastArr = a;
+            if (!double.IsNaN(_lastP) && (p < _lastP - 0.001 || p > _lastP + 5))
+            {
+                // PTS melompat (stream di-reset): mulai ulang penjadwalan
+                lock (_q) { foreach (var it in _qi) { AVFrame* f = (AVFrame*)it.F; ffmpeg.av_frame_free(&f); } _qi.Clear(); }
+                _minTr = double.MaxValue; _lastKeptP = double.NaN;
+            }
+            _lastP = p;
+            double tr = a - p;
+            if (tr < _minTr) _minTr = tr; else _minTr += 0.0001;   // acuan jalur tercepat, merayap naik pelan agar tahan selisih jam
+            if (!double.IsNaN(_lastKeptP) && p - _lastKeptP < MinIntervalMs / 1000.0 * 0.7) return;   // batas fps berdasarkan PTS
+            _lastKeptP = p;
+            AVFrame* c = ffmpeg.av_frame_clone(fr);
+            if (c == null) return;
+            double due = p + _minTr + DelayMs / 1000.0;
+            lock (_q)
+            {
+                if (_qi.Count >= 10) { AVFrame* o = (AVFrame*)_qi[0].F; ffmpeg.av_frame_free(&o); _qi.RemoveAt(0); }
+                _qi.Add(new QItem { F = (IntPtr)c, Due = (long)(due * Stopwatch.Frequency) });
+            }
+        }
+
+        // dipanggil render thread sebelum menggambar tile: tampilkan frame terbaru yang sudah jatuh tempo
+        public void PresentDue()
+        {
+            IntPtr pick = IntPtr.Zero;
+            long now = Stopwatch.GetTimestamp();
+            lock (_q)
+            {
+                int n = 0;
+                while (n < _qi.Count && _qi[n].Due <= now) n++;
+                for (int i = 0; i < n; i++)
+                {
+                    if (pick != IntPtr.Zero) { AVFrame* o = (AVFrame*)pick; ffmpeg.av_frame_free(&o); }
+                    pick = _qi[i].F;
+                }
+                if (n > 0) _qi.RemoveRange(0, n);
+            }
+            if (pick == IntPtr.Zero) return;
+            AVFrame* f = (AVFrame*)pick;
+            try { ShowFrame(f); }
+            catch (Exception ex) { _copyErr = ex.Message; }
+            finally { ffmpeg.av_frame_free(&f); }
+        }
+
+        void ShowFrame(AVFrame* fr)
+        {
+            if (_sw || _swFb) { CopySw(fr); return; }
+            if (fr->format != (int)AVPixelFormat.AV_PIX_FMT_D3D11)
+            {
+                var pf = (AVPixelFormat)fr->format;
+                if (pf == AVPixelFormat.AV_PIX_FMT_YUV420P || pf == AVPixelFormat.AV_PIX_FMT_YUVJ420P)
+                {
+                    // dekoder GPU menolak stream ini dan ffmpeg memberi frame software: pakai jalur upload
+                    _swFb = true;
+                    Say("dekoder GPU tidak dipakai untuk stream ini (" + pf + ") -> dekode software, upload ke GPU");
+                    CopySw(fr);
+                    return;
+                }
+                throw new Exception("frame bukan D3D11 (format " + fr->format + "): dekode GPU tidak aktif");
+            }
+            if (Direct) Hold(fr); else Copy(fr);
+        }
+
         void Run()
         {
             int backoff = 1500;
@@ -412,7 +507,7 @@ float4 ps(VSO i) : SV_Target
                 {
                     cc->hw_device_ctx = ffmpeg.av_buffer_ref(G.HwDev);
                     cc->get_format = new AVCodecContext_get_format_func { Pointer = Marshal.GetFunctionPointerForDelegate(_fmt) };
-                    cc->extra_hw_frames = 4;
+                    cc->extra_hw_frames = 12;
                     cc->thread_count = 1;
                 }
                 else cc->thread_count = 2;
@@ -425,10 +520,12 @@ float4 ps(VSO i) : SV_Target
                 Say("terhubung " + par->codec_id + (_sw ? " [software]" : " [GPU]") + " " + par->width + "x" + par->height + (UseMain ? " (utama)" : " (sub)"));
                 Status = "Menunggu frame...";
                 bool main0 = UseMain;
-                long lastCopy = 0;
-                long minTicks = Stopwatch.Frequency * MinIntervalMs / 1000 * 7 / 10;
+                ClearQ();
+                var tbr = fc->streams[vi]->time_base;
+                double tb = tbr.den != 0 ? (double)tbr.num / tbr.den : 0;
                 while (!Stop && UseMain == main0)
                 {
+                    if (_copyErr != null) { string cm = _copyErr; _copyErr = null; throw new Exception(cm); }
                     Arm(10);
                     e = ffmpeg.av_read_frame(fc, pkt);
                     if (e < 0) throw new Exception("baca: " + Err(e));
@@ -442,34 +539,14 @@ float4 ps(VSO i) : SV_Target
                         if (e == ffmpeg.AVERROR(ffmpeg.EAGAIN) || e == ffmpeg.AVERROR_EOF) break;
                         if (e < 0) throw new Exception("decode: " + Err(e));
                         Decoded++;
-                        long now = Stopwatch.GetTimestamp();
-                        if (Visible && now - lastCopy >= minTicks)
-                        {
-                            lastCopy = now;
-                            if (_sw || _swFb) CopySw(fr);
-                            else
-                            {
-                                if (fr->format != (int)AVPixelFormat.AV_PIX_FMT_D3D11)
-                                {
-                                    var pf = (AVPixelFormat)fr->format;
-                                    if (pf == AVPixelFormat.AV_PIX_FMT_YUV420P || pf == AVPixelFormat.AV_PIX_FMT_YUVJ420P)
-                                    {
-                                        // dekoder GPU menolak stream ini dan ffmpeg memberi frame software: pakai jalur upload
-                                        _swFb = true;
-                                        Say("dekoder GPU tidak dipakai untuk stream ini (" + pf + ") -> dekode software, upload ke GPU");
-                                        CopySw(fr);
-                                    }
-                                    else throw new Exception("frame bukan D3D11 (format " + fr->format + "): dekode GPU tidak aktif");
-                                }
-                                else if (Direct) Hold(fr); else Copy(fr);
-                            }
-                        }
+                        if (Visible) Enqueue(fr, tb);
                         ffmpeg.av_frame_unref(fr);
                     }
                 }
             }
             finally
             {
+                ClearQ();
                 if (fr != null) ffmpeg.av_frame_free(&fr);
                 if (pkt != null) ffmpeg.av_packet_free(&pkt);
                 if (cc != null) ffmpeg.avcodec_free_context(&cc);
@@ -805,6 +882,7 @@ float4 ps(VSO i) : SV_Target
             {
                 var rc = RectOf(t);
                 if (rc.IsEmpty || !t.Visible) continue;
+                t.PresentDue();
                 lock (t.Lk)
                 {
                     if (!t.HasFrame || t.Tex == null) continue;
@@ -837,7 +915,7 @@ float4 ps(VSO i) : SV_Target
                 int ok = 0, dec = 0;
                 foreach (var t in _tiles) { if (t.HasFrame) ok++; if (!t.Failed) dec++; }
                 Say("HEALTH tile hidup " + ok + "/" + dec + ", frame render " + _frames);
-                foreach (var t in _tiles) Say("  " + t.Name + " dec=" + t.Decoded + " salin=" + t.Copied + " tampil=" + t.Shown + " has=" + t.HasFrame + " st=" + t.Status);
+                foreach (var t in _tiles) Say("  " + t.Name + " dec=" + t.Decoded + " salin=" + t.Copied + " antre=" + t.QCount + " tampil=" + t.Shown + " has=" + t.HasFrame + " st=" + t.Status);
             }
         }
 
