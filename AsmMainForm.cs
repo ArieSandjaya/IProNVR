@@ -716,12 +716,13 @@ namespace IproNvrTool
             for (int i = 0; i < s.LiveWindowsOnStart && i < 4; i++) OpenWindow("live");
             if (s.MapOnStart) OpenWindow("map");
             Activate("operation");
-            BeginInvoke(new Action(delegate { try { MultiviewForm.RestoreOpenWindows(); } catch { } }));
+            BeginInvoke(new Action(delegate { try { D3dWall.RestoreOpen(); } catch { } try { MultiviewForm.RestoreOpenWindows(); } catch { } }));
         }
 
         void OnClosing(object sender, FormClosingEventArgs e)
         {
             IproNvrTool.Events.Added -= OnEvent;
+            try { D3dWall.CloseAll(); } catch { }
             idleTimer.Stop();
             NotifyForm.CloseAll();
             try { EventMonitor.Stop(); } catch { }

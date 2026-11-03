@@ -13,6 +13,57 @@ namespace IproNvrTool
     /// </summary>
     public static class D3dWall
     {
+        static readonly Dictionary<string, Form> open = new Dictionary<string, Form>();
+        /// <summary>true saat aplikasi keluar: jendela yang tertutup tetap tercatat supaya dipulihkan pada start berikutnya.</summary>
+        public static volatile bool Exiting;
+
+        static string Key(GroupRec g, Screen s) { return g.Id + "|" + s.DeviceName; }
+
+        static void Remember(GroupRec g, Screen s, bool add)
+        {
+            try
+            {
+                var list = AppSettings.Current.D3dOpen;
+                lock (list)
+                {
+                    list.RemoveAll(delegate(D3dOpenRec r) { return r.GroupId == g.Id && r.Screen == s.DeviceName; });
+                    if (add) list.Add(new D3dOpenRec { GroupId = g.Id, GroupName = g.Name, Screen = s.DeviceName });
+                }
+                AppSettings.Current.Save();
+            }
+            catch (Exception ex) { try { Log.Write("Wall Direct3D: gagal menyimpan kondisi: " + ex.Message); } catch { } }
+        }
+
+        public static void CloseAll()
+        {
+            Exiting = true;
+            List<Form> l;
+            lock (open) l = new List<Form>(open.Values);
+            foreach (Form f in l) { try { f.Close(); } catch { } }
+        }
+
+        /// <summary>Buka kembali Wall Direct3D yang terbuka saat aplikasi terakhir ditutup (group + monitor yang sama).</summary>
+        public static void RestoreOpen()
+        {
+            List<D3dOpenRec> recs;
+            var src = AppSettings.Current.D3dOpen;
+            lock (src) recs = new List<D3dOpenRec>(src);
+            foreach (D3dOpenRec r in recs)
+            {
+                try
+                {
+                    Screen sc = null;
+                    foreach (Screen s in Screen.AllScreens) if (s.DeviceName == r.Screen) { sc = s; break; }
+                    if (sc == null) { Log.Write("Wall Direct3D: monitor " + r.Screen + " tidak ada, '" + r.GroupName + "' tidak dipulihkan (tetap tercatat)"); continue; }
+                    GroupRec g = AsmDb.GetGroup(r.GroupId);
+                    if (g == null) { Log.Write("Wall Direct3D: group '" + r.GroupName + "' tidak ditemukan"); continue; }
+                    string err = Open(g, sc);
+                    if (err != null) Log.Write("Wall Direct3D (pulihkan '" + g.Name + "'): " + err.Replace("\n", " "));
+                }
+                catch (Exception ex) { Log.Write("Wall Direct3D (pulihkan): " + ex.Message); }
+            }
+        }
+
         public const string DownloadUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-shared-9.0.zip";
 
         static string FindDir()
@@ -34,6 +85,8 @@ namespace IproNvrTool
         /// <summary>Buka Wall Direct3D untuk satu group di satu layar. Mengembalikan pesan galat atau null.</summary>
         public static string Open(GroupRec g, Screen screen)
         {
+            Form ex0;
+            lock (open) { if (open.TryGetValue(Key(g, screen), out ex0) && !ex0.IsDisposed) { try { ex0.Activate(); } catch { } return null; } }
             string dir = FindDir();
             if (dir == null)
                 return "DLL ffmpeg 9 (shared) tidak ditemukan.\n\nUnduh: " + DownloadUrl +
@@ -89,6 +142,14 @@ namespace IproNvrTool
                 return "Wall Direct3D gagal dibuka: " + e.GetType().Name + ": " + e.Message;
             }
             f.Show();
+            string key = Key(g, screen);
+            lock (open) open[key] = f;
+            Remember(g, screen, true);
+            f.FormClosed += delegate
+            {
+                lock (open) open.Remove(key);
+                if (!Exiting) Remember(g, screen, false);   // ditutup pengguna (Esc): jangan dipulihkan lagi
+            };
             return null;
         }
 

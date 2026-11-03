@@ -8,6 +8,14 @@ namespace IproNvrTool
 {
     /// <summary>Pengaturan aplikasi, disimpan di %AppData%\IproNvrTool\settings.xml.
     /// Password dienkripsi dengan DPAPI (hanya bisa dibuka oleh user Windows yang sama).</summary>
+    /// <summary>Satu jendela Wall Direct3D yang terbuka: group + monitor (DeviceName Windows).</summary>
+    public class D3dOpenRec
+    {
+        public long GroupId;
+        public string GroupName = "";
+        public string Screen = "";
+    }
+
     public class AppSettings
     {
         public string Host = "192.168.1.100";
@@ -27,7 +35,8 @@ namespace IproNvrTool
         public bool UseVlcDecoder = false;             // live RTSP lewat LibVLC (dekode GPU dalam proses); false = ffmpeg
         public string D3dFfmpegDir = "";        // folder DLL ffmpeg 9 shared (avcodec-63.dll dst) untuk Wall Direct3D; kosong = cari otomatis
         public int D3dMaxStreams = 4;           // batas jumlah stream Wall Direct3D (naikkan bertahap)
-        public int D3dFps = 15;                 // fps gambar Wall Direct3D
+        public int D3dFps = 15;
+        public System.Collections.Generic.List<D3dOpenRec> D3dOpen = new System.Collections.Generic.List<D3dOpenRec>();   // Wall Direct3D yang terbuka (dipulihkan saat aplikasi dihidupkan)                 // fps gambar Wall Direct3D
         public string MosaicGpu = "auto";       // GPU untuk Mosaic GPU: auto (NVIDIA lalu Intel), nvidia, intel
         public string RelayAddress = "";        // opsional: alamat relay MediaMTX bila di mesin lain, mis. 192.168.1.20 atau 192.168.1.20:8554 (kosong = ikut server)
         public bool UseRelay = false;           // live lewat relay RTSP di server (MediaMTX); cadangan: kamera langsung
