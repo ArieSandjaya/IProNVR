@@ -272,7 +272,7 @@ float4 ps(VSO i) : SV_Target
         AVFrame* _held;
         public D3D.Texture2D ArrTex { get { return _srcWrap; } }
         public readonly Dictionary<int, D3D.VideoProcessorInputView> Views = new Dictionary<int, D3D.VideoProcessorInputView>();
-        bool _sw;
+        bool _sw, _swFb;
         byte[] _nv;
 
         // cache video processor (diurus render thread)
@@ -404,6 +404,7 @@ float4 ps(VSO i) : SV_Target
                 e = ffmpeg.avcodec_parameters_to_context(cc, par);
                 if (e < 0) throw new Exception("params: " + Err(e));
                 // codec yang tidak punya dekoder D3D11VA (MJPEG, MPEG-4, dll) didekode software lalu diunggah ke GPU
+                _swFb = false;
                 var cid = par->codec_id;
                 _sw = !(cid == AVCodecID.AV_CODEC_ID_H264 || cid == AVCodecID.AV_CODEC_ID_HEVC || cid == AVCodecID.AV_CODEC_ID_VP9 ||
                         cid == AVCodecID.AV_CODEC_ID_AV1 || cid == AVCodecID.AV_CODEC_ID_MPEG2VIDEO);
@@ -445,12 +446,22 @@ float4 ps(VSO i) : SV_Target
                         if (Visible && now - lastCopy >= minTicks)
                         {
                             lastCopy = now;
-                            if (_sw) CopySw(fr);
+                            if (_sw || _swFb) CopySw(fr);
                             else
                             {
                                 if (fr->format != (int)AVPixelFormat.AV_PIX_FMT_D3D11)
-                                    throw new Exception("frame bukan D3D11 (format " + fr->format + "): dekode GPU tidak aktif");
-                                if (Direct) Hold(fr); else Copy(fr);
+                                {
+                                    var pf = (AVPixelFormat)fr->format;
+                                    if (pf == AVPixelFormat.AV_PIX_FMT_YUV420P || pf == AVPixelFormat.AV_PIX_FMT_YUVJ420P)
+                                    {
+                                        // dekoder GPU menolak stream ini dan ffmpeg memberi frame software: pakai jalur upload
+                                        _swFb = true;
+                                        Say("dekoder GPU tidak dipakai untuk stream ini (" + pf + ") -> dekode software, upload ke GPU");
+                                        CopySw(fr);
+                                    }
+                                    else throw new Exception("frame bukan D3D11 (format " + fr->format + "): dekode GPU tidak aktif");
+                                }
+                                else if (Direct) Hold(fr); else Copy(fr);
                             }
                         }
                         ffmpeg.av_frame_unref(fr);
