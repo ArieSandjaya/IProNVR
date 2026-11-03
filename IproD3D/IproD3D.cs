@@ -71,12 +71,12 @@ namespace IproD3D
 
         /// <summary>Buka jendela wall untuk satu layar. rects = (x,y,w,h) ternormalisasi per kamera.</summary>
         public static Form Open(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
-            Rectangle bounds, string deviceName, string ffmpegDir, int maxStreams, int fps, Action<string> log)
+            Rectangle bounds, string deviceName, string ffmpegDir, int maxStreams, int fps, Action<string> log, Func<int, bool> isRec)
         {
             try { File.WriteAllText(FLog.Path0, ""); } catch { }
             FLog.W("Open " + title + " layar=" + deviceName + " tile=" + urls.Length + " dir=" + ffmpegDir);
             Init(ffmpegDir);
-            return new Wall(title, urls, mainUrls, names, rects, bounds, deviceName, maxStreams, fps, log);
+            return new Wall(title, urls, mainUrls, names, rects, bounds, deviceName, maxStreams, fps, log, isRec);
         }
     }
 
@@ -241,7 +241,7 @@ float4 ps(VSO i) : SV_Target
         public string Name, Url, MainUrl;
         public RectangleF Rel;
         public Gpu G;
-        public volatile bool UseMain, Visible = true, Stop;
+        public volatile bool UseMain, Visible = true, Stop, Rec;
         public Action<string> Log;
         public int MinIntervalMs = 66;
 
@@ -762,10 +762,17 @@ float4 ps(VSO i) : SV_Target
         volatile bool _stop;
         Tile _zoom;
         bool _info;
+        readonly Func<int, bool> _isRec;
+        long _lastRecPoll;
+        float _dpi = 96f;
+        int BarH { get { return (int)(18 * _dpi / 96f); } }   // tinggi bilah nama, sama dengan sel multiview utama
+        static readonly Color BarBack = Color.FromArgb(40, 46, 60), RecRed = Color.FromArgb(235, 30, 30);
         bool _gdiOk = true;
         int _cw, _ch;
         readonly Font _fName = new Font("Segoe UI", 9f, FontStyle.Bold);
         readonly Font _fSmall = new Font("Segoe UI", 8f);
+        readonly Font _fBar = new Font("Segoe UI", 8.5f);
+        readonly Font _fRec = new Font("Segoe UI", 11f);
         long _frames, _lastStat;
         bool _presentLogged;
         static bool _fmtLogged;
@@ -777,8 +784,9 @@ float4 ps(VSO i) : SV_Target
         readonly string _title;
 
         public Wall(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
-            Rectangle bounds, string deviceName, int maxStreams, int fps, Action<string> log)
+            Rectangle bounds, string deviceName, int maxStreams, int fps, Action<string> log, Func<int, bool> isRec)
         {
+            _isRec = isRec;
             _title = title; _log = log; _fps = fps < 5 ? 5 : fps > 30 ? 30 : fps;
             Text = title;
             FormBorderStyle = FormBorderStyle.None;
@@ -807,6 +815,7 @@ float4 ps(VSO i) : SV_Target
                 _tiles[i] = t;
             }
             var h = Handle;   // paksa handle dibuat
+            try { using (var gg = Graphics.FromHwnd(h)) _dpi = gg.DpiX; } catch { }
             CreateSwap();
             _useShader = _g.Vs != null && _g.Ps != null;
             Say(_useShader ? "render: shader NV12->RGB" : "render: Video Processor (shader gagal: " + _g.ShaderErr + ")");
@@ -878,6 +887,11 @@ float4 ps(VSO i) : SV_Target
             var ctx = _g.Ctx;
             lock (_g.Sync) { ctx.ClearRenderTargetView(_rtv, new RawColor4(0.06f, 0.08f, 0.16f, 1f)); }
             var probes = new List<KeyValuePair<Tile, Rectangle>>();
+            if (_isRec != null && Stopwatch.GetTimestamp() - _lastRecPoll > 2 * Stopwatch.Frequency)
+            {
+                _lastRecPoll = Stopwatch.GetTimestamp();
+                for (int i = 0; i < _tiles.Length; i++) { try { _tiles[i].Rec = _isRec(i); } catch { } }
+            }
             foreach (var t in _tiles)
             {
                 var rc = RectOf(t);
@@ -924,10 +938,9 @@ float4 ps(VSO i) : SV_Target
             var tex = t.Tex;
             if (tex == null) return;
             int vw = t.TexW, vh = t.TexH;
-            double ar = (double)vw / vh;
-            int dw = rc.Width, dh = (int)(dw / ar);
-            if (dh > rc.Height) { dh = rc.Height; dw = (int)(dh * ar); }
-            int dx = rc.X + (rc.Width - dw) / 2, dy = rc.Y + (rc.Height - dh) / 2;
+            int bar = BarH;
+            int dw = rc.Width, dh = rc.Height - bar, dx = rc.X, dy = rc.Y + bar;
+            if (dh < 2) return;
             if (t.SrvTex != tex)
             {
                 t.DisposeVp();
@@ -1092,8 +1105,10 @@ float4 ps(VSO i) : SV_Target
                 {
                     g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
                     int alive = 0; foreach (var t0 in _tiles) if (t0.HasFrame) alive++;
-                    g.DrawString("D3D " + _g.Name + "  render " + _frames + "  tile gambar " + alive + "/" + _tiles.Length + "  (log: " + FLog.Path0 + ")", _fSmall, Brushes.Yellow, 4, _ch - 18);
+                    if (_info) g.DrawString("D3D " + _g.Name + "  render " + _frames + "  tile gambar " + alive + "/" + _tiles.Length + "  (log: " + FLog.Path0 + ")", _fSmall, Brushes.Yellow, 4, _ch - 18);
                     using (var bar = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
+                    using (var barBack = new SolidBrush(BarBack))
+                    using (var recBr = new SolidBrush(RecRed))
                     using (var fg = new SolidBrush(Color.White))
                     using (var dim = new SolidBrush(Color.FromArgb(200, 200, 200)))
                     using (var pen = new Pen(Color.FromArgb(40, 40, 40)))
@@ -1102,17 +1117,23 @@ float4 ps(VSO i) : SV_Target
                         {
                             var rc = RectOf(t);
                             if (rc.IsEmpty) continue;
+                            int bh = BarH;
+                            var barR = new Rectangle(rc.X, rc.Y, rc.Width, bh);
+                            g.FillRectangle(barBack, barR);
+                            int recW = t.Rec ? (int)(22 * _dpi / 96f) : 0;
+                            var nameR = new RectangleF(rc.X + 4, rc.Y, Math.Max(1, rc.Width - 8 - recW), bh);
+                            var nf = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
+                            g.DrawString(t.Name ?? "", _fBar, fg, nameR, nf);
+                            if (t.Rec)
+                            {
+                                var rf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                                g.DrawString("\u25CF", _fRec, recBr, new RectangleF(rc.Right - recW, rc.Y, recW, bh), rf);
+                            }
                             if (!t.HasFrame)
                             {
                                 g.DrawRectangle(pen, rc.X, rc.Y, rc.Width - 1, rc.Height - 1);
                                 var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                                g.DrawString((t.Name ?? "") + "\n" + (t.Status ?? ""), _fSmall, dim, rc, sf);
-                            }
-                            else
-                            {
-                                var sz = g.MeasureString(t.Name ?? "", _fName);
-                                g.FillRectangle(bar, rc.X, rc.Y, Math.Min(rc.Width, sz.Width + 8), sz.Height + 2);
-                                g.DrawString(t.Name ?? "", _fName, fg, rc.X + 4, rc.Y + 1);
+                                g.DrawString(t.Status ?? "", _fSmall, dim, new RectangleF(rc.X, rc.Y + bh, rc.Width, rc.Height - bh), sf);
                             }
                             if (_info)
                             {

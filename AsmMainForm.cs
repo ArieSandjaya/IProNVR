@@ -535,7 +535,16 @@ namespace IproNvrTool
             if (mgroups.Count == 0) Asm.Sub(mz, "(belum ada group)", delegate { });
             m.Items.Add(mz);
 
-            ToolStripMenuItem md = new ToolStripMenuItem("Wall Direct3D (dekode GPU, uji coba)");
+            ToolStripMenuItem mv = new ToolStripMenuItem("Multiview lama (jendela terpisah, dekode CPU)");
+            Asm.Sub(mv, "Multiview baru...", delegate { MultiviewForm.CreateNew(); });
+            foreach (string nm in MultiviewForm.ListNames())
+            {
+                string n = nm;
+                Asm.Sub(mv, n + (MultiviewForm.IsOpen(n) ? "   (terbuka)" : ""), delegate { MultiviewForm.OpenNamed(n); });
+            }
+            Asm.Sub(mv, "Tutup semua multiview", delegate { MultiviewForm.CloseAll(); });
+            m.Items.Add(mv);
+            ToolStripMenuItem md = new ToolStripMenuItem("Wall Direct3D (dekode GPU)");
             foreach (GroupRec mg in mgroups)
             {
                 GroupRec g4 = mg;
@@ -554,15 +563,6 @@ namespace IproNvrTool
             if (mgroups.Count == 0) Asm.Sub(md, "(belum ada group)", delegate { });
             m.Items.Add(md);
 
-            ToolStripMenuItem mv = new ToolStripMenuItem("Multiview (jendela terpisah)");
-            Asm.Sub(mv, "Multiview baru...", delegate { MultiviewForm.CreateNew(); });
-            foreach (string nm in MultiviewForm.ListNames())
-            {
-                string n = nm;
-                Asm.Sub(mv, n + (MultiviewForm.IsOpen(n) ? "   (terbuka)" : ""), delegate { MultiviewForm.OpenNamed(n); });
-            }
-            Asm.Sub(mv, "Tutup semua multiview", delegate { MultiviewForm.CloseAll(); });
-            m.Items.Add(mv);
             Asm.Item(m, "Tampilan klasik (alat lama)", delegate
             {
                 var f = new MainForm();

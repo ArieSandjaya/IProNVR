@@ -52,6 +52,7 @@ namespace IproNvrTool
             if (probe != null) return "DLL ffmpeg gagal dimuat dari " + dir + "\n" + probe;
 
             ScreenLayout lay = ScreenLayout.ById(g.Layout);
+            var recNvr = new List<long>(); var recCh = new List<int>();
             var urls = new List<string>(); var mains = new List<string>(); var names = new List<string>(); var rects = new List<float>();
             for (int i = 0; i < lay.Count && i < g.Slots.Length; i++)
             {
@@ -64,6 +65,7 @@ namespace IproNvrTool
                 if (sub == null) continue;
                 string main = MosaicWall.FirstRtsp(nvr, cam, false);
                 Rectangle r = lay.Cells[i];
+                recNvr.Add(cr.NvrId); recCh.Add(cr.Channel);
                 urls.Add(sub); mains.Add(main); names.Add(Dir.Title(cr.NvrId, cr.Channel));
                 rects.Add((float)r.X / lay.Cols); rects.Add((float)r.Y / lay.Rows);
                 rects.Add((float)r.Width / lay.Cols); rects.Add((float)r.Height / lay.Rows);
@@ -71,13 +73,14 @@ namespace IproNvrTool
             if (urls.Count == 0) return "Tidak ada kamera di group ini yang punya URL RTSP.";
 
             Action<string> log = delegate(string m) { try { Log.Write(m); } catch { } };
+            Func<int, bool> isRec = delegate(int i) { return i >= 0 && i < recNvr.Count && Dir.IsRecording(recNvr[i], recCh[i]); };
             Form f;
             try
             {
                 var s = AppSettings.Current;
                 f = (Form)entry.GetMethod("Open").Invoke(null, new object[] {
                     "Wall Direct3D - " + g.Name, urls.ToArray(), mains.ToArray(), names.ToArray(), rects.ToArray(),
-                    screen.Bounds, screen.DeviceName, dir, Math.Max(1, s.D3dMaxStreams), s.D3dFps <= 0 ? 15 : s.D3dFps, log });
+                    screen.Bounds, screen.DeviceName, dir, Math.Max(1, s.D3dMaxStreams), s.D3dFps <= 0 ? 15 : s.D3dFps, log, isRec });
             }
             catch (Exception ex)
             {
