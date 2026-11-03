@@ -426,7 +426,7 @@ float4 ps(VSO i) : SV_Target
                 Status = "Menunggu frame...";
                 bool main0 = UseMain;
                 long lastCopy = 0;
-                long minTicks = Stopwatch.Frequency * MinIntervalMs / 1000;
+                long minTicks = Stopwatch.Frequency * MinIntervalMs / 1000 * 7 / 10;
                 while (!Stop && UseMain == main0)
                 {
                     Arm(10);
@@ -778,7 +778,7 @@ float4 ps(VSO i) : SV_Target
 
         void RenderLoop()
         {
-            long period = Stopwatch.Frequency / _fps;
+            long period = Stopwatch.Frequency / Math.Max(_fps, 25);
             long next = Stopwatch.GetTimestamp();
             while (!_stop)
             {
