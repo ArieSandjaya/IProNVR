@@ -98,7 +98,7 @@ namespace IproD3D
         public string ShaderErr;
 
         const string Hlsl =
-@"cbuffer cb : register(b0) { float4 p; };
+@"cbuffer cb : register(b0) { float4 p; float4 q; };
 Texture2D ty : register(t0);
 Texture2D tuv : register(t1);
 SamplerState sm : register(s0);
@@ -113,8 +113,9 @@ VSO vs(uint id : SV_VertexID)
 }
 float4 ps(VSO i) : SV_Target
 {
-    float y = ty.Sample(sm, i.uv).r;
-    float2 c = tuv.Sample(sm, i.uv).rg - 0.5;
+    float2 uv = q.yz + (i.uv - 0.5) / q.x;
+    float y = ty.Sample(sm, uv).r;
+    float2 c = tuv.Sample(sm, uv).rg - 0.5;
     if (p.y < 0.5) { y = (y - 16.0 / 255.0) * (255.0 / 219.0); c = c * (255.0 / 224.0); }
     float3 rgb;
     if (p.x > 0.5) rgb = float3(y + 1.5748 * c.y, y - 0.1873 * c.x - 0.4681 * c.y, y + 1.8556 * c.x);
@@ -161,7 +162,7 @@ float4 ps(VSO i) : SV_Target
             {
                 Vs = new D3D.VertexShader(Dev, Compile("vs", "vs_4_0"), null);
                 Ps = new D3D.PixelShader(Dev, Compile("ps", "ps_4_0"), null);
-                Cb = new D3D.Buffer(Dev, 16, D3D.ResourceUsage.Default, D3D.BindFlags.ConstantBuffer, D3D.CpuAccessFlags.None, D3D.ResourceOptionFlags.None, 0);
+                Cb = new D3D.Buffer(Dev, 32, D3D.ResourceUsage.Default, D3D.BindFlags.ConstantBuffer, D3D.CpuAccessFlags.None, D3D.ResourceOptionFlags.None, 0);
                 Smp = new D3D.SamplerState(Dev, new D3D.SamplerStateDescription
                 {
                     Filter = D3D.Filter.MinMagMipLinear,
@@ -242,6 +243,7 @@ float4 ps(VSO i) : SV_Target
         public RectangleF Rel;
         public Gpu G;
         public volatile bool UseMain, Visible = true, Stop, Rec;
+        public volatile float Zoom = 1f, Cx = 0.5f, Cy = 0.5f;   // zoom digital: pembesaran dan titik tengah (0..1 pada gambar)
         public Action<string> Log;
         public int MinIntervalMs = 66;
 
@@ -798,41 +800,96 @@ float4 ps(VSO i) : SV_Target
             if (was) PtzSend(0, 0, 0);
         }
 
-        protected override void OnMouseDown(MouseEventArgs e)
+        int HitTile(Point pt)
         {
-            base.OnMouseDown(e);
-            if (e.Button != MouseButtons.Left) return;
-            Focus();
-            int hit = -1;
             for (int i = 0; i < _tiles.Length; i++)
             {
                 var rc = RectOf(_tiles[i]);
-                if (!rc.IsEmpty && rc.Contains(e.Location)) { hit = i; break; }
+                if (!rc.IsEmpty && rc.Contains(pt)) return i;
             }
+            return -1;
+        }
+
+        // area gambar sebuah tile (di bawah bilah nama)
+        RectangleF VideoRect(Tile t)
+        {
+            var rc = RectOf(t);
+            int bar = BarH;
+            return new RectangleF(rc.X, rc.Y + bar, rc.Width, Math.Max(1, rc.Height - bar));
+        }
+
+        static void ClampView(Tile t)
+        {
+            float half = 0.5f / t.Zoom;
+            t.Cx = Math.Max(half, Math.Min(1f - half, t.Cx));
+            t.Cy = Math.Max(half, Math.Min(1f - half, t.Cy));
+        }
+
+        static void ResetZoom(Tile t) { t.Zoom = 1f; t.Cx = 0.5f; t.Cy = 0.5f; }
+
+        int _dragTile = -1;
+        Point _dragLast;
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            Focus();
+            int hit = HitTile(e.Location);
+            if (e.Button == MouseButtons.Right) { if (hit >= 0) ResetZoom(_tiles[hit]); return; }   // klik kanan = zoom digital kembali 1x
+            if (e.Button != MouseButtons.Left) return;
             if (hit != _sel) { PtzHoldStop(); _sel = hit; }
+            if (hit >= 0 && _tiles[hit].Zoom > 1f) { _dragTile = hit; _dragLast = e.Location; }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (_dragTile < 0 || (e.Button & MouseButtons.Left) == 0) return;
+            var t = _tiles[_dragTile];
+            var vr = VideoRect(t);
+            t.Cx -= (e.X - _dragLast.X) / (vr.Width * t.Zoom);
+            t.Cy -= (e.Y - _dragLast.Y) / (vr.Height * t.Zoom);
+            ClampView(t);
+            _dragLast = e.Location;
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            _dragTile = -1;
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
-            if (_sel < 0 || _ptz == null) return;
-            int dz = e.Delta > 0 ? PtzSpeed : -PtzSpeed;   // roda ke depan = zoom in
-            PtzSend(0, 0, dz);
-            if (_wheelTimer == null)
+            int hit = HitTile(e.Location);
+            if (hit < 0) return;
+            if ((ModifierKeys & Keys.Control) != 0)
             {
-                _wheelTimer = new System.Windows.Forms.Timer { Interval = 300 };
-                _wheelTimer.Tick += delegate { _wheelTimer.Stop(); PtzSend(0, 0, 0); };
+                // Ctrl + roda = zoom optik PTZ pada kamera di bawah kursor
+                if (_ptz == null) return;
+                if (hit != _sel) { PtzHoldStop(); _sel = hit; }
+                PtzSend(0, 0, e.Delta > 0 ? PtzSpeed : -PtzSpeed);
+                if (_wheelTimer == null)
+                {
+                    _wheelTimer = new System.Windows.Forms.Timer { Interval = 300 };
+                    _wheelTimer.Tick += delegate { _wheelTimer.Stop(); PtzSend(0, 0, 0); };
+                }
+                _wheelTimer.Stop(); _wheelTimer.Start();
+                return;
             }
-            _wheelTimer.Stop(); _wheelTimer.Start();
-        }
-
-        protected override bool IsInputKey(Keys keyData)
-        {
-            switch (keyData & Keys.KeyCode)
-            {
-                case Keys.Left: case Keys.Right: case Keys.Up: case Keys.Down: return true;   // panah dipakai untuk PTZ, bukan pindah fokus
-            }
-            return base.IsInputKey(keyData);
+            // roda = zoom digital (semua kamera), titik di bawah kursor tetap di tempatnya
+            var t = _tiles[hit];
+            var vr = VideoRect(t);
+            float u = Math.Max(0f, Math.Min(1f, (e.X - vr.X) / vr.Width)), v = Math.Max(0f, Math.Min(1f, (e.Y - vr.Y) / vr.Height));
+            float z0 = t.Zoom;
+            float z1 = e.Delta > 0 ? z0 * 1.25f : z0 / 1.25f;
+            z1 = Math.Max(1f, Math.Min(8f, z1));
+            if (z1 < 1.02f) z1 = 1f;
+            float sx = t.Cx + (u - 0.5f) / z0, sy = t.Cy + (v - 0.5f) / z0;
+            t.Zoom = z1;
+            t.Cx = sx - (u - 0.5f) / z1; t.Cy = sy - (v - 0.5f) / z1;
+            ClampView(t);
         }
 
         protected override void OnKeyUp(KeyEventArgs e)
@@ -1035,8 +1092,8 @@ float4 ps(VSO i) : SV_Target
                 t.SrvTex = tex;
             }
             var ctx = _g.Ctx;
-            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, 0f, 0f };
-            unsafe { fixed (float* pcb = cb) ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)pcb, 16, 16), _g.Cb, 0); }
+            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, 0f, 0f, t.Zoom, t.Cx, t.Cy, 0f };
+            unsafe { fixed (float* pcb = cb) ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)pcb, 32, 32), _g.Cb, 0); }
             ctx.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
             ctx.VertexShader.Set(_g.Vs);
             ctx.PixelShader.Set(_g.Ps);
@@ -1208,6 +1265,8 @@ float4 ps(VSO i) : SV_Target
                             var nameR = new RectangleF(rc.X + 4, rc.Y, Math.Max(1, rc.Width - 8 - recW), bh);
                             var nf = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
                             g.DrawString(t.Name ?? "", _fBar, fg, nameR, nf);
+                            if (t.Zoom > 1.01f)
+                                g.DrawString("x" + t.Zoom.ToString("0.0"), _fSmall, Brushes.Orange, rc.Right - recW - 34, rc.Y + (bh - _fSmall.Height) / 2);
                             if (t.Rec)
                             {
                                 var rf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
@@ -1244,6 +1303,7 @@ float4 ps(VSO i) : SV_Target
         {
             if (e.KeyCode == Keys.Escape) { Close(); return; }
             if (e.KeyCode == Keys.I) _info = !_info;
+            if (e.KeyCode == Keys.D0 || e.KeyCode == Keys.Home) { int h0 = _sel >= 0 ? _sel : -1; if (h0 >= 0) ResetZoom(_tiles[h0]); }
             switch (e.KeyCode)
             {
                 case Keys.Left: PtzHoldStart(-PtzSpeed, 0, 0); e.Handled = true; break;

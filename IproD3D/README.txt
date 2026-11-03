@@ -9,3 +9,5 @@ DLL ffmpeg 9.0 shared (wajib, versi harus avcodec-63):
   (atau isi foldernya di Setup > Dekode & stream).
 
 Di jendela: Esc = tutup, klik dua kali = perbesar satu kamera (stream utama) / kembali, I = info frame.
+Zoom digital (semua kamera): roda mouse = zoom in/out, tarik dengan mouse = geser, klik kanan atau tombol 0 = kembali 1x.
+PTZ optik: Ctrl + roda, atau PgUp/PgDn, + / -; panah = geser kamera PTZ.
