@@ -114,7 +114,8 @@ namespace IproNvrTool
         public bool SoftFish { get { FisheyeRec r = Fish; return r != null && r.Enabled && !r.CamStream && FMode != FishMode.Off; } }
         /// <summary>Ada pemrosesan gambar: dewarp di aplikasi, atau susun ulang stream 2x2 dari kamera (mode panorama ganda).</summary>
         public bool FishFilter { get { FisheyeRec r = Fish; return r != null && r.Enabled && FMode != FishMode.Off && (!r.CamStream || FMode == FishMode.Dual); } }
-        public bool PtzActive { get { return SoftFish && FMode == FishMode.Ptz; } }
+        /// <summary>Geser (drag) memutar tampilan dan roda mouse zoom pada semua mode dewarp di aplikasi (Panorama, Quad, Panorama ganda, PTZ virtual).</summary>
+        public bool PtzActive { get { return SoftFish; } }
         public byte[] RawJpeg { get { return Tile != null && Tile.LastJpeg != null ? Tile.LastJpeg : LastJpeg; } }
 
         NvrSession sess;

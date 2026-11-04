@@ -80,7 +80,7 @@ namespace IproNvrTool
         {
             string key = string.Format(System.Globalization.CultureInfo.InvariantCulture,
                 "{0}x{1}>{2}x{3}|{4}|{5}|{6:F1}|{7:F3}|{8:F3}|{9:F3}|{10:F1}|{11:F1}|{12:F1}|{13:F1}",
-                sw, sh, ow, oh, (int)m, r.Mount, r.Fov, r.Cx, r.Cy, r.Radius, r.Rot, m == FishMode.Ptz ? yaw : 0, m == FishMode.Ptz ? pitch : 0, m == FishMode.Ptz ? hfov : 0);
+                sw, sh, ow, oh, (int)m, r.Mount, r.Fov, r.Cx, r.Cy, r.Radius, r.Rot, yaw, pitch, hfov);
             lock (cache)
             {
                 for (int i = 0; i < cache.Count; i++)
@@ -196,11 +196,24 @@ namespace IproNvrTool
             double half = Math.Max(10, r.Fov) * 0.5 * Math.PI / 180.0;
             int mt = r.Mount;
             wallRot = mt == 1 ? r.Rot * Math.PI / 180.0 : 0;
+            double zoom = Math.Max(0.3, 80.0 / Math.Max(10.0, hfov));       // roda mouse: zoom (hfov 80 = bawaan)
+            double pOff = pitch - DefaultPitch(mt);                          // geser vertikal oleh mouse
             if (m == FishMode.Panorama)
             {
                 double y0, y1, p0, p1;
-                if (mt == 1) { y0 = -85; y1 = 85; p0 = -40; p1 = 40; }
-                else { y0 = 0; y1 = 360; p0 = 5; p1 = 80; }
+                if (mt == 1)
+                {
+                    double yc = Math.Max(-60, Math.Min(60, yaw)), ys0 = 170.0 / zoom, pc = Math.Max(-40, Math.Min(40, pOff)), ps0 = 80.0 / zoom;
+                    y0 = yc - ys0 / 2; y1 = yc + ys0 / 2; p0 = pc - ps0 / 2; p1 = pc + ps0 / 2;
+                }
+                else
+                {
+                    double ps0 = 75.0 / zoom, pc = Math.Max(5 + ps0 / 2 - 20, Math.Min(84 - ps0 / 2 + 20, 42.5 + pOff));
+                    y0 = yaw; y1 = yaw + 360;                                // putar: geser awal panorama (melingkar)
+                    p0 = pc - ps0 / 2; p1 = pc + ps0 / 2;
+                    if (p1 > 89) { p0 -= p1 - 89; p1 = 89; }
+                    if (p0 < 0) { p1 -= p0; p0 = 0; }
+                }
                 for (int j = 0; j < oh; j++)
                 {
                     double p = p0 + (j + 0.5) / oh * (p1 - p0);
@@ -220,7 +233,7 @@ namespace IproNvrTool
                 {
                     int rx = (k % 2) * tw, ry = (k / 2) * th;
                     int rw = (k % 2 == 1) ? ow - tw : tw, rh = (k / 2 == 1) ? oh - th : th;
-                    Persp(l, ow, rx, ry, rw, rh, Forward(mt, ys[k], ps[k], r.Rot), mt, 95, cx, cy, R, half, sw, sh);
+                    Persp(l, ow, rx, ry, rw, rh, Forward(mt, ys[k] + yaw, Math.Max(-80, Math.Min(89, ps[k] + pOff)), r.Rot), mt, Math.Max(25, Math.Min(140, 95 / zoom)), cx, cy, R, half, sw, sh);
                 }
             }
             else
