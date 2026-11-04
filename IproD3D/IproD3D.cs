@@ -69,6 +69,13 @@ namespace IproD3D
             _init = true;
         }
 
+        /// <summary>Buat satu kotak kamera (kontrol WinForms) berdekode GPU untuk tampilan Operation / Live.</summary>
+        public static Control CreateCell(string name, string url, string mainUrl, string ffmpegDir, int fps, Action<string> log)
+        {
+            Init(ffmpegDir);
+            return new CellSurface(name, url, mainUrl, fps, log);
+        }
+
         /// <summary>Buka jendela wall untuk satu layar. rects = (x,y,w,h) ternormalisasi per kamera.</summary>
         public static Form Open(string title, string[] urls, string[] mainUrls, string[] names, float[] rects,
             Rectangle bounds, string deviceName, string ffmpegDir, int maxStreams, int fps, Action<string> log, Func<int, bool> isRec, Action<int, int, int, int> ptz)
@@ -745,6 +752,273 @@ float4 ps(VSO i) : SV_Target
                 if (Tex != null) { Tex.Dispose(); Tex = null; }
                 HasFrame = false;
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ CellSurface (satu kotak kamera di dalam jendela biasa)
+
+    static class Painter
+    {
+        // gambar tekstur NV12 sebuah tile ke render target (viewport = dx,dy,dw,dh); pemanggil memegang t.Lk dan g.Sync
+        public static void Draw(Gpu g, Tile t, D3D.RenderTargetView rtv, int dx, int dy, int dw, int dh)
+        {
+            var tex = t.Tex;
+            if (tex == null || dw < 2 || dh < 2) return;
+            if (t.SrvTex != tex)
+            {
+                t.DisposeVp();
+                var d1 = new D3D.ShaderResourceViewDescription { Format = DX.Format.R8_UNorm, Dimension = SharpDX.Direct3D.ShaderResourceViewDimension.Texture2D };
+                d1.Texture2D.MipLevels = 1; d1.Texture2D.MostDetailedMip = 0;
+                var d2 = new D3D.ShaderResourceViewDescription { Format = DX.Format.R8G8_UNorm, Dimension = SharpDX.Direct3D.ShaderResourceViewDimension.Texture2D };
+                d2.Texture2D.MipLevels = 1; d2.Texture2D.MostDetailedMip = 0;
+                t.SrvY = new D3D.ShaderResourceView(g.Dev, tex, d1);
+                t.SrvUV = new D3D.ShaderResourceView(g.Dev, tex, d2);
+                t.SrvTex = tex;
+            }
+            var ctx = g.Ctx;
+            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, 0f, 0f, t.Zoom, t.Cx, t.Cy, 0f };
+            unsafe { fixed (float* pcb = cb) ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)pcb, 32, 32), g.Cb, 0); }
+            ctx.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
+            ctx.VertexShader.Set(g.Vs);
+            ctx.PixelShader.Set(g.Ps);
+            ctx.PixelShader.SetConstantBuffer(0, g.Cb);
+            ctx.PixelShader.SetSampler(0, g.Smp);
+            ctx.PixelShader.SetShaderResources(0, new D3D.ShaderResourceView[] { t.SrvY, t.SrvUV });
+            ctx.Rasterizer.SetViewport(dx, dy, dw, dh, 0f, 1f);
+            ctx.OutputMerger.SetRenderTargets(rtv);
+            ctx.Draw(3, 0);
+            ctx.PixelShader.SetShaderResources(0, new D3D.ShaderResourceView[2]);
+            ctx.OutputMerger.ResetTargets();
+        }
+    }
+
+    /// <summary>Kontrol WinForms biasa yang menampilkan satu kamera lewat dekode GPU (D3D11VA) + render D3D11.
+    /// Dipakai tampilan Operation / Live: satu kontrol per kotak, semua digambar oleh satu thread render bersama.</summary>
+    public sealed class CellSurface : Control
+    {
+        static readonly List<CellSurface> All = new List<CellSurface>();
+        static Thread _rt;
+        static volatile bool _rtStop;
+
+        readonly Tile _t = new Tile();
+        readonly object _rl = new object();
+        Gpu _g;
+        DX.SwapChain _sc;
+        D3D.Texture2D _back;
+        D3D.RenderTargetView _rtv;
+        DX.Surface1 _surf;
+        int _cw, _ch;
+        volatile int _w, _h;
+        volatile bool _vis = true, _down;
+        bool _started;
+        string _lastStatus = "";
+        readonly Font _f = new Font("Segoe UI", 9f);
+        System.Windows.Forms.Timer _stTimer;
+        bool _pan;
+        Point _panLast;
+
+        /// <summary>Status sambungan ("" = gambar tampil); dipanggil di UI thread.</summary>
+        public event Action<string> StatusChanged;
+        public bool Zoomed { get { return _t.Zoom > 1.01f; } }
+        public bool HasPicture { get { return _t.HasFrame; } }
+
+        internal CellSurface(string name, string url, string mainUrl, int fps, Action<string> log)
+        {
+            SetStyle(ControlStyles.Opaque | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.Selectable, true);
+            DoubleBuffered = false;
+            BackColor = Color.Black;
+            _t.Name = name; _t.Url = url; _t.MainUrl = mainUrl; _t.Log = log;
+            fps = fps < 5 ? 5 : fps > 30 ? 30 : fps;
+            _t.MinIntervalMs = 1000 / fps - 4;
+            _t.Status = "Menyambung...";
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e) { }
+        protected override void OnPaint(PaintEventArgs e) { }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            _w = ClientSize.Width; _h = ClientSize.Height; _vis = Visible;
+            if (_started) return;
+            _started = true;
+            try
+            {
+                var sc = Screen.FromControl(this);
+                _g = Gpu.For(sc.DeviceName);
+                _t.G = _g;
+                _t.Start(0);
+            }
+            catch (Exception ex) { _t.Status = "GPU: " + ex.Message; _t.Failed = true; }
+            lock (All) { All.Add(this); if (_rt == null) { _rtStop = false; _rt = new Thread(RenderAll) { IsBackground = true, Name = "d3d-cells" }; _rt.Start(); } }
+            _stTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _stTimer.Tick += delegate
+            {
+                string st = _t.HasFrame ? "" : (_t.Status ?? "");
+                if (st != _lastStatus) { _lastStatus = st; var h = StatusChanged; if (h != null) h(st); }
+            };
+            _stTimer.Start();
+        }
+
+        protected override void OnResize(EventArgs e) { base.OnResize(e); _w = ClientSize.Width; _h = ClientSize.Height; }
+        protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); _vis = Visible; }
+
+        // ---- zoom digital: roda = zoom, tarik kiri = geser (saat sudah di-zoom), klik tengah = kembali 1x
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            float u = Math.Max(0f, Math.Min(1f, e.X / (float)Math.Max(1, _w))), v = Math.Max(0f, Math.Min(1f, e.Y / (float)Math.Max(1, _h)));
+            float z0 = _t.Zoom;
+            float z1 = e.Delta > 0 ? z0 * 1.25f : z0 / 1.25f;
+            z1 = Math.Max(1f, Math.Min(8f, z1));
+            if (z1 < 1.02f) z1 = 1f;
+            float sx = _t.Cx + (u - 0.5f) / z0, sy = _t.Cy + (v - 0.5f) / z0;
+            _t.Zoom = z1;
+            _t.Cx = sx - (u - 0.5f) / z1; _t.Cy = sy - (v - 0.5f) / z1;
+            Clamp();
+        }
+
+        void Clamp()
+        {
+            float half = 0.5f / _t.Zoom;
+            _t.Cx = Math.Max(half, Math.Min(1f - half, _t.Cx));
+            _t.Cy = Math.Max(half, Math.Min(1f - half, _t.Cy));
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button == MouseButtons.Middle) { _t.Zoom = 1f; _t.Cx = 0.5f; _t.Cy = 0.5f; return; }
+            if (e.Button == MouseButtons.Left && Zoomed) { _pan = true; _panLast = e.Location; }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (!_pan || (e.Button & MouseButtons.Left) == 0) return;
+            _t.Cx -= (e.X - _panLast.X) / (Math.Max(1, _w) * _t.Zoom);
+            _t.Cy -= (e.Y - _panLast.Y) / (Math.Max(1, _h) * _t.Zoom);
+            Clamp();
+            _panLast = e.Location;
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); _pan = false; }
+
+        // ---- render (thread bersama)
+        static void RenderAll()
+        {
+            long period = Stopwatch.Frequency / 25;
+            long next = Stopwatch.GetTimestamp();
+            while (!_rtStop)
+            {
+                CellSurface[] snap;
+                lock (All) snap = All.ToArray();
+                foreach (var c in snap) { try { c.RenderOnce(); } catch (Exception ex) { FLog.W("sel render galat: " + ex.GetType().Name + " " + ex.Message); } }
+                next += period;
+                long now = Stopwatch.GetTimestamp();
+                if (next < now) next = now;
+                int ms = (int)((next - now) * 1000 / Stopwatch.Frequency);
+                Thread.Sleep(ms > 0 ? ms : 1);
+            }
+        }
+
+        void MakeSwap(int w, int h)
+        {
+            FreeSwap();
+            var desc = new DX.SwapChainDescription
+            {
+                ModeDescription = new DX.ModeDescription(w, h, new DX.Rational(60, 1), DX.Format.B8G8R8A8_UNorm),
+                SampleDescription = new DX.SampleDescription(1, 0),
+                Usage = DX.Usage.RenderTargetOutput,
+                BufferCount = 1,
+                OutputHandle = Handle,
+                IsWindowed = true,
+                SwapEffect = DX.SwapEffect.Discard,
+                Flags = DX.SwapChainFlags.GdiCompatible
+            };
+            lock (_g.Sync)
+            {
+                using (var fac = new DX.Factory1())
+                {
+                    _sc = new DX.SwapChain(fac, _g.Dev, desc);
+                    fac.MakeWindowAssociation(Handle, DX.WindowAssociationFlags.IgnoreAll);
+                }
+                _back = _sc.GetBackBuffer<D3D.Texture2D>(0);
+                _rtv = new D3D.RenderTargetView(_g.Dev, _back);
+                try { _surf = _sc.GetBackBuffer<DX.Surface1>(0); } catch { _surf = null; }
+            }
+            _cw = w; _ch = h;
+        }
+
+        void FreeSwap()
+        {
+            if (_g == null) return;
+            lock (_g.Sync)
+            {
+                try { if (_surf != null) _surf.Dispose(); } catch { }
+                try { if (_rtv != null) _rtv.Dispose(); } catch { }
+                try { if (_back != null) _back.Dispose(); } catch { }
+                try { if (_sc != null) _sc.Dispose(); } catch { }
+                _surf = null; _rtv = null; _back = null; _sc = null;
+            }
+            _t.DisposeVp();
+        }
+
+        void RenderOnce()
+        {
+            if (_g == null || _t.Failed && _t.G == null) return;
+            lock (_rl)
+            {
+                if (_down || !IsHandleCreated) return;
+                int w = _w, h = _h;
+                if (!_vis || w < 8 || h < 8) { _t.Visible = false; return; }
+                _t.Visible = true;
+                if (_sc == null || w != _cw || h != _ch) { lock (_t.Lk) { MakeSwap(w, h); } }
+                _t.PresentDue();
+                lock (_t.Lk)
+                {
+                    lock (_g.Sync) { _g.Ctx.ClearRenderTargetView(_rtv, new SharpDX.Mathematics.Interop.RawColor4(0f, 0f, 0f, 1f)); }
+                    if (_t.HasFrame && _t.Tex != null)
+                    {
+                        try { lock (_g.Sync) { Painter.Draw(_g, _t, _rtv, 0, 0, _cw, _ch); } _t.Shown++; }
+                        catch (Exception ex) { _t.Status = "Render: " + ex.Message; _t.DisposeVp(); _t.HasFrame = false; }
+                    }
+                    else if (_surf != null)
+                    {
+                        IntPtr hdc = IntPtr.Zero;
+                        try
+                        {
+                            hdc = _surf.GetDC(false);
+                            using (var g = Graphics.FromHdc(hdc))
+                            {
+                                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                                g.DrawString(_t.Status ?? "", _f, Brushes.Gainsboro, new RectangleF(0, 0, _cw, _ch), sf);
+                            }
+                        }
+                        catch { }
+                        finally { if (hdc != IntPtr.Zero) { try { _surf.ReleaseDC(); } catch { } } }
+                    }
+                }
+                _sc.TryPresent(0, DX.PresentFlags.None);
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                try { if (_stTimer != null) { _stTimer.Stop(); _stTimer.Dispose(); } } catch { }
+                lock (All) { All.Remove(this); }
+                _t.Stop = true;
+                lock (_rl)
+                {
+                    _down = true;
+                    try { FreeSwap(); } catch { }
+                }
+                var t = _t;
+                ThreadPool.QueueUserWorkItem(delegate { try { t.Join(); t.DisposeAll(); } catch { } });
+            }
+            base.Dispose(disposing);
         }
     }
 

@@ -289,6 +289,7 @@ namespace IproNvrTool
             if (e.Button == MouseButtons.Left && HasCamera)
             {
                 if (PtzActive) ptzLast = Control.MousePosition;
+                else if (d3d != null && D3dWall.IsZoomed(d3d)) dragReady = false;
                 else { dragReady = true; down = Control.MousePosition; }
             }
             if (e.Button == MouseButtons.Right && ContextMenuStrip != null) { }
@@ -399,6 +400,7 @@ namespace IproNvrTool
             lblName.Visible = false;
         }
 
+        Control d3d;   // kotak kamera berdekode GPU (Direct3D) sebagai pengganti Tile
         LiveTile _stash; NvrSession _stashSess; long _stashNvr; int _stashCh;
 
         /// <summary>Hanya RTSP langsung (tanpa sesi push NVR) yang bisa ditahan tanpa reconnect.</summary>
@@ -478,6 +480,12 @@ namespace IproNvrTool
 
         void StopCurrent()
         {
+            if (d3d != null)
+            {
+                Control dc = d3d; d3d = null;
+                Controls.Remove(dc);
+                dc.Dispose();
+            }
             LiveTile t = Tile;
             NvrSession s = sess;
             long nid = NvrId;
@@ -532,6 +540,7 @@ namespace IproNvrTool
                 useSub = false;
                 if (decodeWidth > 0 && decodeWidth < 1280) decodeWidth = 1280;
             }
+            if (!SoftFish && (Fish == null || !Fish.Enabled) && ShowLiveD3d(nvr, channel, useSub)) return;
             sess = Pool.Acquire(nvr, channel);
             Task gate; int gateTick;
             StopGate.Get(nvr.Id, channel, out gate, out gateTick);
@@ -573,6 +582,36 @@ namespace IproNvrTool
             SetName();
             if (gate != null) { Tile.StartAfter = gate; Tile.StartAfterTick = gateTick; }
             Tile.Start(delayMs);
+        }
+
+        /// <summary>Coba tampilkan kamera lewat dekode GPU + Direct3D. False bila tidak tersedia (dipakai dekoder lama).</summary>
+        bool ShowLiveD3d(NvrRecord nvr, int channel, bool useSub)
+        {
+            string url;
+            try { url = MosaicWall.FirstRtsp(nvr, Dir.Cam(nvr.Id, channel), useSub); } catch { return false; }
+            if (string.IsNullOrEmpty(url)) return false;
+            Control c = D3dWall.CreateCell(TitleText(), url);
+            if (c == null) return false;
+            d3d = c;
+            c.Dock = DockStyle.Fill;
+            c.BackColor = Color.Black;
+            HookMouse(c);
+            if (ContextMenuStrip != null) c.ContextMenuStrip = ContextMenuStrip;
+            var ev = c.GetType().GetEvent("StatusChanged");
+            if (ev != null)
+            {
+                Action<string> h = delegate(string st)
+                {
+                    StatusText = st;
+                    try { if (IsHandleCreated && !IsDisposed) SetName(); } catch { }
+                };
+                ev.AddEventHandler(c, h);
+            }
+            Controls.Add(c);
+            lblName.SendToBack();
+            c.BringToFront();
+            SetName();
+            return true;
         }
 
         List<StreamSource> CamStreamSources(NvrRecord nvr, int channel)
@@ -691,6 +730,7 @@ namespace IproNvrTool
             lblEmpty.ContextMenuStrip = m;
             lblName.ContextMenuStrip = m;
             if (Tile != null) Tile.SetMenu(m);
+            if (d3d != null) d3d.ContextMenuStrip = m;
             if (Pic != null) Pic.ContextMenuStrip = m;
         }
 

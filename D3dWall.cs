@@ -19,6 +19,54 @@ namespace IproNvrTool
 
         static readonly SerialWorker PtzWorker = new SerialWorker(150);
 
+        static bool cellTried, cellOk;
+        static MethodInfo cellMake;
+
+        /// <summary>Buat kotak kamera berdekode GPU untuk Operation/Live window. null bila modul/DLL tidak tersedia (pakai dekoder lama).</summary>
+        public static Control CreateCell(string name, string url)
+        {
+            if (!AppSettings.Current.D3dLive || string.IsNullOrEmpty(url)) return null;
+            if (!cellTried)
+            {
+                cellTried = true;
+                try
+                {
+                    string dir = FindDir();
+                    string mod = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IproD3D.dll");
+                    if (dir != null && File.Exists(mod))
+                    {
+                        Type entry = Assembly.LoadFrom(mod).GetType("IproD3D.Entry", true);
+                        string probe = (string)entry.GetMethod("Probe").Invoke(null, new object[] { dir });
+                        if (probe == null) { cellMake = entry.GetMethod("CreateCell"); cellDir = dir; cellOk = cellMake != null; }
+                        else Log.Write("Tampilan GPU: DLL ffmpeg gagal dimuat: " + probe);
+                    }
+                    else Log.Write("Tampilan GPU tidak aktif: " + (dir == null ? "DLL ffmpeg 9 tidak ditemukan (folder ffmpeg9)" : "IproD3D.dll tidak ada"));
+                }
+                catch (Exception ex) { Log.Write("Tampilan GPU: " + Inner(ex).Message); }
+            }
+            if (!cellOk) return null;
+            try
+            {
+                Action<string> log = delegate(string m) { try { Log.Write(m); } catch { } };
+                int fps = AppSettings.Current.D3dFps <= 0 ? 15 : AppSettings.Current.D3dFps;
+                return (Control)cellMake.Invoke(null, new object[] { name, url, null, cellDir, fps, log });
+            }
+            catch (Exception ex) { Log.Write("Tampilan GPU: " + Inner(ex).Message); cellOk = false; return null; }
+        }
+
+        static string cellDir;
+        static PropertyInfo zoomedProp;
+
+        public static bool IsZoomed(Control c)
+        {
+            try
+            {
+                if (zoomedProp == null) zoomedProp = c.GetType().GetProperty("Zoomed");
+                return zoomedProp != null && (bool)zoomedProp.GetValue(c, null);
+            }
+            catch { return false; }
+        }
+
         static string Key(GroupRec g, Screen s) { return g.Id + "|" + s.DeviceName; }
 
         static void Remember(GroupRec g, Screen s, bool add)

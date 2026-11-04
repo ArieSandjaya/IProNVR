@@ -36,6 +36,7 @@ namespace IproNvrTool
         public string D3dFfmpegDir = "";        // folder DLL ffmpeg 9 shared (avcodec-63.dll dst) untuk Wall Direct3D; kosong = cari otomatis
         public int D3dMaxStreams = 4;           // batas jumlah stream Wall Direct3D (naikkan bertahap)
         public int D3dFps = 15;
+        public bool D3dLive = true;             // Operation/Live window memakai dekode GPU + Direct3D bila modul dan DLL ffmpeg 9 tersedia
         public System.Collections.Generic.List<D3dOpenRec> D3dOpen = new System.Collections.Generic.List<D3dOpenRec>();   // Wall Direct3D yang terbuka (dipulihkan saat aplikasi dihidupkan)                 // fps gambar Wall Direct3D
         public string MosaicGpu = "auto";       // GPU untuk Mosaic GPU: auto (NVIDIA lalu Intel), nvidia, intel
         public string RelayAddress = "";        // opsional: alamat relay MediaMTX bila di mesin lain, mis. 192.168.1.20 atau 192.168.1.20:8554 (kosong = ikut server)
