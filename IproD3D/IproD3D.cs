@@ -70,6 +70,9 @@ namespace IproD3D
         }
 
         /// <summary>Buat satu kotak kamera (kontrol WinForms) berdekode GPU untuk tampilan Operation / Live.</summary>
+        /// <summary>Adaptive stream Wall: tile yang sejak awal memakai stream utama (diisi aplikasi sebelum Open).</summary>
+        public static bool[] StartMain;
+
         public static Control CreateCell(string name, string url, string mainUrl, string ffmpegDir, int fps, Action<string> log)
         {
             Init(ffmpegDir);
@@ -250,6 +253,7 @@ float4 ps(VSO i) : SV_Target
         public RectangleF Rel;
         public Gpu G;
         public volatile bool UseMain, Visible = true, Stop, Rec;
+        public bool AdaptMain;   // adaptif: ukuran kotak cukup besar -> stream utama (dipulihkan setelah zoom/full view)
         public volatile float Zoom = 1f, Cx = 0.5f, Cy = 0.5f;   // zoom digital: pembesaran dan titik tengah (0..1 pada gambar)
         public Action<string> Log;
         public int MinIntervalMs = 66;
@@ -900,6 +904,10 @@ float4 ps(VSO i) : SV_Target
         /// <summary>Frame yang sedang tampil sebagai Bitmap RGB (null bila belum ada gambar).</summary>
         public Bitmap Snapshot(int maxW) { return _t.Snapshot(maxW); }
         public bool HasPicture { get { return _t.HasFrame; } }
+        /// <summary>Ada URL stream utama untuk kotak ini (adaptive stream).</summary>
+        public bool HasMain { get { return !string.IsNullOrEmpty(_t.MainUrl); } }
+        /// <summary>Stream yang dipakai: true = utama, false = sub. Mengganti akan menyambung ulang ke stream lain di kotak yang sama.</summary>
+        public bool UseMain { get { return _t.UseMain; } set { if (value && !HasMain) value = false; if (_t.UseMain != value) _t.UseMain = value; } }
 
         internal CellSurface(string name, string url, string mainUrl, int fps, Action<string> log)
         {
@@ -1306,6 +1314,7 @@ float4 ps(VSO i) : SV_Target
             _g = Gpu.For(deviceName);
             Say("GPU: " + _g.Name);
             int n = urls.Length;
+            bool[] sm = Entry.StartMain; Entry.StartMain = null;
             _tiles = new Tile[n];
             for (int i = 0; i < n; i++)
             {
@@ -1315,6 +1324,7 @@ float4 ps(VSO i) : SV_Target
                 t.Url = urls[i];
                 t.MainUrl = mainUrls != null && i < mainUrls.Length ? mainUrls[i] : null;
                 t.Rel = new RectangleF(rects[i * 4], rects[i * 4 + 1], rects[i * 4 + 2], rects[i * 4 + 3]);
+                if (sm != null && i < sm.Length && sm[i] && !string.IsNullOrEmpty(t.MainUrl)) { t.AdaptMain = true; t.UseMain = true; }
                 t.MinIntervalMs = 1000 / _fps - 4;
                 if (i >= maxStreams) { t.Status = "Dibatasi (batas stream " + maxStreams + ")"; t.Visible = false; t.Failed = true; }
                 _tiles[i] = t;
@@ -1687,7 +1697,7 @@ float4 ps(VSO i) : SV_Target
             base.OnMouseDoubleClick(e);
             if (_zoom != null)
             {
-                _zoom.UseMain = false;
+                _zoom.UseMain = _zoom.AdaptMain;
                 _zoom = null;
                 foreach (var t in _tiles) if (!t.Failed) t.Visible = true;
                 return;

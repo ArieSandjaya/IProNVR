@@ -468,6 +468,7 @@ namespace IproNvrTool
                 StopCurrent();   // buang stream utama
                 NvrId = _stashNvr; Channel = _stashCh;
                 d3d = sd;
+                ScheduleAdapt();
                 if (!Controls.Contains(sd)) Controls.Add(sd);
                 sd.Visible = true;
                 lblName.SendToBack();
@@ -514,6 +515,8 @@ namespace IproNvrTool
         {
             StopSwapTimer();
             if (fishTimer != null) { fishTimer.Stop(); fishTimer.Dispose(); fishTimer = null; }
+            if (adaptTimer != null) { adaptTimer.Stop(); adaptTimer.Dispose(); adaptTimer = null; }
+            d3dMain = false;
             if (d3dPic != null) { Controls.Remove(d3dPic); if (d3dPic.Image != null) d3dPic.Image.Dispose(); d3dPic.Dispose(); d3dPic = null; }
             if (d3d != null)
             {
@@ -637,9 +640,17 @@ namespace IproNvrTool
             }
             catch { return false; }
             if (string.IsNullOrEmpty(url)) return false;
-            Control c = D3dWall.CreateCell(TitleText(), url);
+            string murl = null;
+            if (!fishOn && AppSettings.Current.AdaptiveStream)
+            {
+                try { murl = MosaicWall.FirstRtsp(nvr, Dir.Cam(nvr.Id, channel), false); } catch { }
+                if (murl == url) murl = null;
+            }
+            Control c = D3dWall.CreateCell(TitleText(), url, murl);
             if (c == null) return false;
             d3d = c;
+            d3dMain = false;
+            if (murl != null) { ScheduleAdapt(); if (!adaptHooked) { adaptHooked = true; SizeChanged += delegate { ScheduleAdapt(); }; } }
             c.BackColor = Color.Black;
             var ev = c.GetType().GetEvent("StatusChanged");
             if (ev != null)
@@ -690,6 +701,33 @@ namespace IproNvrTool
             fishTimer.Start();
             SetName();
             return true;
+        }
+
+        bool d3dMain, adaptHooked;
+        System.Windows.Forms.Timer adaptTimer;
+
+        /// <summary>Adaptive stream: ukuran kotak berubah (layout/full view) -> tunggu sebentar lalu pilih sub atau utama.</summary>
+        void ScheduleAdapt()
+        {
+            if (IsDisposed) return;
+            if (adaptTimer == null)
+            {
+                adaptTimer = new System.Windows.Forms.Timer { Interval = 1200 };
+                adaptTimer.Tick += delegate { adaptTimer.Stop(); AdaptCheck(); };
+            }
+            adaptTimer.Stop(); adaptTimer.Start();
+        }
+
+        void AdaptCheck()
+        {
+            Control c = d3d;
+            if (IsDisposed || c == null || d3dPic != null || _stashD3d != null || swapTimer != null || !HasCamera || !c.Visible) return;
+            if (!D3dWall.HasMain(c)) return;
+            bool cur = D3dWall.IsMain(c);
+            bool want = D3dWall.WantMain(c.Width, Dir.Cam(NvrId, Channel), cur);
+            if (want == cur) return;
+            d3dMain = want;
+            D3dWall.SetMain(c, want);
         }
 
         void StopSwapTimer()

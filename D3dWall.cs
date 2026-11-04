@@ -23,7 +23,48 @@ namespace IproNvrTool
         static MethodInfo cellMake;
 
         /// <summary>Buat kotak kamera berdekode GPU untuk Operation/Live window. null bila modul/DLL tidak tersedia (pakai dekoder lama).</summary>
-        public static Control CreateCell(string name, string url)
+        /// <summary>Adaptive stream (seperti XProtect): stream utama bila kotak lebih lebar dari resolusi substream, selain itu substream.
+        /// Histeresis agar tidak bolak-balik: naik saat lebar &gt; 1,05x lebar sub, turun saat &lt; 0,8x.</summary>
+        public static bool WantMain(int tileWidthPx, CameraRecord cam, bool currentlyMain)
+        {
+            if (!AppSettings.Current.AdaptiveStream) return false;
+            int subW = cam != null && cam.Width.HasValue && cam.Width.Value >= 160 ? cam.Width.Value : 640;
+            return currentlyMain ? tileWidthPx >= subW * 0.8 : tileWidthPx > subW * 1.05;
+        }
+
+        public static void SetMain(Control c, bool main)
+        {
+            try
+            {
+                var p = c.GetType().GetProperty("UseMain");
+                if (p != null) p.SetValue(c, main, null);
+            }
+            catch { }
+        }
+
+        public static bool IsMain(Control c)
+        {
+            try
+            {
+                var p = c.GetType().GetProperty("UseMain");
+                return p != null && (bool)p.GetValue(c, null);
+            }
+            catch { return false; }
+        }
+
+        public static bool HasMain(Control c)
+        {
+            try
+            {
+                var p = c.GetType().GetProperty("HasMain");
+                return p != null && (bool)p.GetValue(c, null);
+            }
+            catch { return false; }
+        }
+
+        public static Control CreateCell(string name, string url) { return CreateCell(name, url, null); }
+
+        public static Control CreateCell(string name, string url, string mainUrl)
         {
             if (!AppSettings.Current.D3dLive || string.IsNullOrEmpty(url)) return null;
             if (!cellTried)
@@ -49,7 +90,7 @@ namespace IproNvrTool
             {
                 Action<string> log = delegate(string m) { try { Log.Write(m); } catch { } };
                 int fps = AppSettings.Current.D3dFps <= 0 ? 15 : AppSettings.Current.D3dFps;
-                return (Control)cellMake.Invoke(null, new object[] { name, url, null, cellDir, fps, log });
+                return (Control)cellMake.Invoke(null, new object[] { name, url, mainUrl, cellDir, fps, log });
             }
             catch (Exception ex) { Log.Write("Tampilan GPU: " + Inner(ex).Message); cellOk = false; return null; }
         }
@@ -191,6 +232,7 @@ namespace IproNvrTool
 
             ScreenLayout lay = ScreenLayout.ById(g.Layout);
             var recNvr = new List<long>(); var recCh = new List<int>();
+            var startMain = new List<bool>();
             var urls = new List<string>(); var mains = new List<string>(); var names = new List<string>(); var rects = new List<float>();
             for (int i = 0; i < lay.Count && i < g.Slots.Length; i++)
             {
@@ -204,6 +246,7 @@ namespace IproNvrTool
                 string main = MosaicWall.FirstRtsp(nvr, cam, false);
                 Rectangle r = lay.Cells[i];
                 recNvr.Add(cr.NvrId); recCh.Add(cr.Channel);
+                startMain.Add(!string.IsNullOrEmpty(main) && main != sub && WantMain((int)((float)r.Width / lay.Cols * screen.Bounds.Width), cam, false));
                 urls.Add(sub); mains.Add(main); names.Add(Dir.Title(cr.NvrId, cr.Channel));
                 rects.Add((float)r.X / lay.Cols); rects.Add((float)r.Y / lay.Rows);
                 rects.Add((float)r.Width / lay.Cols); rects.Add((float)r.Height / lay.Rows);
@@ -228,6 +271,8 @@ namespace IproNvrTool
             try
             {
                 var s = AppSettings.Current;
+                var smf = entry.GetField("StartMain");
+                if (smf != null) smf.SetValue(null, startMain.ToArray());
                 f = (Form)entry.GetMethod("Open").Invoke(null, new object[] {
                     "Wall Direct3D - " + g.Name, urls.ToArray(), mains.ToArray(), names.ToArray(), rects.ToArray(),
                     screen.Bounds, screen.DeviceName, dir, Math.Max(1, s.D3dMaxStreams), s.D3dFps <= 0 ? 15 : s.D3dFps, log, isRec, ptz });
