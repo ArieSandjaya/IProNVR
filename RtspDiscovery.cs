@@ -196,6 +196,118 @@ namespace IproNvrTool
         }
     }
 
+    /// <summary>Kamera Axis: baca daftar resolusi, format video, dan stream profile lewat VAPIX (param.cgi), lalu susun URL RTSP axis-media.</summary>
+    public static class AxisVapix
+    {
+        public class Info
+        {
+            public List<string> Resolutions = new List<string>();   // "1920x1080", terbesar dulu
+            public List<string> Codecs = new List<string>();         // h264 / h265 / mjpeg
+            public List<string> Profiles = new List<string>();       // nama stream profile yang dibuat di kamera
+        }
+
+        static string Get(string ip, string user, string pass, string query, int timeoutMs)
+        {
+            try
+            {
+                var uri = new Uri("http://" + ip + "/axis-cgi/param.cgi?action=list&" + query);
+                var rq = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(uri);
+                rq.Timeout = timeoutMs; rq.ReadWriteTimeout = timeoutMs;
+                rq.Proxy = null;
+                var cc = new System.Net.CredentialCache();
+                cc.Add(uri, "Digest", new System.Net.NetworkCredential(user ?? "", pass ?? ""));
+                cc.Add(uri, "Basic", new System.Net.NetworkCredential(user ?? "", pass ?? ""));
+                rq.Credentials = cc;
+                using (var rs = (System.Net.HttpWebResponse)rq.GetResponse())
+                using (var sr = new StreamReader(rs.GetResponseStream(), Encoding.UTF8))
+                    return sr.ReadToEnd();
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Nilai parameter (akhiran nama, mis. "Properties.Image.Resolution"); null bila tidak ada.</summary>
+        static string Val(string text, string suffix)
+        {
+            foreach (string raw in text.Split('\n'))
+            {
+                string ln = raw.Trim();
+                int eq = ln.IndexOf('=');
+                if (eq <= 0) continue;
+                string k = ln.Substring(0, eq);
+                if (k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return ln.Substring(eq + 1).Trim();
+            }
+            return null;
+        }
+
+        /// <summary>null bila bukan kamera Axis (atau login ditolak / port 80 tertutup).</summary>
+        public static Info Detect(string ip, string user, string pass)
+        {
+            string t = Get(ip, user, pass, "group=Brand,Properties.Image", 4000);
+            if (string.IsNullOrEmpty(t)) return null;
+            string brand = Val(t, "Brand.Brand");
+            if (brand == null || brand.IndexOf("axis", StringComparison.OrdinalIgnoreCase) < 0) return null;
+            var info = new Info();
+            string res = Val(t, "Properties.Image.Resolution");
+            if (res != null)
+                foreach (string r in res.Split(','))
+                {
+                    string x = r.Trim();
+                    if (System.Text.RegularExpressions.Regex.IsMatch(x, @"^\d+x\d+$") && !info.Resolutions.Contains(x)) info.Resolutions.Add(x);
+                }
+            info.Resolutions.Sort(delegate(string a, string b) { return Px(b).CompareTo(Px(a)); });
+            string fmt = Val(t, "Properties.Image.Format");
+            if (fmt != null) foreach (string f in fmt.Split(',')) { string x = f.Trim().ToLowerInvariant(); if (x.Length > 0) info.Codecs.Add(x); }
+            string sp = Get(ip, user, pass, "group=StreamProfile", 4000);
+            if (!string.IsNullOrEmpty(sp))
+                foreach (string raw in sp.Split('\n'))
+                {
+                    string ln = raw.Trim();
+                    int eq = ln.IndexOf('=');
+                    if (eq <= 0 || !ln.Substring(0, eq).EndsWith(".Name", StringComparison.OrdinalIgnoreCase)) continue;
+                    string n = ln.Substring(eq + 1).Trim();
+                    if (n.Length > 0 && !info.Profiles.Contains(n)) info.Profiles.Add(n);
+                }
+            return info;
+        }
+
+        static long Px(string wh)
+        {
+            string[] a = wh.Split('x');
+            long w, h;
+            return a.Length == 2 && long.TryParse(a[0], out w) && long.TryParse(a[1], out h) ? w * h : 0;
+        }
+
+        /// <summary>Susun templat RTSP: [0] = sub (terkecil dengan lebar &gt;= 320), [1] = main (terbesar), sisanya stream tengah + stream profile.</summary>
+        public static List<string> Templates(Info info)
+        {
+            string h = "rtsp://{user}:{pass}@{ip}:554/axis-media/media.amp";
+            string codec = info.Codecs.Contains("h264") || info.Codecs.Count == 0 ? "h264" : (info.Codecs.Contains("h265") ? "h265" : "h264");
+            var l = new List<string>();
+            if (info.Resolutions.Count == 0) { l.Add(h + "?videocodec=" + codec); return AddProfiles(l, info, h); }
+            string sub = info.Resolutions[info.Resolutions.Count - 1];
+            for (int i = info.Resolutions.Count - 1; i >= 0; i--)
+            {
+                string w = info.Resolutions[i].Split('x')[0];
+                int wi; if (int.TryParse(w, out wi) && wi >= 320) { sub = info.Resolutions[i]; break; }
+            }
+            string main = info.Resolutions[0];
+            l.Add(h + "?videocodec=" + codec + "&resolution=" + sub);
+            if (main != sub) l.Add(h + "?videocodec=" + codec + "&resolution=" + main);
+            foreach (string r in info.Resolutions)
+            {
+                if (r == sub || r == main || l.Count >= 6) continue;
+                l.Add(h + "?videocodec=" + codec + "&resolution=" + r);
+            }
+            return AddProfiles(l, info, h);
+        }
+
+        static List<string> AddProfiles(List<string> l, Info info, string h)
+        {
+            foreach (string p in info.Profiles) if (l.Count < 10) l.Add(h + "?streamprofile=" + Uri.EscapeDataString(p));
+            return l;
+        }
+    }
+
     public class DiscoveryResult
     {
         public string Method = "";
@@ -247,7 +359,7 @@ namespace IproNvrTool
             var l = new List<Cand>();
             l.Add(new Cand("pola Dahua/OEM", h + "/cam/realmonitor?channel=1&subtype=1", h + "/cam/realmonitor?channel=1&subtype=0").Ex(h + "/cam/realmonitor?channel=1&subtype=2"));
             l.Add(new Cand("pola Hikvision", h + "/Streaming/Channels/102", h + "/Streaming/Channels/101").Ex(h + "/Streaming/Channels/103"));
-            l.Add(new Cand("pola Axis (H.264)", h + "/axis-media/media.amp?videocodec=h264&resolution=640x360", h + "/axis-media/media.amp?videocodec=h264"));
+            l.Add(new Cand("pola Axis (H.264)", h + "/axis-media/media.amp?videocodec=h264&resolution=640x360", h + "/axis-media/media.amp?videocodec=h264").Ex(h + "/axis-media/media.amp?videocodec=h264&resolution=1280x720"));
             l.Add(new Cand("pola Axis lama (MPEG-4)", h + "/mpeg4/media.amp?resolution=640x480", h + "/mpeg4/media.amp"));
             l.Add(new Cand("pola Panasonic/i-PRO", h + "/MediaInput/h264/stream_2", h + "/MediaInput/h264/stream_1"));
             l.Add(new Cand("pola Panasonic/i-PRO (tunggal)", h + "/MediaInput/h264", null));
@@ -282,6 +394,19 @@ namespace IproNvrTool
             ip = ip.Trim();
             var cands = new List<Cand>();
             string note = "";
+
+            // 0. Axis (VAPIX): daftar resolusi + stream profile langsung dari kamera
+            AxisVapix.Info ax = AxisVapix.Detect(ip, user, pass);
+            if (ax != null)
+            {
+                List<string> at = AxisVapix.Templates(ax);
+                if (at.Count > 0)
+                {
+                    var ac = new Cand("Axis VAPIX", at[0], at.Count > 1 ? at[1] : null);
+                    for (int ai = 2; ai < at.Count; ai++) ac.Ex(at[ai]);
+                    cands.Add(ac);
+                }
+            }
 
             // 1. ONVIF
             string oerr;
