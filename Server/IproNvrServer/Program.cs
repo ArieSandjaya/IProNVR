@@ -17,6 +17,7 @@ namespace IproNvrServer
         public int TokenDays = 30;
         public string FfmpegPath = "";   // kosong = ffmpeg.exe di samping server atau di PATH
         public bool Relay = true;        // relay RTSP lewat MediaMTX (aktif bila mediamtx.exe ada di Tools\\mediamtx)
+        public bool RelayAlwaysOn = true; // true = server menyimpan koneksi RTSP ke SEMUA kamera (sub + main) terus-menerus, sehingga pindah ke full view instan; false = tarik hanya saat ada penonton (hemat koneksi NVR)
         public int RelayPort = 8554;     // port RTSP relay untuk client
         public string MediaMtxPath = ""; // kosong = Tools\\mediamtx\\mediamtx.exe di samping server
         // MediaMTX di MESIN LAIN (server tidak menjalankannya sendiri): isi alamat API-nya, mis. "http://192.168.1.20:9997". Di mesin itu: api: yes, apiAddress, dan login

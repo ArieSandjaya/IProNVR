@@ -340,9 +340,8 @@ namespace IproNvrServer
                 lock (lk) { if (applied.TryGetValue(kv.Key, out cur) && cur == kv.Value) continue; }
                 var body = new Dictionary<string, object>();
                 body["source"] = kv.Value;
-                body["sourceOnDemand"] = true;
-                body["sourceOnDemandStartTimeout"] = "10s";
-                body["sourceOnDemandCloseAfter"] = "15s";
+                body["sourceOnDemand"] = !cfg.RelayAlwaysOn;
+                if (!cfg.RelayAlwaysOn) { body["sourceOnDemandStartTimeout"] = "10s"; body["sourceOnDemandCloseAfter"] = "15s"; }
                 body["rtspTransport"] = "tcp";
                 int code;
                 string name = Uri.EscapeDataString(kv.Key);
