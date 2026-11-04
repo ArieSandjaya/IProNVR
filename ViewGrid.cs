@@ -238,7 +238,7 @@ namespace IproNvrTool
         void Rerender()
         {
             byte[] raw = RawJpeg;
-            PictureBox pb = Playback ? Pic : (Tile == null ? null : Tile.Picture);
+            PictureBox pb = Playback ? Pic : (d3dPic != null ? d3dPic : (Tile == null ? null : Tile.Picture));
             if (raw == null || pb == null) return;
             Bitmap b;
             try { using (var ms = new MemoryStream(raw)) b = new Bitmap(ms); }
@@ -401,6 +401,9 @@ namespace IproNvrTool
         }
 
         Control d3d;   // kotak kamera berdekode GPU (Direct3D) sebagai pengganti Tile
+        PictureBox d3dPic;                       // fisheye + GPU: gambar hasil dewarp (frame diambil dari GPU)
+        System.Windows.Forms.Timer fishTimer;
+        bool fishBusy; int fishTick;
         Control _stashD3d;   // kotak GPU substream yang ditahan (tetap tersambung) saat area menampilkan stream utama
         LiveTile _stash; NvrSession _stashSess; long _stashNvr; int _stashCh;
 
@@ -409,7 +412,7 @@ namespace IproNvrTool
         {
             get
             {
-                if (d3d != null) return true;   // kotak GPU: RTSP langsung, aman ditahan tanpa reconnect
+                if (d3d != null) return d3dPic == null;   // kotak GPU: RTSP langsung, aman ditahan tanpa reconnect (kecuali fisheye)
                 if (Tile == null || NvrId == 0) return false;
                 NvrRecord n = Dir.Nvr(NvrId);
                 return n != null && (AppSettings.Current.LiveAllRtsp || NvrDrivers.For(n).BrandId != "ipro");
@@ -437,7 +440,7 @@ namespace IproNvrTool
         /// <summary>Simpan tile substream (tetap hidup) agar area bisa menampilkan stream utama tanpa mematikannya.</summary>
         public bool Stash()
         {
-            if (d3d != null)
+            if (d3d != null && d3dPic == null)
             {
                 if (_stashD3d != null) return false;
                 _stashD3d = d3d; _stashNvr = NvrId; _stashCh = Channel;
@@ -507,6 +510,8 @@ namespace IproNvrTool
 
         void StopCurrent()
         {
+            if (fishTimer != null) { fishTimer.Stop(); fishTimer.Dispose(); fishTimer = null; }
+            if (d3dPic != null) { Controls.Remove(d3dPic); if (d3dPic.Image != null) d3dPic.Image.Dispose(); d3dPic.Dispose(); d3dPic = null; }
             if (d3d != null)
             {
                 Control dc = d3d; d3d = null;
@@ -567,7 +572,7 @@ namespace IproNvrTool
                 useSub = false;
                 if (decodeWidth > 0 && decodeWidth < 1280) decodeWidth = 1280;
             }
-            if (!SoftFish && (Fish == null || !Fish.Enabled) && ShowLiveD3d(nvr, channel, useSub)) return;
+            if (ShowLiveD3d(nvr, channel, useSub)) return;
             sess = Pool.Acquire(nvr, channel);
             Task gate; int gateTick;
             StopGate.Get(nvr.Id, channel, out gate, out gateTick);
@@ -611,19 +616,28 @@ namespace IproNvrTool
             Tile.Start(delayMs);
         }
 
-        /// <summary>Coba tampilkan kamera lewat dekode GPU + Direct3D. False bila tidak tersedia (dipakai dekoder lama).</summary>
+        /// <summary>Coba tampilkan kamera lewat dekode GPU + Direct3D. False bila tidak tersedia (dipakai dekoder lama).
+        /// Fisheye yang butuh dewarp di aplikasi: frame didekode GPU lalu diambil (Snapshot), di-dewarp, dan ditampilkan di PictureBox.</summary>
         bool ShowLiveD3d(NvrRecord nvr, int channel, bool useSub)
         {
-            string url;
-            try { url = MosaicWall.FirstRtsp(nvr, Dir.Cam(nvr.Id, channel), useSub); } catch { return false; }
+            bool fishOn = Fish != null && Fish.Enabled && FMode != FishMode.Off;
+            bool headless = fishOn && FishFilter;
+            string url = null;
+            try
+            {
+                if (fishOn && Fish.CamStream)
+                {
+                    foreach (StreamSource x in CamStreamSources(nvr, channel))
+                        if (x.Rtsp && !string.IsNullOrEmpty(x.Url)) { url = x.Url; break; }
+                }
+                else url = MosaicWall.FirstRtsp(nvr, Dir.Cam(nvr.Id, channel), useSub);
+            }
+            catch { return false; }
             if (string.IsNullOrEmpty(url)) return false;
             Control c = D3dWall.CreateCell(TitleText(), url);
             if (c == null) return false;
             d3d = c;
-            c.Dock = DockStyle.Fill;
             c.BackColor = Color.Black;
-            HookMouse(c);
-            if (ContextMenuStrip != null) c.ContextMenuStrip = ContextMenuStrip;
             var ev = c.GetType().GetEvent("StatusChanged");
             if (ev != null)
             {
@@ -634,11 +648,79 @@ namespace IproNvrTool
                 };
                 ev.AddEventHandler(c, h);
             }
+            if (!headless)
+            {
+                c.Dock = DockStyle.Fill;
+                HookMouse(c);
+                if (ContextMenuStrip != null) c.ContextMenuStrip = ContextMenuStrip;
+                Controls.Add(c);
+                lblName.SendToBack();
+                c.BringToFront();
+                SetName();
+                return true;
+            }
+            // mode fisheye: kotak GPU kecil tanpa gambar (hanya dekode), PictureBox menampilkan hasil dewarp
+            D3dWall.SetHeadless(c);
+            c.Dock = DockStyle.None;
+            c.SetBounds(0, 0, 1, 1);
             Controls.Add(c);
+            var pb = new PictureBox();
+            d3dPic = pb;
+            pb.Dock = DockStyle.Fill;
+            pb.SizeMode = PictureBoxSizeMode.Zoom;
+            pb.BackColor = Color.Black;
+            pb.AllowDrop = true;
+            pb.DragEnter += OnDragEnter;
+            pb.DragDrop += OnDragDrop;
+            pb.MouseDown += OnDown;
+            pb.MouseMove += OnMove;
+            pb.MouseUp += delegate { dragReady = false; };
+            pb.MouseWheel += OnWheel;
+            pb.DoubleClick += delegate { if (CellDoubleClicked != null) CellDoubleClicked(this); };
+            if (ContextMenuStrip != null) pb.ContextMenuStrip = ContextMenuStrip;
+            Controls.Add(pb);
             lblName.SendToBack();
-            c.BringToFront();
+            pb.BringToFront();
+            fishBusy = false; fishTick = 0;
+            fishTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            fishTimer.Tick += delegate { FishTick(pb, c); };
+            fishTimer.Start();
             SetName();
             return true;
+        }
+
+        void FishTick(PictureBox pb, Control ctl)
+        {
+            if (fishBusy || IsDisposed || d3dPic != pb || !Visible) return;
+            fishBusy = true;
+            bool wantJpeg = (fishTick++ % 5) == 0;
+            Task.Run(delegate
+            {
+                Bitmap bmp = null; Image res = null; byte[] jpg = null;
+                try
+                {
+                    bmp = D3dWall.Snapshot(ctl, 1280);
+                    if (bmp != null)
+                    {
+                        if (wantJpeg) { using (var ms = new MemoryStream()) { bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg); jpg = ms.ToArray(); } }
+                        try { res = FilterFrame(bmp); } catch { }
+                    }
+                }
+                catch { }
+                Action apply = delegate
+                {
+                    fishBusy = false;
+                    Image show = res ?? bmp;
+                    if (IsDisposed || d3dPic != pb || show == null) { if (res != null) res.Dispose(); if (bmp != null) bmp.Dispose(); return; }
+                    if (res != null && bmp != null) bmp.Dispose();
+                    Image old = pb.Image;
+                    pb.Image = show;
+                    if (old != null) old.Dispose();
+                    if (jpg != null) LastJpeg = jpg;
+                };
+                try { BeginInvoke(apply); }
+                catch { fishBusy = false; if (res != null) res.Dispose(); if (bmp != null) bmp.Dispose(); }
+            });
         }
 
         List<StreamSource> CamStreamSources(NvrRecord nvr, int channel)
@@ -747,6 +829,8 @@ namespace IproNvrTool
             get
             {
                 if (Playback) return Pic == null ? null : Pic.Image;
+                if (d3dPic != null) return d3dPic.Image;
+                if (d3d != null) return D3dWall.Snapshot(d3d, 0);   // kotak GPU: baca balik frame dari GPU
                 return Tile == null ? null : Tile.CurrentImage;
             }
         }
@@ -758,6 +842,7 @@ namespace IproNvrTool
             lblName.ContextMenuStrip = m;
             if (Tile != null) Tile.SetMenu(m);
             if (d3d != null) d3d.ContextMenuStrip = m;
+            if (d3dPic != null) d3dPic.ContextMenuStrip = m;
             if (Pic != null) Pic.ContextMenuStrip = m;
         }
 

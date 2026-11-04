@@ -55,6 +55,29 @@ namespace IproNvrTool
         }
 
         static string cellDir;
+        static MethodInfo snapM, headlessM;
+
+        /// <summary>Frame yang sedang tampil di kotak GPU sebagai Bitmap (null bila belum ada).</summary>
+        public static Bitmap Snapshot(Control c, int maxW)
+        {
+            try
+            {
+                if (snapM == null) snapM = c.GetType().GetMethod("Snapshot");
+                return (Bitmap)snapM.Invoke(c, new object[] { maxW });
+            }
+            catch (Exception ex) { try { Log.Write("Snapshot GPU: " + Inner(ex).Message); } catch { } return null; }
+        }
+
+        public static void SetHeadless(Control c)
+        {
+            try
+            {
+                var p = c.GetType().GetProperty("Headless");
+                if (p != null) p.SetValue(c, true, null);
+            }
+            catch { }
+        }
+
         static PropertyInfo zoomedProp;
 
         public static bool IsZoomed(Control c)

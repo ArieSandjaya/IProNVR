@@ -608,6 +608,67 @@ float4 ps(VSO i) : SV_Target
             catch (Exception ex) { Say("probe gagal: " + ex.Message.Split('\n')[0]); }
         }
 
+        /// <summary>Baca balik frame yang sedang tampil dari GPU dan ubah ke Bitmap RGB (untuk simpan/cetak gambar dan dewarp fisheye).
+        /// maxW > 0: perkecil dengan melompati piksel bila lebih lebar dari maxW.</summary>
+        public Bitmap Snapshot(int maxW)
+        {
+            byte[] yb, uvb; int w, h; bool m709, full;
+            lock (Lk)
+            {
+                if (Tex == null || !HasFrame) return null;
+                w = TexW; h = TexH; m709 = M709; full = FullRange;
+                var d = new D3D.Texture2DDescription
+                {
+                    Width = w, Height = h, MipLevels = 1, ArraySize = 1, Format = DX.Format.NV12,
+                    SampleDescription = new DX.SampleDescription(1, 0), Usage = D3D.ResourceUsage.Staging,
+                    BindFlags = D3D.BindFlags.None, CpuAccessFlags = D3D.CpuAccessFlags.Read, OptionFlags = D3D.ResourceOptionFlags.None
+                };
+                yb = new byte[w * h]; uvb = new byte[w * h / 2];
+                using (var st = new D3D.Texture2D(G.Dev, d))
+                lock (G.Sync)
+                {
+                    G.Ctx.CopySubresourceRegion(Tex, 0, new D3D.ResourceRegion(0, 0, 0, w, h, 1), st, 0, 0, 0, 0);
+                    var box = G.Ctx.MapSubresource(st, 0, D3D.MapMode.Read, D3D.MapFlags.None);
+                    try
+                    {
+                        byte* b = (byte*)box.DataPointer;
+                        int pitch = box.RowPitch;
+                        for (int r = 0; r < h; r++) Marshal.Copy((IntPtr)(b + (long)r * pitch), yb, r * w, w);
+                        byte* u0 = b + (long)h * pitch;
+                        for (int r = 0; r < h / 2; r++) Marshal.Copy((IntPtr)(u0 + (long)r * pitch), uvb, r * w, w);
+                    }
+                    finally { G.Ctx.UnmapSubresource(st, 0); }
+                }
+            }
+            int step = maxW > 0 && w > maxW ? (w + maxW - 1) / maxW : 1;
+            int ow = w / step, oh = h / step;
+            var bmp = new Bitmap(ow, oh, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            var bd = bmp.LockBits(new Rectangle(0, 0, ow, oh), System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            try
+            {
+                float kr = m709 ? 1.5748f : 1.402f, kgu = m709 ? 0.1873f : 0.3441f, kgv = m709 ? 0.4681f : 0.7141f, kb = m709 ? 1.8556f : 1.772f;
+                float ys = full ? 1f : 1.16438f, cs = full ? 1f : 1.13839f, yo = full ? 0f : 16f;
+                for (int oy = 0; oy < oh; oy++)
+                {
+                    byte* row = (byte*)bd.Scan0 + (long)oy * bd.Stride;
+                    int sy = oy * step;
+                    for (int ox = 0; ox < ow; ox++)
+                    {
+                        int sx = ox * step;
+                        float yv = (yb[sy * w + sx] - yo) * ys;
+                        int ui = (sy >> 1) * w + (sx & ~1);
+                        float u = (uvb[ui] - 128f) * cs, v = (uvb[ui + 1] - 128f) * cs;
+                        float r = yv + kr * v, g = yv - kgu * u - kgv * v, bl = yv + kb * u;
+                        row[ox * 3] = (byte)(bl < 0 ? 0 : bl > 255 ? 255 : bl);
+                        row[ox * 3 + 1] = (byte)(g < 0 ? 0 : g > 255 ? 255 : g);
+                        row[ox * 3 + 2] = (byte)(r < 0 ? 0 : r > 255 ? 255 : r);
+                    }
+                }
+            }
+            finally { bmp.UnlockBits(bd); }
+            return bmp;
+        }
+
         void CopySw(AVFrame* fr)
         {
             var pf = (AVPixelFormat)fr->format;
@@ -833,6 +894,11 @@ float4 ps(VSO i) : SV_Target
         /// <summary>Status sambungan ("" = gambar tampil); dipanggil di UI thread.</summary>
         public event Action<string> StatusChanged;
         public bool Zoomed { get { return _t.Zoom > 1.01f; } }
+        volatile bool _headless;
+        /// <summary>Mode tanpa gambar: hanya dekode dan salin ke tekstur (dipakai fisheye: gambar diambil lewat Snapshot lalu di-dewarp aplikasi).</summary>
+        public bool Headless { get { return _headless; } set { _headless = value; } }
+        /// <summary>Frame yang sedang tampil sebagai Bitmap RGB (null bila belum ada gambar).</summary>
+        public Bitmap Snapshot(int maxW) { return _t.Snapshot(maxW); }
         public bool HasPicture { get { return _t.HasFrame; } }
 
         internal CellSurface(string name, string url, string mainUrl, int fps, Action<string> log)
@@ -995,6 +1061,7 @@ float4 ps(VSO i) : SV_Target
             lock (_rl)
             {
                 if (_down || !IsHandleCreated) return;
+                if (_headless) { _t.Visible = true; _t.PresentDue(); return; }
                 int w = _w, h = _h;
                 if (!_vis || w < 8 || h < 8) { _t.Visible = false; _t.FlushQueue(); return; }
                 _t.Visible = true;
