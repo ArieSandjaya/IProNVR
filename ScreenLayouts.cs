@@ -64,6 +64,7 @@ namespace IproNvrTool
                 0, 2, 1, 1, 1, 2, 1, 1, 2, 2, 1, 1, 3, 2, 1, 1,
                 0, 3, 1, 1, 1, 3, 1, 1, 2, 3, 1, 1, 3, 3, 1, 1);
             Even("16", 4);
+            Even("25", 5);
         }
 
         public static List<ScreenLayout> All { get { return all; } }
@@ -83,13 +84,13 @@ namespace IproNvrTool
         /// <summary>Pola terkecil yang cukup untuk n kamera (mis. 5 kamera -> "6").</summary>
         public static ScreenLayout FitFor(int n)
         {
-            string[] order = { "1", "4", "9", "16" };
+            string[] order = { "1", "4", "9", "16", "25" };
             foreach (string id in order)
             {
                 ScreenLayout l = ById(id);
                 if (l.Count >= n) return l;
             }
-            return ById("16");
+            return ById("25");
         }
 
         public Bitmap Preview(int w, int h)

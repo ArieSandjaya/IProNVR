@@ -1038,7 +1038,7 @@ namespace IproNvrTool
             else
             {
                 bool multi = layout.Count > 1 && maximized < 0 && AppSettings.Current.UseSubstreamMulti;
-                int delay = 150 * (idx % 16);
+                int delay = 150 * (idx % 25);
                 c.ShowLive(nvr, channel, multi, DecodeW(), delay);
             }
             if (CellAssigned != null) CellAssigned(idx, nvrId, channel);

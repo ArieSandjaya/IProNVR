@@ -58,8 +58,9 @@ namespace IproNvrTool
         public bool Time24h = true;
         public string OpLayout = "16";          // pola layar Operation window
         public string LiveLayout = "4";         // pola layar Live window bila tidak memakai group
-        public int OpMaxAreas = 16;             // jumlah area maksimum Operation window
-        public int LiveMaxAreas = 16;           // jumlah area maksimum Live window
+        public bool Max25Done;                  // migrasi sekali: batas area dinaikkan ke 25 (grid 5x5)
+        public int OpMaxAreas = 25;             // jumlah area maksimum Operation window
+        public int LiveMaxAreas = 25;           // jumlah area maksimum Live window
         public bool ResumePlayback = true;      // lanjut playback saat ganti kamera
         public string AppTitle = "IPRONVR Series";                     // judul besar di pojok kiri atas (bebas diisi)
         public string AppSubtitle = "Video Surveillance Software";     // baris kecil di atas judul
@@ -147,7 +148,11 @@ namespace IproNvrTool
                     {
                         var ser = new XmlSerializer(typeof(AppSettings));
                         using (var fs = File.OpenRead(p))
-                            return (AppSettings)ser.Deserialize(fs);
+                        {
+                            var r = (AppSettings)ser.Deserialize(fs);
+                            if (!r.Max25Done) { r.Max25Done = true; if (r.OpMaxAreas < 25) r.OpMaxAreas = 25; if (r.LiveMaxAreas < 25) r.LiveMaxAreas = 25; }
+                            return r;
+                        }
                     }
                 }
                 catch { }

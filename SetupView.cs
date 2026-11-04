@@ -803,14 +803,14 @@ namespace IproNvrTool
             catch { }
             p.Heading("Operation window");
             p.Combo("Pola layar awal", la, s.OpLayout, delegate(string v) { s.OpLayout = v; }, null);
-            p.Num("Jumlah area maksimum", 1, 16, s.OpMaxAreas, delegate(int v) { s.OpMaxAreas = v; }, "Pola layar dengan area lebih banyak disembunyikan dari menu.");
+            p.Num("Jumlah area maksimum", 1, 25, s.OpMaxAreas, delegate(int v) { s.OpMaxAreas = v; }, "Pola layar dengan area lebih banyak disembunyikan dari menu.");
             p.Text("Ikon pola layar di toolbar (pisah koma)", s.LayoutShortcuts, delegate(string v) { s.LayoutShortcuts = v; }, "Contoh: 1,4,9,16,25");
             p.Combo("Group saat mulai", gnames.ToArray(), s.OpStartGroup ?? "", delegate(string v) { s.OpStartGroup = v; }, null);
             p.Combo("Sequence saat mulai", snames.ToArray(), s.OpStartSequence ?? "", delegate(string v) { s.OpStartSequence = v; }, "Dipakai bila Group kosong.");
             p.Check("Lanjutkan playback saat ganti kamera", s.ResumePlayback, delegate(bool v) { s.ResumePlayback = v; }, null);
             p.Heading("Live window");
             p.Combo("Pola layar awal", la, s.LiveLayout, delegate(string v) { s.LiveLayout = v; }, null);
-            p.Num("Jumlah area maksimum", 1, 16, s.LiveMaxAreas, delegate(int v) { s.LiveMaxAreas = v; }, null);
+            p.Num("Jumlah area maksimum", 1, 25, s.LiveMaxAreas, delegate(int v) { s.LiveMaxAreas = v; }, null);
             p.Num("Jumlah Live window saat mulai (0-4)", 0, 4, s.LiveWindowsOnStart, delegate(int v) { s.LiveWindowsOnStart = v; }, null);
             p.Text("Isi Live window saat mulai", s.LiveStartItems, delegate(string v) { s.LiveStartItems = v; }, "Format: 1=g:NamaGroup;2=s:NamaSequence");
             p.Check("Buka Map window saat mulai", s.MapOnStart, delegate(bool v) { s.MapOnStart = v; }, null);
