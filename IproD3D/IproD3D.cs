@@ -361,34 +361,33 @@ float4 ps(VSO i) : SV_Target
                 _qi.Clear();
             }
             _minTr = double.MaxValue; _lastP = double.NaN; _lastKeptP = double.NaN; _lastArr = double.NaN; _emaIv = 0.1;
+            _t0 = double.NaN; _prevDue = double.NaN; _n = 0;
         }
 
+        double _t0 = double.NaN, _prevDue = double.NaN;
+        int _n;
+
+        // Jadwal tampil: tiap frame ditunda DelayMs dari kedatangannya, dan jarak antar frame diratakan menurut
+        // rata-rata laju kedatangan (frame yang datang bergerombol dibagi rata, tanpa membuang frame).
         void Enqueue(AVFrame* fr, double tb)
         {
             double a = (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
-            double p;
-            long bp = fr->best_effort_timestamp;
-            if (bp != long.MinValue && tb > 0) p = bp * tb;
-            else
+            if (double.IsNaN(_lastArr) || a - _lastArr > 3.0) { _t0 = a; _n = 0; _prevDue = double.NaN; }   // stream baru / jeda panjang
+            _lastArr = a; _n++;
+            double iv = _n >= 8 ? (a - _t0) / (_n - 1) : 0.1;
+            if (iv < 0.015) iv = 0.015; else if (iv > 0.5) iv = 0.5;
+            if (_n > 200) { _t0 = a - iv * 50; _n = 51; }   // jendela bergulir
+            double d = DelayMs / 1000.0;
+            double due = a + d;
+            if (!double.IsNaN(_prevDue))
             {
-                if (!double.IsNaN(_lastArr)) { double iv = a - _lastArr; if (iv < 0.02) iv = 0.02; if (iv > 0.5) iv = 0.5; _emaIv = _emaIv * 0.9 + iv * 0.1; }
-                p = double.IsNaN(_lastP) ? a : _lastP + _emaIv;
+                double sched = _prevDue + iv;
+                if (sched > due) due = sched;
+                if (due - a > d + 0.5) due = a + d;   // terlalu jauh tertinggal: sinkron ulang
             }
-            _lastArr = a;
-            if (!double.IsNaN(_lastP) && (p < _lastP - 0.001 || p > _lastP + 5))
-            {
-                // PTS melompat (stream di-reset): mulai ulang penjadwalan
-                lock (_q) { foreach (var it in _qi) { AVFrame* f = (AVFrame*)it.F; ffmpeg.av_frame_free(&f); } _qi.Clear(); }
-                _minTr = double.MaxValue; _lastKeptP = double.NaN;
-            }
-            _lastP = p;
-            double tr = a - p;
-            if (tr < _minTr) _minTr = tr; else _minTr += 0.0001;   // acuan jalur tercepat, merayap naik pelan agar tahan selisih jam
-            if (!double.IsNaN(_lastKeptP) && p - _lastKeptP < MinIntervalMs / 1000.0 * 0.7) return;   // batas fps berdasarkan PTS
-            _lastKeptP = p;
+            _prevDue = due;
             AVFrame* c = ffmpeg.av_frame_clone(fr);
             if (c == null) return;
-            double due = p + _minTr + DelayMs / 1000.0;
             lock (_q)
             {
                 if (_qi.Count >= 10) { AVFrame* o = (AVFrame*)_qi[0].F; ffmpeg.av_frame_free(&o); _qi.RemoveAt(0); }
@@ -438,6 +437,8 @@ float4 ps(VSO i) : SV_Target
             if (Direct) Hold(fr); else Copy(fr);
         }
 
+        static readonly Random _rnd = new Random();
+
         void Run()
         {
             int backoff = 1500;
@@ -457,7 +458,8 @@ float4 ps(VSO i) : SV_Target
                 if (Stop) break;
                 if (UseMain != wasMain) continue;   // ganti stream, langsung sambung lagi
                 lock (Lk) { HasFrame = false; }
-                for (int w = 0; w < backoff && !Stop && UseMain == wasMain; w += 100) Thread.Sleep(100);
+                int wait = backoff + _rnd.Next(0, 3000);
+                for (int w = 0; w < wait && !Stop && UseMain == wasMain; w += 100) Thread.Sleep(100);
                 if (backoff < 10000) backoff += 1500;
             }
             lock (Lk) { ReleaseSrc(); }
@@ -909,11 +911,23 @@ float4 ps(VSO i) : SV_Target
         {
             long period = Stopwatch.Frequency / 25;
             long next = Stopwatch.GetTimestamp();
+            long lastStat = next, lastDec = 0, lastCopy = 0, ticks = 0;
             while (!_rtStop)
             {
                 CellSurface[] snap;
                 lock (All) snap = All.ToArray();
                 foreach (var c in snap) { try { c.RenderOnce(); } catch (Exception ex) { FLog.W("sel render galat: " + ex.GetType().Name + " " + ex.Message); } }
+                ticks++;
+                long nowS = Stopwatch.GetTimestamp();
+                if (nowS - lastStat > 10 * Stopwatch.Frequency && snap.Length > 0)
+                {
+                    double sec = (double)(nowS - lastStat) / Stopwatch.Frequency;
+                    long dec = 0, cp = 0, q = 0; int pic = 0, vis = 0;
+                    foreach (var c in snap) { dec += c._t.Decoded; cp += c._t.Copied; q += c._t.QCount; if (c._t.HasFrame) pic++; if (c._vis) vis++; }
+                    FLog.W("[sel] kotak=" + snap.Length + " terlihat=" + vis + " bergambar=" + pic + "  dekode/dtk=" + ((dec - lastDec) / sec).ToString("0") +
+                           "  salin/dtk=" + ((cp - lastCopy) / sec).ToString("0") + "  antre=" + q + "  render/dtk=" + (ticks / sec).ToString("0.0"));
+                    lastStat = nowS; lastDec = dec; lastCopy = cp; ticks = 0;
+                }
                 next += period;
                 long now = Stopwatch.GetTimestamp();
                 if (next < now) next = now;
