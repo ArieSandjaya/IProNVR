@@ -49,7 +49,7 @@ namespace IproNvrTool
             Controls.Add(tv);
             Rebuild();
             Dir.Changed += OnDirChanged;
-            Dir.StatusChanged += OnDirChanged;
+            Dir.StatusChanged += OnStatusOnly;
         }
 
         [System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
@@ -149,6 +149,20 @@ namespace IproNvrTool
             }
         }
 
+        DateTime _lastPaint = DateTime.MinValue;
+        /// <summary>Status koneksi/rekam hanya mengubah warna & titik REC (digambar saat paint): cukup repaint, tanpa bangun ulang pohon.</summary>
+        void OnStatusOnly()
+        {
+            try
+            {
+                if (!IsHandleCreated || IsDisposed) return;
+                if ((DateTime.UtcNow - _lastPaint).TotalMilliseconds < 1000) return;
+                _lastPaint = DateTime.UtcNow;
+                BeginInvoke((Action)delegate { if (!IsDisposed) tv.Invalidate(); });
+            }
+            catch { }
+        }
+
         int _rebuildPending;
         /// <summary>Dir.StatusChanged bisa datang puluhan kali per detik (75 kamera): gabungkan jadi satu rebuild tiap ~1,5 dtk.</summary>
         void OnDirChanged()
@@ -175,7 +189,7 @@ namespace IproNvrTool
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { Dir.Changed -= OnDirChanged; Dir.StatusChanged -= OnDirChanged; }
+            if (disposing) { Dir.Changed -= OnDirChanged; Dir.StatusChanged -= OnStatusOnly; }
             base.Dispose(disposing);
         }
 
