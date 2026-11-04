@@ -353,6 +353,17 @@ float4 ps(VSO i) : SV_Target
 
         public int QCount { get { lock (_q) return _qi.Count; } }
 
+        /// <summary>Buang frame yang menunggu (dipakai saat tile disembunyikan, supaya permukaan dekoder tidak tertahan).</summary>
+        public void FlushQueue()
+        {
+            lock (_q)
+            {
+                if (_qi.Count == 0) return;
+                foreach (var it in _qi) { AVFrame* f = (AVFrame*)it.F; ffmpeg.av_frame_free(&f); }
+                _qi.Clear();
+            }
+        }
+
         void ClearQ()
         {
             lock (_q)
@@ -985,7 +996,7 @@ float4 ps(VSO i) : SV_Target
             {
                 if (_down || !IsHandleCreated) return;
                 int w = _w, h = _h;
-                if (!_vis || w < 8 || h < 8) { _t.Visible = false; return; }
+                if (!_vis || w < 8 || h < 8) { _t.Visible = false; _t.FlushQueue(); return; }
                 _t.Visible = true;
                 if (_sc == null || w != _cw || h != _ch) { lock (_t.Lk) { MakeSwap(w, h); } }
                 _t.PresentDue();

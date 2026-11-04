@@ -401,6 +401,7 @@ namespace IproNvrTool
         }
 
         Control d3d;   // kotak kamera berdekode GPU (Direct3D) sebagai pengganti Tile
+        Control _stashD3d;   // kotak GPU substream yang ditahan (tetap tersambung) saat area menampilkan stream utama
         LiveTile _stash; NvrSession _stashSess; long _stashNvr; int _stashCh;
 
         /// <summary>Hanya RTSP langsung (tanpa sesi push NVR) yang bisa ditahan tanpa reconnect.</summary>
@@ -408,6 +409,7 @@ namespace IproNvrTool
         {
             get
             {
+                if (d3d != null) return true;   // kotak GPU: RTSP langsung, aman ditahan tanpa reconnect
                 if (Tile == null || NvrId == 0) return false;
                 NvrRecord n = Dir.Nvr(NvrId);
                 return n != null && (AppSettings.Current.LiveAllRtsp || NvrDrivers.For(n).BrandId != "ipro");
@@ -418,6 +420,7 @@ namespace IproNvrTool
         public bool Suspend()
         {
             if (!RtspLive) return false;
+            if (d3d != null) return true;   // tetap tersambung; kotak yang disembunyikan tidak digambar
             Tile.Suspended = true;
             return true;
         }
@@ -425,6 +428,7 @@ namespace IproNvrTool
         /// <summary>Lanjutkan stream yang ditahan. Mengembalikan false bila tidak ada yang ditahan.</summary>
         public bool Resume()
         {
+            if (d3d != null) return true;
             if (Tile == null || !Tile.Suspended) return false;
             Tile.Suspended = false;
             return true;
@@ -433,6 +437,15 @@ namespace IproNvrTool
         /// <summary>Simpan tile substream (tetap hidup) agar area bisa menampilkan stream utama tanpa mematikannya.</summary>
         public bool Stash()
         {
+            if (d3d != null)
+            {
+                if (_stashD3d != null) return false;
+                _stashD3d = d3d; _stashNvr = NvrId; _stashCh = Channel;
+                _stashD3d.Visible = false;
+                Controls.Remove(_stashD3d);
+                d3d = null; sess = null;
+                return true;
+            }
             if (!RtspLive || _stash != null) return false;
             _stash = Tile; _stashSess = sess; _stashNvr = NvrId; _stashCh = Channel;
             Tile.Suspended = true;
@@ -444,6 +457,19 @@ namespace IproNvrTool
         /// <summary>Buang stream utama dan pasang kembali tile substream yang disimpan. False bila tidak ada simpanan.</summary>
         public bool Unstash()
         {
+            if (_stashD3d != null)
+            {
+                Control sd = _stashD3d; _stashD3d = null;
+                StopCurrent();   // buang stream utama
+                NvrId = _stashNvr; Channel = _stashCh;
+                d3d = sd;
+                Controls.Add(sd);
+                sd.Visible = true;
+                lblName.SendToBack();
+                sd.BringToFront();
+                SetName();
+                return true;
+            }
             if (_stash == null) return false;
             LiveTile st = _stash; NvrSession ss = _stashSess; long sn = _stashNvr; int sc = _stashCh;
             _stash = null; _stashSess = null;
@@ -460,6 +486,7 @@ namespace IproNvrTool
 
         void DropStash()
         {
+            if (_stashD3d != null) { Control sd = _stashD3d; _stashD3d = null; try { sd.Dispose(); } catch { } }
             if (_stash == null) return;
             LiveTile t = _stash; NvrSession s = _stashSess; long nid = _stashNvr; int ch = _stashCh;
             _stash = null; _stashSess = null;
@@ -525,7 +552,7 @@ namespace IproNvrTool
         /// <summary>Tampilkan kamera secara live. useSub: pakai substream bila ada (multi-area).</summary>
         public void ShowLive(NvrRecord nvr, int channel, bool useSub, int decodeWidth, int delayMs)
         {
-            if (_stash != null && (_stashNvr != nvr.Id || _stashCh != channel)) DropStash();
+            if ((_stash != null || _stashD3d != null) && (_stashNvr != nvr.Id || _stashCh != channel)) DropStash();
             StopCurrent();
             if (Pic != null) { Controls.Remove(Pic); if (Pic.Image != null) Pic.Image.Dispose(); Pic.Dispose(); Pic = null; }
             Playback = false;
