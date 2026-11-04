@@ -857,7 +857,7 @@ namespace IproNvrTool
             {
                 Pic = new PictureBox();
                 Pic.Dock = DockStyle.Fill;
-                Pic.SizeMode = PictureBoxSizeMode.Zoom;
+                Pic.SizeMode = PictureBoxSizeMode.StretchImage;   // sama dengan live: video memenuhi seluruh kotak (FillCell / kotak GPU)
                 Pic.BackColor = Color.Black;
                 Pic.AllowDrop = true;
                 Pic.DragEnter += OnDragEnter;
