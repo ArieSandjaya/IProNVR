@@ -144,6 +144,7 @@ namespace IproNvrServer
                         if (r.SubTemplate != null)
                         {
                             if (overwrite || !had) { upd["rtsp_url"] = r.SubTemplate; upd["rtsp_main_url"] = r.MainTemplate ?? ""; }
+                            upd["rtsp_streams"] = r.StreamsText();
                             upd["codec"] = r.Sub.Codec;
                             upd["width"] = r.Sub.Width;
                             upd["height"] = r.Sub.Height;
@@ -194,6 +195,7 @@ namespace IproNvrServer
                                 du2["scan_detail"] = dr.Summary();
                                 bool had = !string.IsNullOrWhiteSpace(Convert.ToString(cam["rtsp_url"]));
                                 if (overwrite || !had) { du2["rtsp_url"] = dr.SubTemplate; du2["rtsp_main_url"] = dr.MainTemplate ?? ""; }
+                                du2["rtsp_streams"] = dr.StreamsText();
                                 du2["codec"] = dr.Sub.Codec; du2["width"] = dr.Sub.Width; du2["height"] = dr.Sub.Height;
                                 store.Upsert(Schema.ByRoute("cameras"), du2);
                                 lock (lk) job.Found++;
@@ -213,6 +215,11 @@ namespace IproNvrServer
                             upd["scan_detail"] = (mi != null ? "Main " + mi : "Main -") + " | " + (si != null ? "Sub " + si : "Sub -") + "  [via " + BrandCgi.Name(brand) + "]";
                             StreamInfo pick = si ?? mi;
                             upd["codec"] = pick.Codec; upd["width"] = pick.Width; upd["height"] = pick.Height;
+                            string vb = "rtsp://{user}:{pass}@" + host + ":554";
+                            var vs = new List<string>();
+                            if (mi != null) vs.Add(vb + BrandCgi.ViaRtspPath(brand, ch, false) + "\t" + mi);
+                            if (si != null) vs.Add(vb + BrandCgi.ViaRtspPath(brand, ch, true) + "\t" + si);
+                            upd["rtsp_streams"] = string.Join("\n", vs.ToArray());
                             lock (lk) job.Found++;
                             line = "OK   " + label + ": " + upd["scan_detail"];
                         }

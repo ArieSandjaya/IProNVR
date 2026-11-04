@@ -203,6 +203,20 @@ namespace IproNvrTool
         public string MainTemplate;
         public StreamInfo Sub, Main;
         public string Note = "";
+        /// <summary>Semua stream yang terbaca dari kamera (terbesar dulu): templat + info.</summary>
+        public List<KeyValuePair<string, StreamInfo>> All = new List<KeyValuePair<string, StreamInfo>>();
+
+        /// <summary>Satu baris per stream: "templat<TAB>info" (disimpan di kolom rtsp_streams server).</summary>
+        public string StreamsText()
+        {
+            var sb = new StringBuilder();
+            foreach (KeyValuePair<string, StreamInfo> kv in All)
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(kv.Key).Append('\t').Append(kv.Value == null ? "" : kv.Value.ToString());
+            }
+            return sb.ToString();
+        }
 
         public string Summary()
         {
@@ -277,7 +291,12 @@ namespace IproNvrTool
                 prof.Sort(delegate(OnvifProfile a, OnvifProfile b) { return b.Pixels.CompareTo(a.Pixels); });
                 OnvifProfile main = prof[0], sub = prof[prof.Count - 1];
                 string st = Onvif.ToTemplate(sub.Uri), mt = Onvif.ToTemplate(main.Uri);
-                if (st != null) cands.Add(new Cand("ONVIF", st, prof.Count > 1 ? mt : null));
+                if (st != null)
+                {
+                    var oc = new Cand("ONVIF", st, prof.Count > 1 ? mt : null);
+                    for (int pi = 1; pi < prof.Count - 1; pi++) { string xt = Onvif.ToTemplate(prof[pi].Uri); if (xt != null) oc.Ex(xt); }   // profil di antara main dan sub ikut dicatat
+                    cands.Add(oc);
+                }
             }
             else note = "ONVIF: " + oerr;
 
@@ -335,6 +354,9 @@ namespace IproNvrTool
         /// <summary>Sub = stream berpiksel terkecil, Main = terbesar (bila ada dua atau lebih resolusi berbeda); tanpa konfigurasi manual.</summary>
         public static void Rank(List<KeyValuePair<string, StreamInfo>> got, DiscoveryResult res)
         {
+            res.All = new List<KeyValuePair<string, StreamInfo>>(got);
+            res.All.Sort(delegate(KeyValuePair<string, StreamInfo> a, KeyValuePair<string, StreamInfo> b)
+            { return ((long)b.Value.Width * b.Value.Height).CompareTo((long)a.Value.Width * a.Value.Height); });
             KeyValuePair<string, StreamInfo> lo = got[0], hi = got[0];
             foreach (KeyValuePair<string, StreamInfo> kv in got)
             {
