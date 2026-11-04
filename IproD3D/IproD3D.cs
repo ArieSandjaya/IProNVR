@@ -501,8 +501,8 @@ float4 ps(VSO i) : SV_Target
                 ffmpeg.av_dict_set(&opt, "fflags", "nobuffer", 0);
                 ffmpeg.av_dict_set(&opt, "flags", "low_delay", 0);
                 ffmpeg.av_dict_set(&opt, "max_delay", "500000", 0);
-                ffmpeg.av_dict_set(&opt, "analyzeduration", "1500000", 0);
-                ffmpeg.av_dict_set(&opt, "probesize", "500000", 0);
+                ffmpeg.av_dict_set(&opt, "analyzeduration", "800000", 0);
+                ffmpeg.av_dict_set(&opt, "probesize", "300000", 0);
                 Arm(12);
                 int e = ffmpeg.avformat_open_input(&fc, url, null, &opt);
                 ffmpeg.av_dict_free(&opt);

@@ -56,6 +56,18 @@ namespace IproNvrTool
 
         static string cellDir;
         static MethodInfo snapM, headlessM;
+        static PropertyInfo picProp;
+
+        /// <summary>Kotak GPU sudah punya gambar pertama.</summary>
+        public static bool HasPicture(Control c)
+        {
+            try
+            {
+                if (picProp == null) picProp = c.GetType().GetProperty("HasPicture");
+                return picProp != null && (bool)picProp.GetValue(c, null);
+            }
+            catch { return false; }
+        }
 
         /// <summary>Frame yang sedang tampil di kotak GPU sebagai Bitmap (null bila belum ada).</summary>
         public static Bitmap Snapshot(Control c, int maxW)

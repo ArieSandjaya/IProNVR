@@ -401,6 +401,7 @@ namespace IproNvrTool
         }
 
         Control d3d;   // kotak kamera berdekode GPU (Direct3D) sebagai pengganti Tile
+        System.Windows.Forms.Timer swapTimer;   // menunggu stream utama punya gambar sebelum menggantikan substream
         PictureBox d3dPic;                       // fisheye + GPU: gambar hasil dewarp (frame diambil dari GPU)
         System.Windows.Forms.Timer fishTimer;
         bool fishBusy; int fishTick;
@@ -466,7 +467,7 @@ namespace IproNvrTool
                 StopCurrent();   // buang stream utama
                 NvrId = _stashNvr; Channel = _stashCh;
                 d3d = sd;
-                Controls.Add(sd);
+                if (!Controls.Contains(sd)) Controls.Add(sd);
                 sd.Visible = true;
                 lblName.SendToBack();
                 sd.BringToFront();
@@ -510,6 +511,7 @@ namespace IproNvrTool
 
         void StopCurrent()
         {
+            StopSwapTimer();
             if (fishTimer != null) { fishTimer.Stop(); fishTimer.Dispose(); fishTimer = null; }
             if (d3dPic != null) { Controls.Remove(d3dPic); if (d3dPic.Image != null) d3dPic.Image.Dispose(); d3dPic.Dispose(); d3dPic = null; }
             if (d3d != null)
@@ -686,6 +688,65 @@ namespace IproNvrTool
             fishTimer.Tick += delegate { FishTick(pb, c); };
             fishTimer.Start();
             SetName();
+            return true;
+        }
+
+        void StopSwapTimer()
+        {
+            if (swapTimer != null) { swapTimer.Stop(); swapTimer.Dispose(); swapTimer = null; }
+        }
+
+        /// <summary>Full view tanpa layar kosong: substream yang sedang tampil tetap ditampilkan (diperbesar) sementara stream utama
+        /// disambung di belakangnya; begitu stream utama punya gambar, keduanya ditukar. Substream ditahan untuk kembali ke multiview.
+        /// False bila tidak berlaku (kotak bukan GPU / tanpa URL utama): pemanggil memakai cara biasa.</summary>
+        public bool UpgradeToMain()
+        {
+            if (d3d == null || d3dPic != null || _stashD3d != null || !HasCamera) return false;
+            NvrRecord nvr = Dir.Nvr(NvrId);
+            if (nvr == null) return false;
+            string url;
+            try { url = MosaicWall.FirstRtsp(nvr, Dir.Cam(NvrId, Channel), false); } catch { return false; }
+            if (string.IsNullOrEmpty(url)) return false;
+            Control nc = D3dWall.CreateCell(TitleText(), url);
+            if (nc == null) return false;
+            Control oldC = d3d;
+            _stashD3d = oldC; _stashNvr = NvrId; _stashCh = Channel;
+            d3d = nc;
+            nc.Dock = DockStyle.Fill;
+            nc.BackColor = Color.Black;
+            HookMouse(nc);
+            if (ContextMenuStrip != null) nc.ContextMenuStrip = ContextMenuStrip;
+            var ev = nc.GetType().GetEvent("StatusChanged");
+            if (ev != null)
+            {
+                Action<string> h = delegate(string st)
+                {
+                    if (d3d != nc) return;
+                    StatusText = st;
+                    try { if (IsHandleCreated && !IsDisposed) SetName(); } catch { }
+                };
+                ev.AddEventHandler(nc, h);
+            }
+            Controls.Add(nc);
+            oldC.BringToFront();   // substream tetap di depan sampai stream utama siap
+            lblName.SendToBack();
+            int ticks = 0;
+            StopSwapTimer();
+            swapTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            swapTimer.Tick += delegate
+            {
+                ticks++;
+                if (d3d != nc || IsDisposed) { StopSwapTimer(); return; }
+                if (D3dWall.HasPicture(nc) || ticks > 200)
+                {
+                    StopSwapTimer();
+                    nc.BringToFront();
+                    lblName.SendToBack();
+                    oldC.Visible = false;
+                    Controls.Remove(oldC);
+                }
+            };
+            swapTimer.Start();
             return true;
         }
 
@@ -1047,7 +1108,7 @@ namespace IproNvrTool
                     // RTSP langsung: stream lain hanya ditahan (tetap tersambung) sehingga kembali ke multiview tanpa reconnect
                     for (int i = 0; i < cells.Count; i++)
                         if (i != c.Index && !cells[i].Suspend()) cells[i].StopLive();
-                    if (c.HasCamera)
+                    if (c.HasCamera && !c.UpgradeToMain())   // GPU: substream tetap tampil sampai stream utama siap
                     {
                         c.Stash();   // substream area ini ikut ditahan, area menampilkan stream utama
                         Assign(c.Index, c.NvrId, c.Channel, false);   // stream utama
