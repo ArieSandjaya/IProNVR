@@ -547,6 +547,7 @@ namespace IproNvrTool
                 NvrId = _stashNvr; Channel = _stashCh;
                 d3d = sd;
                 ScheduleAdapt();
+                ScheduleFishProbe();   // StopCurrent mereset status gambar bulat: pulihkan (putaran per kamera tersimpan)
                 if (!Controls.Contains(sd)) Controls.Add(sd);
                 sd.Visible = true;
                 lblName.SendToBack();
@@ -830,6 +831,7 @@ namespace IproNvrTool
             Control oldC = d3d;
             _stashD3d = oldC; _stashNvr = NvrId; _stashCh = Channel;
             d3d = nc;
+            if (rawRound) D3dWall.SetRotation(nc, rawAngle);   // full view: gambar bulat tetap pada putaran terakhir dan tetap bisa diputar
             nc.Dock = DockStyle.Fill;
             nc.BackColor = Color.Black;
             HookMouse(nc);
