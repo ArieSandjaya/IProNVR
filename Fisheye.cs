@@ -64,6 +64,76 @@ namespace IproNvrTool
             lock (lk) { Load(); recs.Remove(nvrId + ":" + channel); }
         }
 
+        /// <summary>Deteksi lensa fisheye dari gambar mentah: lingkaran terang dengan sudut gambar gelap dan tepi lingkaran yang tegas.
+        /// Mengembalikan pengaturan bawaan (langit-langit, panorama) dengan pusat dan jari-jari hasil ukur, atau null bila bukan fisheye.</summary>
+        public static FisheyeRec Detect(Bitmap src)
+        {
+            if (src == null || src.Width < 64 || src.Height < 64) return null;
+            int w = Math.Min(160, src.Width), h = Math.Max(16, (int)((long)src.Height * w / src.Width));
+            double aspect = (double)src.Width / src.Height;
+            double[,] L = new double[w, h];
+            using (var b = new Bitmap(w, h, PixelFormat.Format24bppRgb))
+            {
+                using (var g = Graphics.FromImage(b)) { g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear; g.DrawImage(src, 0, 0, w, h); }
+                for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { Color c = b.GetPixel(x, y); L[x, y] = 0.299 * c.R + 0.587 * c.G + 0.114 * c.B; }
+            }
+            // sudut gambar harus gelap (median patch 12%)
+            int pw = Math.Max(3, w * 12 / 100), ph = Math.Max(3, h * 12 / 100);
+            int dark = 0;
+            int[][] cs = { new[] { 0, 0 }, new[] { w - pw, 0 }, new[] { 0, h - ph }, new[] { w - pw, h - ph } };
+            foreach (int[] o in cs)
+            {
+                var v = new List<double>();
+                for (int y = o[1]; y < o[1] + ph; y++) for (int x = o[0]; x < o[0] + pw; x++) v.Add(L[x, y]);
+                v.Sort();
+                if (v[v.Count / 2] < 22) dark++;
+            }
+            if (dark < 3) return null;
+            // pusat terang
+            double cm = 0; int cn = 0;
+            for (int y = h * 4 / 10; y < h * 6 / 10; y++) for (int x = w * 4 / 10; x < w * 6 / 10; x++) { cm += L[x, y]; cn++; }
+            if (cn == 0 || cm / cn < 25) return null;
+            // jari-jari dari 24 arah: dari pusat keluar sampai gelap bertahan
+            double cx = w / 2.0, cy = h / 2.0;
+            var pts = new List<PointF>();
+            for (int a = 0; a < 24; a++)
+            {
+                double ang = a * Math.PI / 12, dx = Math.Cos(ang), dy = Math.Sin(ang);
+                int last = -1, run = 0;
+                for (int r = 2; r < Math.Max(w, h); r++)
+                {
+                    int x = (int)(cx + dx * r), y = (int)(cy + dy * r);
+                    if (x < 0 || y < 0 || x >= w || y >= h) { if (last < 0) last = r - 1; break; }
+                    if (L[x, y] > 20) { last = r; run = 0; } else if (++run >= 4) break;
+                }
+                if (last > 4) pts.Add(new PointF((float)(cx + dx * last), (float)(cy + dy * last)));
+            }
+            if (pts.Count < 14) return null;
+            // lingkaran: pusat dari batas titik, jari-jari rata-rata; titik yang terpotong tepi gambar tidak dipakai menentukan tepi
+            float minx = float.MaxValue, maxx = float.MinValue, miny = float.MaxValue, maxy = float.MinValue;
+            foreach (PointF p in pts) { minx = Math.Min(minx, p.X); maxx = Math.Max(maxx, p.X); miny = Math.Min(miny, p.Y); maxy = Math.Max(maxy, p.Y); }
+            double ccx = (minx + maxx) / 2, ccy = (miny + maxy) / 2;
+            double R = Math.Min(maxx - minx, maxy - miny) / 2;
+            if (R < Math.Min(w, h) * 0.25) return null;
+            // tepi tegas: di dalam tepi terang, di luar gelap, pada sebagian besar sudut
+            int good = 0, tot = 0;
+            for (int a = 0; a < 36; a++)
+            {
+                double ang = a * Math.PI / 18, dx = Math.Cos(ang), dy = Math.Sin(ang);
+                int xi = (int)(ccx + dx * R * 0.9), yi = (int)(ccy + dy * R * 0.9), xo = (int)(ccx + dx * R * 1.12), yo = (int)(ccy + dy * R * 1.12);
+                if (xi < 0 || yi < 0 || xi >= w || yi >= h) continue;
+                tot++;
+                bool outDark = xo < 0 || yo < 0 || xo >= w || yo >= h || L[xo, yo] < 22;
+                if (L[xi, yi] > 28 && outDark) good++;
+            }
+            if (tot < 18 || good < tot * 0.7) return null;
+            var r2 = new FisheyeRec();
+            r2.Enabled = true; r2.Mount = 0; r2.Fov = 180; r2.Mode = (int)FishMode.Panorama;
+            r2.Cx = ccx / w; r2.Cy = ccy / h;
+            r2.Radius = R / Math.Min(w, h);
+            return r2;
+        }
+
         public static double DefaultPitch(int mount) { return mount == 1 ? 0 : 45; }
 
         // ---------------- LUT ----------------

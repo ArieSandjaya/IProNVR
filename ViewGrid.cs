@@ -191,6 +191,7 @@ namespace IproNvrTool
         {
             Fish = Fisheye.Get(NvrId, Channel);
             FMode = Fish != null && Fish.Enabled ? Fish.FMode : FishMode.Off;
+            if (Fish == null) ScheduleFishProbe();
             ResetView();
         }
 
@@ -199,6 +200,42 @@ namespace IproNvrTool
             fYaw = 0;
             fPitch = Fisheye.DefaultPitch(Fish == null ? 0 : Fish.Mount);
             fHfov = 80;
+        }
+
+        static readonly HashSet<string> fishProbed = new HashSet<string>();
+        System.Windows.Forms.Timer fishProbeTimer;
+
+        /// <summary>Kamera tanpa pengaturan fisheye: setelah gambar pertama, deteksi lensa fisheye dari gambar (sekali per kamera per sesi)
+        /// dan aktifkan dewarp panorama (dapat digeser/diputar mouse). Pengaturan yang sudah ada (termasuk "Off") tidak diubah.</summary>
+        void ScheduleFishProbe()
+        {
+            if (Playback || !HasCamera || !AppSettings.Current.AutoFisheye) return;
+            string key = NvrId + ":" + Channel;
+            lock (fishProbed) { if (fishProbed.Contains(key)) return; }
+            if (fishProbeTimer != null) { fishProbeTimer.Stop(); fishProbeTimer.Dispose(); }
+            int tries = 0;
+            long nv = NvrId; int ch = Channel;
+            fishProbeTimer = new System.Windows.Forms.Timer { Interval = 2500 };
+            fishProbeTimer.Tick += delegate
+            {
+                if (IsDisposed || NvrId != nv || Channel != ch || Fish != null || Playback) { fishProbeTimer.Stop(); return; }
+                if (++tries > 6) { fishProbeTimer.Stop(); return; }
+                Image img = null;
+                try { img = CurrentImage; } catch { }
+                Bitmap bmp = img as Bitmap;
+                if (bmp == null) { if (img != null && d3d != null) img.Dispose(); return; }
+                fishProbeTimer.Stop();
+                lock (fishProbed) fishProbed.Add(key);
+                FisheyeRec r = null;
+                try { r = Fisheye.Detect(bmp); } catch (Exception ex) { Log.Write("Deteksi fisheye: " + ex.Message); }
+                if (d3d != null && d3dPic == null) bmp.Dispose();
+                if (r == null) return;
+                r.NvrId = nv; r.Channel = ch;
+                try { Fisheye.Save(r); Log.Write("Fisheye terdeteksi otomatis: " + Dir.Title(nv, ch) + " (pusat " + r.Cx.ToString("0.00") + "," + r.Cy.ToString("0.00") + " jari-jari " + r.Radius.ToString("0.00") + ")"); }
+                catch (Exception ex) { Log.Write("Fisheye simpan: " + ex.Message); return; }
+                RequestFishReload();
+            };
+            fishProbeTimer.Start();
         }
 
         public void RequestFishReload()
