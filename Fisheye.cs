@@ -134,6 +134,22 @@ namespace IproNvrTool
             return r2;
         }
 
+        public static bool NoAuto(long nvrId, int channel)
+        {
+            var l = AppSettings.Current.FisheyeNoAuto;
+            lock (l) return l.Contains(nvrId + ":" + channel);
+        }
+
+        /// <summary>Pengguna sengaja mematikan fisheye (true) atau mengaktifkannya lagi (false): menentukan apakah deteksi otomatis boleh mengaktifkan.</summary>
+        public static void SetNoAuto(long nvrId, int channel, bool off)
+        {
+            var l = AppSettings.Current.FisheyeNoAuto;
+            string k = nvrId + ":" + channel;
+            bool changed;
+            lock (l) { changed = off ? !l.Contains(k) : l.Remove(k); if (off && changed) l.Add(k); }
+            if (changed) { try { AppSettings.Current.Save(); } catch { } }
+        }
+
         public static double DefaultPitch(int mount) { return mount == 1 ? 0 : 45; }
 
         // ---------------- LUT ----------------

@@ -98,6 +98,7 @@ namespace IproNvrTool
             del.Click += delegate
             {
                 Fisheye.Delete(rec.NvrId, rec.Channel);
+                Fisheye.SetNoAuto(rec.NvrId, rec.Channel, true);
                 cell.RequestFishReload();
                 DialogResult = DialogResult.OK;
             };

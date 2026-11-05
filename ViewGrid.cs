@@ -191,7 +191,7 @@ namespace IproNvrTool
         {
             Fish = Fisheye.Get(NvrId, Channel);
             FMode = Fish != null && Fish.Enabled ? Fish.FMode : FishMode.Off;
-            if (Fish == null) ScheduleFishProbe();
+            if (Fish == null || !Fish.Enabled) ScheduleFishProbe();
             ResetView();
         }
 
@@ -209,7 +209,7 @@ namespace IproNvrTool
         /// dan aktifkan dewarp panorama (dapat digeser/diputar mouse). Pengaturan yang sudah ada (termasuk "Off") tidak diubah.</summary>
         void ScheduleFishProbe()
         {
-            if (Playback || !HasCamera || !AppSettings.Current.AutoFisheye) return;
+            if (Playback || !HasCamera || !AppSettings.Current.AutoFisheye || Fisheye.NoAuto(NvrId, Channel)) return;
             string key = NvrId + ":" + Channel;
             lock (fishProbed) { if (fishProbed.Contains(key)) return; }
             if (fishProbeTimer != null) { fishProbeTimer.Stop(); fishProbeTimer.Dispose(); }
@@ -218,7 +218,7 @@ namespace IproNvrTool
             fishProbeTimer = new System.Windows.Forms.Timer { Interval = 2500 };
             fishProbeTimer.Tick += delegate
             {
-                if (IsDisposed || NvrId != nv || Channel != ch || Fish != null || Playback) { fishProbeTimer.Stop(); return; }
+                if (IsDisposed || NvrId != nv || Channel != ch || (Fish != null && Fish.Enabled) || Playback) { fishProbeTimer.Stop(); return; }
                 if (++tries > 6) { fishProbeTimer.Stop(); return; }
                 Image img = null;
                 try { img = CurrentImage; } catch { }
@@ -230,6 +230,14 @@ namespace IproNvrTool
                 try { r = Fisheye.Detect(bmp); } catch (Exception ex) { Log.Write("Deteksi fisheye: " + ex.Message); }
                 if (d3d != null && d3dPic == null) bmp.Dispose();
                 if (r == null) return;
+                FisheyeRec old = Fisheye.Get(nv, ch);
+                if (old != null)
+                {
+                    // sudah ada rekaman (mis. status Off): pertahankan pemasangan/rotasi/FOV, ganti geometri lingkaran dan aktifkan
+                    old.Enabled = true; old.CamStream = false; old.Mode = (int)FishMode.Panorama;
+                    old.Cx = r.Cx; old.Cy = r.Cy; old.Radius = r.Radius;
+                    r = old;
+                }
                 r.NvrId = nv; r.Channel = ch;
                 try { Fisheye.Save(r); Log.Write("Fisheye terdeteksi otomatis: " + Dir.Title(nv, ch) + " (pusat " + r.Cx.ToString("0.00") + "," + r.Cy.ToString("0.00") + " jari-jari " + r.Radius.ToString("0.00") + ")"); }
                 catch (Exception ex) { Log.Write("Fisheye simpan: " + ex.Message); return; }
@@ -248,6 +256,7 @@ namespace IproNvrTool
         {
             if (!HasCamera) return;
             FisheyeRec r = Fisheye.Get(NvrId, Channel);
+            Fisheye.SetNoAuto(NvrId, Channel, m == FishMode.Off);   // dimatikan sengaja: jangan dideteksi otomatis lagi
             if (r == null)
             {
                 if (m == FishMode.Off) return;
