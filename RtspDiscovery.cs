@@ -281,9 +281,16 @@ namespace IproNvrTool
         public static List<string> Templates(Info info)
         {
             string h = "rtsp://{user}:{pass}@{ip}:554/axis-media/media.amp";
-            string codec = info.Codecs.Contains("h264") || info.Codecs.Count == 0 ? "h264" : (info.Codecs.Contains("h265") ? "h265" : "h264");
+            var codecs = new List<string>();
+            if (info.Codecs.Contains("h264") || info.Codecs.Count == 0) codecs.Add("h264");
+            if (info.Codecs.Contains("h265")) codecs.Add("h265");
+            if (codecs.Count == 0) codecs.Add("h264");
             var l = new List<string>();
-            if (info.Resolutions.Count == 0) { l.Add(h + "?videocodec=" + codec); return AddProfiles(l, info, h); }
+            if (info.Resolutions.Count == 0)
+            {
+                foreach (string cd in codecs) l.Add(h + "?videocodec=" + cd);
+                return AddProfiles(l, info, h);
+            }
             string sub = info.Resolutions[info.Resolutions.Count - 1];
             for (int i = info.Resolutions.Count - 1; i >= 0; i--)
             {
@@ -291,19 +298,24 @@ namespace IproNvrTool
                 int wi; if (int.TryParse(w, out wi) && wi >= 320) { sub = info.Resolutions[i]; break; }
             }
             string main = info.Resolutions[0];
-            l.Add(h + "?videocodec=" + codec + "&resolution=" + sub);
-            if (main != sub) l.Add(h + "?videocodec=" + codec + "&resolution=" + main);
-            foreach (string r in info.Resolutions)
+            // urutan: sub dan main codec pertama dulu (dipakai sebagai kandidat sub/main), lalu semua resolusi lain dan codec lain
+            foreach (string cd in codecs)
             {
-                if (r == sub || r == main || l.Count >= 6) continue;
-                l.Add(h + "?videocodec=" + codec + "&resolution=" + r);
+                l.Add(h + "?videocodec=" + cd + "&resolution=" + sub);
+                if (main != sub) l.Add(h + "?videocodec=" + cd + "&resolution=" + main);
             }
+            foreach (string cd in codecs)
+                foreach (string r in info.Resolutions)
+                {
+                    if (r == sub || r == main || l.Count >= 14) continue;
+                    l.Add(h + "?videocodec=" + cd + "&resolution=" + r);
+                }
             return AddProfiles(l, info, h);
         }
 
         static List<string> AddProfiles(List<string> l, Info info, string h)
         {
-            foreach (string p in info.Profiles) if (l.Count < 10) l.Add(h + "?streamprofile=" + Uri.EscapeDataString(p));
+            foreach (string p in info.Profiles) if (l.Count < 20) l.Add(h + "?streamprofile=" + Uri.EscapeDataString(p));
             return l;
         }
     }
@@ -357,14 +369,14 @@ namespace IproNvrTool
         {
             string h = "rtsp://{user}:{pass}@{ip}:554";
             var l = new List<Cand>();
-            l.Add(new Cand("pola Dahua/OEM", h + "/cam/realmonitor?channel=1&subtype=1", h + "/cam/realmonitor?channel=1&subtype=0").Ex(h + "/cam/realmonitor?channel=1&subtype=2"));
-            l.Add(new Cand("pola Hikvision", h + "/Streaming/Channels/102", h + "/Streaming/Channels/101").Ex(h + "/Streaming/Channels/103"));
-            l.Add(new Cand("pola Axis (H.264)", h + "/axis-media/media.amp?videocodec=h264&resolution=640x360", h + "/axis-media/media.amp?videocodec=h264").Ex(h + "/axis-media/media.amp?videocodec=h264&resolution=1280x720"));
-            l.Add(new Cand("pola Axis (H.265)", h + "/axis-media/media.amp?videocodec=h265&resolution=640x360", h + "/axis-media/media.amp?videocodec=h265"));
+            l.Add(new Cand("pola Dahua/OEM", h + "/cam/realmonitor?channel=1&subtype=1", h + "/cam/realmonitor?channel=1&subtype=0").Ex(h + "/cam/realmonitor?channel=1&subtype=2").Ex(h + "/cam/realmonitor?channel=1&subtype=3"));
+            l.Add(new Cand("pola Hikvision", h + "/Streaming/Channels/102", h + "/Streaming/Channels/101").Ex(h + "/Streaming/Channels/103").Ex(h + "/Streaming/Channels/104"));
+            l.Add(new Cand("pola Axis", h + "/axis-media/media.amp?videocodec=h264&resolution=640x360", h + "/axis-media/media.amp?videocodec=h264")
+                .Ex(h + "/axis-media/media.amp?videocodec=h264&resolution=1280x720").Ex(h + "/axis-media/media.amp?videocodec=h265&resolution=640x360").Ex(h + "/axis-media/media.amp?videocodec=h265"));
             l.Add(new Cand("pola Axis lama (MPEG-4)", h + "/mpeg4/media.amp?resolution=640x480", h + "/mpeg4/media.amp"));
-            l.Add(new Cand("pola Panasonic/i-PRO", h + "/MediaInput/h264/stream_2", h + "/MediaInput/h264/stream_1"));
-            l.Add(new Cand("pola Panasonic/i-PRO (H.265)", h + "/MediaInput/h265/stream_2", h + "/MediaInput/h265/stream_1"));
-            l.Add(new Cand("pola Panasonic/i-PRO (tunggal)", h + "/MediaInput/h264", null));
+            l.Add(new Cand("pola Panasonic/i-PRO", h + "/MediaInput/h264/stream_2", h + "/MediaInput/h264/stream_1")
+                .Ex(h + "/MediaInput/h264/stream_3").Ex(h + "/MediaInput/h264/stream_4").Ex(h + "/MediaInput/h265/stream_1").Ex(h + "/MediaInput/h265/stream_2").Ex(h + "/MediaInput/h265/stream_3").Ex(h + "/MediaInput/h265/stream_4"));
+            l.Add(new Cand("pola Panasonic/i-PRO (tunggal)", h + "/MediaInput/h264", null).Ex(h + "/MediaInput/h265"));
             l.Add(new Cand("pola Uniview", h + "/media/video2", h + "/media/video1"));
             l.Add(new Cand("pola generik stream1/2", h + "/stream2", h + "/stream1"));
             l.Add(new Cand("pola generik live", h + "/live/ch1", h + "/live/ch0"));
@@ -435,7 +447,7 @@ namespace IproNvrTool
                 if (Regex.IsMatch(t0, "subtype=1", RegexOptions.IgnoreCase))
                 {
                     main = Regex.Replace(t0, "subtype=1", "subtype=0", RegexOptions.IgnoreCase);
-                    tc = new Cand("templat NVR", t0, main).Ex(Regex.Replace(t0, "subtype=1", "subtype=2", RegexOptions.IgnoreCase));
+                    tc = new Cand("templat NVR", t0, main).Ex(Regex.Replace(t0, "subtype=1", "subtype=2", RegexOptions.IgnoreCase)).Ex(Regex.Replace(t0, "subtype=1", "subtype=3", RegexOptions.IgnoreCase));
                 }
                 else if (Regex.IsMatch(t0, @"/Streaming/Channels/(\d)02\b", RegexOptions.IgnoreCase))
                 {
@@ -451,26 +463,46 @@ namespace IproNvrTool
             if (rtspOpen) cands.AddRange(Patterns());
             else note += (note.Length > 0 ? "; " : "") + "port 554 tertutup/tidak terjangkau";
 
+            // Kumpulkan SEMUA stream yang terbaca (H.264 dan H.265, semua resolusi/profil), tanpa duplikat.
+            // Sumber pasti (ONVIF, VAPIX, templat NVR): semuanya diuji dan digabung. Pola merk: berhenti di pola pertama yang berhasil
+            // (tetapi semua variannya diuji). Sub = piksel terkecil, Main = terbesar.
+            var got = new List<KeyValuePair<string, StreamInfo>>();
+            var seen = new HashSet<string>();
+            var methods = new List<string>();
             foreach (Cand c in cands)
             {
                 if (ct.IsCancellationRequested) { res.Note = "dibatalkan"; return res; }
-                string err;
-                StreamInfo si = StreamProbe.Probe(exe, Url(c.Sub, user, pass, ip), out err, 9000);
-                if (si == null) { note += (note.Length > 0 ? "; " : "") + c.Method + ": " + Short(err); continue; }
-                res.Method = c.Method;
-                // kumpulkan semua stream yang terbaca, lalu pilih otomatis: piksel terkecil = sub, terbesar = main
-                var got = new List<KeyValuePair<string, StreamInfo>>();
-                got.Add(new KeyValuePair<string, StreamInfo>(c.Sub, si));
-                var more = new List<string>();
-                if (c.Main != null) more.Add(c.Main);
-                more.AddRange(c.Extra);
-                foreach (string u in more)
+                bool sure = !c.Method.StartsWith("pola", StringComparison.Ordinal);
+                var urls = new List<string>();
+                urls.Add(c.Sub);
+                if (c.Main != null) urls.Add(c.Main);
+                urls.AddRange(c.Extra);
+                int okCount = 0;
+                string firstErr = null;
+                for (int k = 0; k < urls.Count; k++)
                 {
                     if (ct.IsCancellationRequested) break;
-                    string e2;
-                    StreamInfo xi = StreamProbe.Probe(exe, Url(u, user, pass, ip), out e2, 9000);
-                    if (xi != null) got.Add(new KeyValuePair<string, StreamInfo>(u, xi));
+                    string full = Url(urls[k], user, pass, ip);
+                    if (seen.Contains(full)) { okCount++; continue; }
+                    string err;
+                    StreamInfo si = StreamProbe.Probe(exe, full, out err, 9000);
+                    if (si == null)
+                    {
+                        if (firstErr == null) firstErr = err;
+                        if (k == 0 && !sure) break;     // pola merk: sub tidak ada -> pola ini bukan milik kamera ini
+                        continue;
+                    }
+                    seen.Add(full);
+                    okCount++;
+                    got.Add(new KeyValuePair<string, StreamInfo>(urls[k], si));
                 }
+                if (okCount == 0) { note += (note.Length > 0 ? "; " : "") + c.Method + ": " + Short(firstErr); continue; }
+                if (!methods.Contains(c.Method)) methods.Add(c.Method);
+                if (!sure) break;   // pola merk pertama yang cocok sudah cukup
+            }
+            if (got.Count > 0)
+            {
+                res.Method = string.Join(" + ", methods.ToArray());
                 Rank(got, res);
                 return res;
             }
