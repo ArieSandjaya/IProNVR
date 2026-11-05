@@ -360,8 +360,10 @@ namespace IproNvrTool
             l.Add(new Cand("pola Dahua/OEM", h + "/cam/realmonitor?channel=1&subtype=1", h + "/cam/realmonitor?channel=1&subtype=0").Ex(h + "/cam/realmonitor?channel=1&subtype=2"));
             l.Add(new Cand("pola Hikvision", h + "/Streaming/Channels/102", h + "/Streaming/Channels/101").Ex(h + "/Streaming/Channels/103"));
             l.Add(new Cand("pola Axis (H.264)", h + "/axis-media/media.amp?videocodec=h264&resolution=640x360", h + "/axis-media/media.amp?videocodec=h264").Ex(h + "/axis-media/media.amp?videocodec=h264&resolution=1280x720"));
+            l.Add(new Cand("pola Axis (H.265)", h + "/axis-media/media.amp?videocodec=h265&resolution=640x360", h + "/axis-media/media.amp?videocodec=h265"));
             l.Add(new Cand("pola Axis lama (MPEG-4)", h + "/mpeg4/media.amp?resolution=640x480", h + "/mpeg4/media.amp"));
             l.Add(new Cand("pola Panasonic/i-PRO", h + "/MediaInput/h264/stream_2", h + "/MediaInput/h264/stream_1"));
+            l.Add(new Cand("pola Panasonic/i-PRO (H.265)", h + "/MediaInput/h265/stream_2", h + "/MediaInput/h265/stream_1"));
             l.Add(new Cand("pola Panasonic/i-PRO (tunggal)", h + "/MediaInput/h264", null));
             l.Add(new Cand("pola Uniview", h + "/media/video2", h + "/media/video1"));
             l.Add(new Cand("pola generik stream1/2", h + "/stream2", h + "/stream1"));

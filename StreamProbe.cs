@@ -14,6 +14,7 @@ namespace IproNvrTool
         public double Fps;
         public override string ToString()
         {
+            if (Width <= 0 || Height <= 0) return Codec + " (ukuran belum terbaca)";
             return Codec + " " + Width + "x" + Height + (Fps > 0 ? " " + Fps.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "fps" : "");
         }
     }
@@ -32,11 +33,9 @@ namespace IproNvrTool
             return null;
         }
 
-        /// <summary>Blokir hingga ~10 detik. Null bila tidak tersambung / tidak ada video.</summary>
-        public static StreamInfo Probe(string exe, string url, out string error, int timeoutMs = 12000)
+        static string RunProbe(string exe, string url, int probesize, int analyzeUs, int timeoutMs)
         {
-            error = null;
-            var psi = new ProcessStartInfo(exe, "-hide_banner -rtsp_transport tcp -probesize 500000 -analyzeduration 2000000 -i \"" + url.Replace("\"", "%22") + "\"");
+            var psi = new ProcessStartInfo(exe, "-hide_banner -rtsp_transport tcp -probesize " + probesize + " -analyzeduration " + analyzeUs + " -i \"" + url.Replace("\"", "%22") + "\"");
             psi.UseShellExecute = false;
             psi.CreateNoWindow = true;
             psi.RedirectStandardError = true;
@@ -50,26 +49,58 @@ namespace IproNvrTool
                 p.BeginOutputReadLine();
                 if (!p.WaitForExit(timeoutMs)) { try { p.Kill(); } catch { } }
                 else p.WaitForExit();
-                string text = sb.ToString();
-                Match m = VideoLine.Match(text);
-                if (!m.Success)
-                {
-                    string last = "";
-                    foreach (string line in text.Split('\n')) if (line.Trim().Length > 0) last = line.Trim();
-                    error = last.Length > 0 ? last : "tidak ada respons";
-                    return null;
-                }
-                var si = new StreamInfo();
-                si.Codec = m.Groups[1].Value;
-                si.Width = int.Parse(m.Groups[2].Value);
-                si.Height = int.Parse(m.Groups[3].Value);
-                if (m.Groups[4].Success)
-                {
-                    double f;
-                    if (double.TryParse(m.Groups[4].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) si.Fps = f;
-                }
-                return si;
+                return sb.ToString();
             }
+        }
+
+        // baris video tanpa ukuran, mis. "Video: hevc, none(...)" / "unspecified size": H.265 (GOP panjang, IDR besar) butuh probe lebih lama
+        static readonly Regex VideoNoSize = new Regex(@"Video:\s*(\w+)", RegexOptions.Compiled);
+
+        /// <summary>Blokir hingga ~10 detik (H.265 tanpa ukuran terbaca: diulang sekali dengan probe lebih besar, sampai ~2x timeout). Null bila tidak tersambung / tidak ada video.</summary>
+        public static StreamInfo Probe(string exe, string url, out string error, int timeoutMs = 12000)
+        {
+            error = null;
+            string text = RunProbe(exe, url, 500000, 2000000, timeoutMs);
+            Match m = VideoLine.Match(text);
+            if (!m.Success)
+            {
+                Match vn = VideoNoSize.Match(text);
+                bool noSize = vn.Success || text.IndexOf("unspecified size", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("Could not find codec parameters", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (noSize)
+                {
+                    // stream ada tetapi parameter belum terbaca: ulangi dengan probe besar (H.265 / resolusi tinggi / GOP panjang)
+                    string t2 = RunProbe(exe, url, 8000000, 8000000, Math.Max(timeoutMs, 14000));
+                    Match m2 = VideoLine.Match(t2);
+                    if (m2.Success) { m = m2; text = t2; }
+                    else
+                    {
+                        Match v2 = VideoNoSize.Match(t2);
+                        if (v2.Success)
+                        {
+                            // codec terbaca tetapi ukuran tidak: stream tetap bisa dipakai (client membaca ukuran saat memutar)
+                            return new StreamInfo { Codec = v2.Groups[1].Value };
+                        }
+                        text = t2.Length > 0 ? t2 : text;
+                    }
+                }
+            }
+            if (!m.Success)
+            {
+                string last = "";
+                foreach (string line in text.Split('\n')) if (line.Trim().Length > 0) last = line.Trim();
+                error = last.Length > 0 ? last : "tidak ada respons";
+                return null;
+            }
+            var si = new StreamInfo();
+            si.Codec = m.Groups[1].Value;
+            si.Width = int.Parse(m.Groups[2].Value);
+            si.Height = int.Parse(m.Groups[3].Value);
+            if (m.Groups[4].Success)
+            {
+                double f;
+                if (double.TryParse(m.Groups[4].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f)) si.Fps = f;
+            }
+            return si;
         }
     }
 }
