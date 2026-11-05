@@ -124,6 +124,13 @@ VSO vs(uint id : SV_VertexID)
 float4 ps(VSO i) : SV_Target
 {
     float2 uv = q.yz + (i.uv - 0.5) / q.x;
+    if (q.w != 0.0)   // putar gambar (kamera fisheye mentah): searah jarum jam sebesar q.w radian di sekitar titik tengah gambar, bulat tetap bulat (p.z = lebar/tinggi)
+    {
+        float2 d = uv - 0.5; d.x *= p.z;
+        float cs = cos(q.w), sn = sin(q.w);
+        d = float2(cs * d.x + sn * d.y, -sn * d.x + cs * d.y);
+        d.x /= p.z; uv = d + 0.5;
+    }
     float y = ty.Sample(sm, uv).r;
     float2 c = tuv.Sample(sm, uv).rg - 0.5;
     if (p.y < 0.5) { y = (y - 16.0 / 255.0) * (255.0 / 219.0); c = c * (255.0 / 224.0); }
@@ -254,6 +261,7 @@ float4 ps(VSO i) : SV_Target
         public Gpu G;
         public volatile bool UseMain, Visible = true, Stop, Rec;
         public bool AdaptMain;   // adaptif: ukuran kotak cukup besar -> stream utama (dipulihkan setelah zoom/full view)
+        public volatile float Rot;   // putaran gambar (radian, searah jarum jam)
         public volatile float Zoom = 1f, Cx = 0.5f, Cy = 0.5f;   // zoom digital: pembesaran dan titik tengah (0..1 pada gambar)
         public Action<string> Log;
         public int MinIntervalMs = 66;
@@ -854,7 +862,7 @@ float4 ps(VSO i) : SV_Target
                 t.SrvTex = tex;
             }
             var ctx = g.Ctx;
-            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, 0f, 0f, t.Zoom, t.Cx, t.Cy, 0f };
+            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, t.TexW > 0 && t.TexH > 0 ? (float)t.TexW / t.TexH : 1f, 0f, t.Zoom, t.Cx, t.Cy, t.Rot };
             unsafe { fixed (float* pcb = cb) ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)pcb, 32, 32), g.Cb, 0); }
             ctx.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
             ctx.VertexShader.Set(g.Vs);
@@ -904,6 +912,8 @@ float4 ps(VSO i) : SV_Target
         /// <summary>Frame yang sedang tampil sebagai Bitmap RGB (null bila belum ada gambar).</summary>
         public Bitmap Snapshot(int maxW) { return _t.Snapshot(maxW); }
         public bool HasPicture { get { return _t.HasFrame; } }
+        /// <summary>Putar gambar bebas (derajat, searah jarum jam) di sekitar titik tengah: untuk kamera fisheye yang tampil bulat.</summary>
+        public float Rotation { get { return _t.Rot * 180f / (float)Math.PI; } set { _t.Rot = value * (float)Math.PI / 180f; } }
         /// <summary>Ada URL stream utama untuk kotak ini (adaptive stream).</summary>
         public bool HasMain { get { return !string.IsNullOrEmpty(_t.MainUrl); } }
         /// <summary>Stream yang dipakai: true = utama, false = sub. Mengganti akan menyambung ulang ke stream lain di kotak yang sama.</summary>
@@ -1468,7 +1478,7 @@ float4 ps(VSO i) : SV_Target
                 t.SrvTex = tex;
             }
             var ctx = _g.Ctx;
-            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, 0f, 0f, t.Zoom, t.Cx, t.Cy, 0f };
+            var cb = new float[] { t.M709 ? 1f : 0f, t.FullRange ? 1f : 0f, (float)vw / Math.Max(1, vh), 0f, t.Zoom, t.Cx, t.Cy, t.Rot };
             unsafe { fixed (float* pcb = cb) ctx.UpdateSubresource(new SharpDX.DataBox((IntPtr)pcb, 32, 32), _g.Cb, 0); }
             ctx.InputAssembler.PrimitiveTopology = SharpDX.Direct3D.PrimitiveTopology.TriangleList;
             ctx.VertexShader.Set(_g.Vs);

@@ -202,16 +202,39 @@ namespace IproNvrTool
             fHfov = 80;
         }
 
-        static readonly HashSet<string> fishProbed = new HashSet<string>();
+        // ---- gambar fisheye bulat (mentah): dapat diputar bebas 360 derajat dengan mouse (kotak GPU) ----
+        static readonly Dictionary<string, bool> roundCams = new Dictionary<string, bool>();   // hasil deteksi per kamera (sesi ini)
+        static readonly Dictionary<string, float> roundAngle = new Dictionary<string, float>();
         System.Windows.Forms.Timer fishProbeTimer;
+        bool rawRound; float rawAngle; double rawLast;
 
-        /// <summary>Kamera tanpa pengaturan fisheye: setelah gambar pertama, deteksi lensa fisheye dari gambar (sekali per kamera per sesi)
-        /// dan aktifkan dewarp panorama (dapat digeser/diputar mouse). Pengaturan yang sudah ada (termasuk "Off") tidak diubah.</summary>
+        /// <summary>Gambar mentah berbentuk bulat (lensa fisheye) dan dekode GPU: tarik dengan mouse untuk memutar gambar bebas 360 derajat.</summary>
+        public bool RawRotatable { get { return rawRound && d3d != null && d3dPic == null && !(Fish != null && Fish.Enabled && FMode != FishMode.Off); } }
+
+        void ApplyRaw()
+        {
+            string key = NvrId + ":" + Channel;
+            rawRound = true;
+            float a; lock (roundCams) { if (!roundAngle.TryGetValue(key, out a)) a = 0; }
+            rawAngle = a;
+            if (d3d != null) D3dWall.SetRotation(d3d, a);
+        }
+
+        public void ResetRawRotation()
+        {
+            rawAngle = 0;
+            lock (roundCams) roundAngle[NvrId + ":" + Channel] = 0;
+            if (d3d != null) D3dWall.SetRotation(d3d, 0);
+        }
+
+        /// <summary>Kamera tanpa dewarp aktif: setelah gambar pertama, periksa apakah gambarnya bulat (lensa fisheye) - sekali per kamera per sesi.</summary>
         void ScheduleFishProbe()
         {
-            if (Playback || !HasCamera || !AppSettings.Current.AutoFisheye || Fisheye.NoAuto(NvrId, Channel)) return;
+            if (Playback || !HasCamera || !AppSettings.Current.AutoFisheye) return;
             string key = NvrId + ":" + Channel;
-            lock (fishProbed) { if (fishProbed.Contains(key)) return; }
+            bool known, isRound = false;
+            lock (roundCams) { known = roundCams.TryGetValue(key, out isRound); }
+            if (known) { if (isRound) ApplyRaw(); return; }
             if (fishProbeTimer != null) { fishProbeTimer.Stop(); fishProbeTimer.Dispose(); }
             int tries = 0;
             long nv = NvrId; int ch = Channel;
@@ -225,23 +248,13 @@ namespace IproNvrTool
                 Bitmap bmp = img as Bitmap;
                 if (bmp == null) { if (img != null && d3d != null) img.Dispose(); return; }
                 fishProbeTimer.Stop();
-                lock (fishProbed) fishProbed.Add(key);
                 FisheyeRec r = null;
                 try { r = Fisheye.Detect(bmp); } catch (Exception ex) { Log.Write("Deteksi fisheye: " + ex.Message); }
                 if (d3d != null && d3dPic == null) bmp.Dispose();
+                lock (roundCams) roundCams[key] = r != null;
                 if (r == null) return;
-                FisheyeRec old = Fisheye.Get(nv, ch);
-                if (old != null)
-                {
-                    // sudah ada rekaman (mis. status Off): pertahankan pemasangan/rotasi/FOV, ganti geometri lingkaran dan aktifkan
-                    old.Enabled = true; old.CamStream = false; old.Mode = (int)FishMode.Panorama;
-                    old.Cx = r.Cx; old.Cy = r.Cy; old.Radius = r.Radius;
-                    r = old;
-                }
-                r.NvrId = nv; r.Channel = ch;
-                try { Fisheye.Save(r); Log.Write("Fisheye terdeteksi otomatis: " + Dir.Title(nv, ch) + " (pusat " + r.Cx.ToString("0.00") + "," + r.Cy.ToString("0.00") + " jari-jari " + r.Radius.ToString("0.00") + ")"); }
-                catch (Exception ex) { Log.Write("Fisheye simpan: " + ex.Message); return; }
-                RequestFishReload();
+                Log.Write("Gambar bulat (fisheye) terdeteksi: " + Dir.Title(nv, ch) + " - tarik dengan mouse untuk memutar");
+                ApplyRaw();
             };
             fishProbeTimer.Start();
         }
@@ -256,7 +269,6 @@ namespace IproNvrTool
         {
             if (!HasCamera) return;
             FisheyeRec r = Fisheye.Get(NvrId, Channel);
-            Fisheye.SetNoAuto(NvrId, Channel, m == FishMode.Off);   // dimatikan sengaja: jangan dideteksi otomatis lagi
             if (r == null)
             {
                 if (m == FishMode.Off) return;
@@ -336,10 +348,18 @@ namespace IproNvrTool
             if (e.Button == MouseButtons.Left && HasCamera)
             {
                 if (PtzActive) ptzLast = Control.MousePosition;
+                else if (RawRotatable && !D3dWall.IsZoomed(d3d)) { dragReady = false; rawLast = RawAngleAt(s as Control, e.Location); }
                 else if (d3d != null && D3dWall.IsZoomed(d3d)) dragReady = false;
                 else { dragReady = true; down = Control.MousePosition; }
             }
             if (e.Button == MouseButtons.Right && ContextMenuStrip != null) { }
+        }
+
+        /// <summary>Sudut kursor terhadap titik tengah kotak (ternormalisasi: lingkaran yang ditarik ke kotak tetap konsisten), searah jarum jam.</summary>
+        static double RawAngleAt(Control c, Point p)
+        {
+            if (c == null || c.Width < 2 || c.Height < 2) return 0;
+            return Math.Atan2((p.Y - c.Height / 2.0) / c.Height, (p.X - c.Width / 2.0) / c.Width);
         }
 
         void OnMove(object s, MouseEventArgs e)
@@ -354,6 +374,18 @@ namespace IproNvrTool
                 fPitch = mt == 1 ? Math.Max(-80, Math.Min(80, fPitch)) : Math.Max(-10, Math.Min(89, fPitch));
                 ptzLast = cur;
                 Rerender();
+                return;
+            }
+            if (RawRotatable && (Control.MouseButtons & MouseButtons.Left) != 0 && !D3dWall.IsZoomed(d3d))
+            {
+                double a = RawAngleAt(s as Control, e.Location);
+                double dl = a - rawLast;
+                while (dl > Math.PI) dl -= 2 * Math.PI;
+                while (dl < -Math.PI) dl += 2 * Math.PI;
+                rawLast = a;
+                rawAngle = (float)((rawAngle + dl * 180.0 / Math.PI) % 360.0);
+                D3dWall.SetRotation(d3d, rawAngle);
+                lock (roundCams) roundAngle[NvrId + ":" + Channel] = rawAngle;
                 return;
             }
             if (!dragReady || (Control.MouseButtons & MouseButtons.Left) == 0) { dragReady = false; return; }
@@ -562,7 +594,8 @@ namespace IproNvrTool
             StopSwapTimer();
             if (fishTimer != null) { fishTimer.Stop(); fishTimer.Dispose(); fishTimer = null; }
             if (adaptTimer != null) { adaptTimer.Stop(); adaptTimer.Dispose(); adaptTimer = null; }
-            d3dMain = false;
+            if (fishProbeTimer != null) { fishProbeTimer.Stop(); fishProbeTimer.Dispose(); fishProbeTimer = null; }
+            d3dMain = false; rawRound = false; rawAngle = 0;
             if (d3dPic != null) { Controls.Remove(d3dPic); if (d3dPic.Image != null) d3dPic.Image.Dispose(); d3dPic.Dispose(); d3dPic = null; }
             if (d3d != null)
             {
@@ -1388,6 +1421,7 @@ namespace IproNvrTool
                     ToolStripMenuItem sub = Asm.Sub(fe, names[k], delegate { cell.SetFishMode(fm); });
                     sub.Checked = cell.FMode == fm && (fm == FishMode.Dual || !(cell.Fish != null && cell.Fish.CamStream));
                 }
+                if (cell.RawRotatable) Asm.Sub(fe, "Reset putaran gambar bulat", delegate { cell.ResetRawRotation(); });
                 fe.DropDownItems.Add(new ToolStripSeparator());
                 Asm.Sub(fe, "Kalibrasi lensa & sumber stream...", delegate
                 {

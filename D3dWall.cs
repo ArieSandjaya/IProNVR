@@ -42,6 +42,21 @@ namespace IproNvrTool
             catch { }
         }
 
+        public static void SetRotation(Control c, float deg)
+        {
+            try
+            {
+                var p = c.GetType().GetProperty("Rotation");
+                if (p != null) p.SetValue(c, deg, null);
+            }
+            catch { }
+        }
+
+        public static bool CanRotate(Control c)
+        {
+            try { return c.GetType().GetProperty("Rotation") != null; } catch { return false; }
+        }
+
         public static bool IsMain(Control c)
         {
             try
