@@ -516,8 +516,17 @@ namespace IproNvrTool
             res.All = new List<KeyValuePair<string, StreamInfo>>(got);
             res.All.Sort(delegate(KeyValuePair<string, StreamInfo> a, KeyValuePair<string, StreamInfo> b)
             { return ((long)b.Value.Width * b.Value.Height).CompareTo((long)a.Value.Width * a.Value.Height); });
-            KeyValuePair<string, StreamInfo> lo = got[0], hi = got[0];
+            // sub/main dipilih hanya dari stream H.264/H.265 (MJPEG - biasanya stream ke-3 kamera - boros bandwidth dan didekode software,
+            // jangan sampai terpilih sebagai sub). MJPEG tetap tercatat di daftar semua stream; dipakai hanya bila itu satu-satunya.
+            var pool = new List<KeyValuePair<string, StreamInfo>>();
             foreach (KeyValuePair<string, StreamInfo> kv in got)
+            {
+                string cd = (kv.Value.Codec ?? "").ToLowerInvariant();
+                if (cd.IndexOf("jpeg") < 0 && cd.IndexOf("jpg") < 0) pool.Add(kv);
+            }
+            if (pool.Count == 0) pool = new List<KeyValuePair<string, StreamInfo>>(got);
+            KeyValuePair<string, StreamInfo> lo = pool[0], hi = pool[0];
+            foreach (KeyValuePair<string, StreamInfo> kv in pool)
             {
                 long p = (long)kv.Value.Width * kv.Value.Height;
                 if (p < (long)lo.Value.Width * lo.Value.Height) lo = kv;
@@ -526,7 +535,7 @@ namespace IproNvrTool
             res.SubTemplate = lo.Key; res.Sub = lo.Value;
             bool distinct = (long)hi.Value.Width * hi.Value.Height > (long)lo.Value.Width * lo.Value.Height;
             if (distinct) { res.MainTemplate = hi.Key; res.Main = hi.Value; }
-            else if (got.Count > 1) { res.MainTemplate = got[1].Key; res.Main = got[1].Value; }   // semua sama besar: tetap catat main
+            else if (pool.Count > 1) { res.MainTemplate = pool[1].Key; res.Main = pool[1].Value; }   // semua sama besar: tetap catat main
         }
 
         static string Short(string s)
