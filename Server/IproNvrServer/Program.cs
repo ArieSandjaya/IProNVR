@@ -66,6 +66,65 @@ namespace IproNvrServer
         }
     }
 
+    /// <summary>Log audit: siapa mengubah apa (login, simpan/hapus konfigurasi, deteksi, impor). Disimpan di logs\audit.log dan 2000 baris terakhir di memori.</summary>
+    public static class Audit
+    {
+        public class Entry { public string Time, User, Ip, Action, Detail; }
+        static readonly object lk = new object();
+        static readonly List<Entry> ring = new List<Entry>();
+        static string file;
+
+        public static void Init(string dataDir)
+        {
+            try
+            {
+                string d = Path.Combine(dataDir, "logs");
+                Directory.CreateDirectory(d);
+                file = Path.Combine(d, "audit.log");
+                if (File.Exists(file))
+                {
+                    string[] lines = File.ReadAllLines(file, Encoding.UTF8);
+                    for (int i = Math.Max(0, lines.Length - 2000); i < lines.Length; i++)
+                    {
+                        string[] p = lines[i].Split('\t');
+                        if (p.Length >= 5) ring.Add(new Entry { Time = p[0], User = p[1], Ip = p[2], Action = p[3], Detail = p[4] });
+                    }
+                }
+            }
+            catch { }
+        }
+
+        static string Clean(string s) { return (s ?? "").Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '); }
+
+        public static void Add(string user, string ip, string action, string detail)
+        {
+            var e = new Entry { Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), User = Clean(user), Ip = Clean(ip), Action = Clean(action), Detail = Clean(detail) };
+            lock (lk)
+            {
+                ring.Add(e);
+                if (ring.Count > 2000) ring.RemoveRange(0, ring.Count - 2000);
+                try { if (file != null) File.AppendAllText(file, e.Time + "\t" + e.User + "\t" + e.Ip + "\t" + e.Action + "\t" + e.Detail + Environment.NewLine, Encoding.UTF8); } catch { }
+            }
+        }
+
+        /// <summary>Terbaru dulu; q = saring teks (user / aksi / rincian / IP).</summary>
+        public static List<Dictionary<string, object>> List(int n, string q)
+        {
+            var res = new List<Dictionary<string, object>>();
+            q = (q ?? "").Trim().ToLowerInvariant();
+            lock (lk)
+            {
+                for (int i = ring.Count - 1; i >= 0 && res.Count < n; i--)
+                {
+                    Entry e = ring[i];
+                    if (q.Length > 0 && (e.User + " " + e.Ip + " " + e.Action + " " + e.Detail).ToLowerInvariant().IndexOf(q, StringComparison.Ordinal) < 0) continue;
+                    res.Add(new Dictionary<string, object> { { "time", e.Time }, { "user", e.User }, { "ip", e.Ip }, { "action", e.Action }, { "detail", e.Detail } });
+                }
+            }
+            return res;
+        }
+    }
+
     class ServerService : ServiceBase
     {
         Host host;
@@ -83,6 +142,7 @@ namespace IproNvrServer
         {
             ServerConfig cfg = ServerConfig.Load();
             Log.Init(cfg.DataDir);
+            Audit.Init(cfg.DataDir);
             store = new Store(cfg.DataDir);
             if (!store.HasAdmin())
             {

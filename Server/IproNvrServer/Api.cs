@@ -479,8 +479,8 @@ namespace IproNvrServer
                     object n, p;
                     b.TryGetValue("name", out n); b.TryGetValue("pass", out p);
                     Row u = store.Login(Convert.ToString(n), Convert.ToString(p));
-                    if (u == null) { Fail(ip); Log.Write("Login gagal: " + n + " dari " + ip); Err(rs, 401, "Nama atau password salah."); return; }
-                    Log.Write("Login: " + u["name"] + " dari " + ip);
+                    if (u == null) { Fail(ip); Log.Write("Login gagal: " + n + " dari " + ip); Audit.Add(Convert.ToString(n), ip, "login gagal", ""); Err(rs, 401, "Nama atau password salah."); return; }
+                    Log.Write("Login: " + u["name"] + " dari " + ip); Audit.Add(Convert.ToString(u["name"]), ip, "login", "");
                     var o = new Dictionary<string, object>();
                     o["token"] = NewToken(u);
                     o["user"] = u;
@@ -520,6 +520,14 @@ namespace IproNvrServer
                     return;
                 }
 
+                if (head == "audit")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    int an = 300; int.TryParse(rq.QueryString["n"], out an); if (an < 1 || an > 2000) an = 300;
+                    Json(rs, 200, Audit.List(an, rq.QueryString["q"]));
+                    return;
+                }
+                if (head == "status") { Json(rs, 200, SystemStatus()); return; }
                 if (head == "relay")
                 {
                     if (relay == null) { Json(rs, 200, new Dictionary<string, object> { { "enabled", false }, { "status", "Relay tidak aktif" } }); return; }
@@ -527,6 +535,7 @@ namespace IproNvrServer
                     {
                         if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
                         relay.Resync();
+                        Audit.Add(s.User["name"] + "", ip, "sinkron ulang relay", "");
                         Json(rs, 200, new Dictionary<string, object> { { "ok", true } });
                         return;
                     }
@@ -568,6 +577,7 @@ namespace IproNvrServer
                     string ie;
                     object ir = ImportIps(ReadBody(rq), s.User["name"] + "", out ie);
                     if (ir == null) { Err(rs, 400, ie); return; }
+                    Audit.Add(s.User["name"] + "", ip, "impor IP kamera", "");
                     Json(rs, 200, ir);
                     return;
                 }
@@ -587,6 +597,7 @@ namespace IproNvrServer
                     string e;
                     string jid = disc.Start(b, s.User["name"] + "", out e);
                     if (jid == null) { Err(rs, 400, e); return; }
+                    Audit.Add(s.User["name"] + "", ip, "deteksi RTSP", "job " + jid);
                     Json(rs, 200, new Dictionary<string, object> { { "job", jid } });
                     return;
                 }
@@ -619,8 +630,10 @@ namespace IproNvrServer
                 if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin yang boleh mengubah konfigurasi."); return; }
                 if (rq.HttpMethod == "POST" || rq.HttpMethod == "PUT")
                 {
-                    long id = store.Upsert(td, ReadBody(rq));
+                    Dictionary<string, object> wb = ReadBody(rq);
+                    long id = store.Upsert(td, wb);
                     Log.Write(s.User["name"] + " simpan " + td.Route + " #" + id);
+                    Audit.Add(s.User["name"] + "", ip, (wb.ContainsKey("id") ? "ubah " : "tambah ") + td.Route, "#" + id + (wb.ContainsKey("name") ? " " + wb["name"] : ""));
                     Json(rs, 200, new Dictionary<string, object> { { "id", id }, { "version", store.Version } });
                     return;
                 }
@@ -630,6 +643,7 @@ namespace IproNvrServer
                     if (seg.Length < 2 || !long.TryParse(seg[1], out id)) { Err(rs, 400, "id wajib: DELETE /api/" + head + "/{id}"); return; }
                     store.Delete(td, id);
                     Log.Write(s.User["name"] + " hapus " + td.Route + " #" + id);
+                    Audit.Add(s.User["name"] + "", ip, "hapus " + td.Route, "#" + id);
                     Json(rs, 200, new Dictionary<string, object> { { "ok", true }, { "version", store.Version } });
                     return;
                 }
@@ -644,6 +658,96 @@ namespace IproNvrServer
             {
                 try { rs.OutputStream.Close(); } catch { }
             }
+        }
+
+        static string RS(Row r, string k) { object o; return r.TryGetValue(k, out o) && o != null ? Convert.ToString(o) : ""; }
+        static long RL(Row r, string k) { object o; long v; return r.TryGetValue(k, out o) && o != null && long.TryParse(Convert.ToString(o), out v) ? v : 0; }
+
+        /// <summary>Dashboard kesehatan sistem (seperti System Dashboard XProtect): server, relay, ringkasan per NVR, kamera bermasalah.</summary>
+        object SystemStatus()
+        {
+            var o = new Dictionary<string, object>();
+            var srv = new Dictionary<string, object>();
+            try
+            {
+                Process pr = Process.GetCurrentProcess();
+                srv["started"] = pr.StartTime.ToString("yyyy-MM-dd HH:mm:ss");
+                srv["uptime"] = (long)(DateTime.Now - pr.StartTime).TotalSeconds;
+                srv["memMB"] = pr.WorkingSet64 / 1048576;
+            }
+            catch { }
+            srv["version"] = store.Version;
+            srv["time"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            lock (sessions) srv["sessions"] = sessions.Count;
+            try
+            {
+                long dbBytes = 0;
+                foreach (string f in Directory.GetFiles(cfg.DataDir, "*.db*")) dbBytes += new FileInfo(f).Length;
+                srv["dbMB"] = Math.Round(dbBytes / 1048576.0, 1);
+                var di = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(cfg.DataDir)));
+                srv["diskFreeGB"] = Math.Round(di.AvailableFreeSpace / 1073741824.0, 1);
+                srv["diskTotalGB"] = Math.Round(di.TotalSize / 1073741824.0, 1);
+            }
+            catch { }
+            o["server"] = srv;
+
+            Dictionary<string, long[]> live = relay != null ? relay.LivePaths() : new Dictionary<string, long[]>();
+            bool relayOn = relay != null && live.Count > 0;
+            long readers = 0, readyPaths = 0;
+            foreach (long[] v in live.Values) { readers += v[1]; if (v[0] == 1) readyPaths++; }
+            var ro = relay == null ? new Dictionary<string, object> { { "enabled", false } } : relay.Info(false);
+            ro.Remove("user"); ro.Remove("pass");
+            ro["livePaths"] = live.Count; ro["readyPaths"] = readyPaths; ro["readers"] = readers;
+            o["relay"] = ro;
+
+            var nvrs = store.List(Schema.ByRoute("nvrs"));
+            var cams = store.List(Schema.ByRoute("cameras"));
+            var byNvr = new Dictionary<long, Row>();
+            foreach (Row n in nvrs) byNvr[RL(n, "id")] = n;
+            var per = new Dictionary<long, long[]>();     // id -> [kamera, dengan rtsp, reg ok, reg error, relay siap]
+            foreach (Row n in nvrs) per[RL(n, "id")] = new long[5];
+            var problems = new List<object>();
+            var codecs = new Dictionary<string, int>();
+            long withRtsp = 0, regOk = 0, regErr = 0;
+            foreach (Row c in cams)
+            {
+                Row n; long nid = RL(c, "nvr_id");
+                if (!byNvr.TryGetValue(nid, out n)) continue;
+                long[] p = per[nid];
+                p[0]++;
+                bool hasUrl = RS(c, "rtsp_url").Length > 0;
+                if (hasUrl) { p[1]++; withRtsp++; }
+                long reg = RL(c, "reg_status");
+                if (reg == 1) { p[2]++; regOk++; } else if (reg == 2) { p[3]++; regErr++; }
+                string cd = RS(c, "codec").ToLowerInvariant(); if (cd.Length == 0) cd = "-";
+                int cc; codecs.TryGetValue(cd, out cc); codecs[cd] = cc + 1;
+                string why = null;
+                long[] lv = null;
+                if (!hasUrl) why = "Belum ada URL RTSP (jalankan Deteksi)";
+                else if (reg == 2) why = "NVR melaporkan kamera error";
+                if (relayOn)
+                {
+                    string pn = MediaMtxRelay.PathName(RS(n, "host"), (int)RL(n, "port"), (int)RL(c, "channel"), false);
+                    if (live.TryGetValue(pn, out lv))
+                    {
+                        if (lv[0] == 1) p[4]++;
+                        else if (why == null && lv[1] > 0) why = "Relay: stream belum siap, ada penonton";
+                    }
+                }
+                if (why != null && problems.Count < 200)
+                    problems.Add(new Dictionary<string, object> { { "nvr", RS(n, "name") }, { "ch", RL(c, "channel") }, { "name", RS(c, "name") }, { "why", why } });
+            }
+            var perList = new List<object>();
+            foreach (Row n in nvrs)
+            {
+                long[] p = per[RL(n, "id")];
+                perList.Add(new Dictionary<string, object> { { "id", RL(n, "id") }, { "name", RS(n, "name") }, { "host", RS(n, "host") }, { "cams", p[0] }, { "rtsp", p[1] }, { "ok", p[2] }, { "err", p[3] }, { "ready", p[4] } });
+            }
+            o["nvrs"] = perList;
+            o["problems"] = problems;
+            o["codecs"] = codecs;
+            o["totals"] = new Dictionary<string, object> { { "nvrs", nvrs.Count }, { "cameras", cams.Count }, { "rtsp", withRtsp }, { "regOk", regOk }, { "regErr", regErr } };
+            return o;
         }
 
         object SchemaInfo()

@@ -51,6 +51,9 @@ thead th{border-top:0;border-bottom:2px solid var(--line);white-space:nowrap}
 tbody tr:hover{background:#00000008}
 td.act{white-space:nowrap;text-align:right}
 td .mono{font:12px ui-monospace,Consolas,monospace;color:var(--mut);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.hg{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.hb{border:1px solid var(--bd,#dee2e6);border-radius:4px;padding:10px 12px}.hb h4{margin:0 0 6px;font-size:14px}
+.kv{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dashed rgba(128,128,128,.25);font-size:13px}.kv:last-child{border:0}.hs{font-size:12px;color:var(--mut);margin-top:6px}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;color:#fff;background:var(--mut)}
 .badge.ok{background:var(--ok)}.badge.bad{background:var(--bad)}.badge.info{background:var(--info)}.badge.warn{background:var(--warn);color:#212529}
 .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -119,7 +122,7 @@ pre.log{margin:8px 0 0;max-height:240px;overflow:auto;font:12px ui-monospace,Con
 <div id="app"></div>
 <div id="modal"></div>
 <script>
-var tok=sessionStorage.getItem('tok'),me=null,schema=[],data={},ver=0,page='home',job=null,poll=null,msg=null,flt={nvr:'',q:''};
+var hp=null,tok=sessionStorage.getItem('tok'),me=null,schema=[],data={},ver=0,page='home',job=null,poll=null,msg=null,flt={nvr:'',q:''};
 var META={
  nvrs:{t:'NVR',ic:'▣',lbl:{name:'Nama',host:'Host / IP',port:'Port',use_https:'HTTPS',username:'User NVR',password:'Password NVR',max_channels:'Jumlah kanal',brand:'Merek',model:'Model',location:'Lokasi',notes:'Catatan',cam_user:'User kamera (RTSP)',cam_pass:'Password kamera (RTSP)',rtsp_template:'Template RTSP substream',substream_param:'Parameter substream NVR'},
   full:['rtsp_template','substream_param','notes'],hint:{rtsp_template:'Contoh: rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1'}},
@@ -156,18 +159,51 @@ function render(){
   var admin=me.is_admin==1,cnt=function(r){return (data[r]||[]).length};
   var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Konfigurasi</div>';
   ['nvrs','cameras','groups','users'].forEach(function(r){if(!data[r])return;menu+='<a data-p="'+r+'" class="'+(page==r?'on':'')+'"><span class="ic">'+META[r].ic+'</span>'+META[r].t+'<em>'+cnt(r)+'</em></a>'});
+  if(admin)menu+='<div class="hd">Sistem</div><a data-p="audit" class="'+(page=='audit'?'on':'')+'"><span class="ic">≡</span>Log audit</a>';
   a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">IP</div><span><b>IPRO</b> NVR</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (hanya baca)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Versi konfigurasi: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Keluar</button></div><div id="content"></div></div></div>';
   [].forEach.call(a.querySelectorAll('#side a'),function(x){x.onclick=function(){page=x.dataset.p;msg=null;document.body.classList.remove('open');render()}});
   a.querySelector('.burger').onclick=function(){document.body.classList.toggle('open')};
   a.querySelector('#lo').onclick=function(){api('POST','/api/logout').then(logout,logout)};
   var c=a.querySelector('#content');
-  var body=page=='home'?home():listPage(page);
+  if(hp){clearInterval(hp);hp=null}
+  var body=page=='home'?home():page=='audit'?auditPage():listPage(page);
   c.appendChild(body);
   body.insertBefore($('<div id="job" class="card" style="display:none"></div>'),body.children[1]);   // di bawah judul halaman
   if(msg){c.insertBefore($('<div class="alert '+(msg.bad?'er':'ok')+(msg.busy?' busy':'')+'">'+(msg.busy?'<span class="spin"></span>':'')+esc(msg.t)+'</div>'),c.firstChild);msg=null}
   drawJob();
 }
 function head(title,sub){return $('<div class="ch"><h1>'+esc(title)+'</h1><div class="bc">Beranda / <b>'+esc(sub||title)+'</b></div></div>')}
+
+/* ---------- kesehatan sistem & log audit ---------- */
+function dur(sec){var d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return (d?d+' hari ':'')+(h||d?h+' jam ':'')+m+' menit'}
+function loadHealth(){
+  api('GET','/api/status').then(function(st){
+    var e=document.getElementById('hl');if(!e)return;
+    var sv=st.server||{},ry=st.relay||{},t=st.totals||{};
+    function kv(k,v){return '<div class="kv"><span>'+k+'</span><b>'+v+'</b></div>'}
+    var disk=sv.diskTotalGB?(sv.diskFreeGB+' GB bebas / '+sv.diskTotalGB+' GB'):'-';
+    var diskBad=sv.diskTotalGB&&sv.diskFreeGB/sv.diskTotalGB<0.1;
+    var cod=Object.keys(st.codecs||{}).map(function(k){return esc(k)+': '+st.codecs[k]}).join(' &nbsp; ');
+    var h='<div class="hg">'+
+     '<div class="hb"><h4>Server</h4>'+kv('Aktif sejak',esc(sv.started||'-'))+kv('Berjalan',dur(sv.uptime||0))+kv('Memori',(sv.memMB||0)+' MB')+kv('Database',(sv.dbMB||0)+' MB')+kv('Disk',(diskBad?'<span class="badge bad">':'<span>')+disk+'</span>')+kv('Sesi login',sv.sessions||0)+'</div>'+
+     '<div class="hb"><h4>Relay RTSP</h4>'+kv('Status','<span class="badge '+(ry.enabled?'ok':'warn')+'">'+(ry.enabled?'Aktif':'Tidak aktif')+'</span>')+kv('Path siap / terdaftar',(ry.readyPaths||0)+' / '+(ry.livePaths||0))+kv('Penonton (client)',ry.readers||0)+kv('Port',ry.port||'-')+'</div>'+
+     '<div class="hb"><h4>Kamera</h4>'+kv('NVR',t.nvrs||0)+kv('Kamera',t.cameras||0)+kv('Dengan URL RTSP',(t.rtsp||0)+' / '+(t.cameras||0))+kv('Normal / error di NVR',(t.regOk||0)+' / '+(t.regErr?'<span class="badge bad">'+t.regErr+'</span>':0))+'<div class="hs">Codec: '+(cod||'-')+'</div></div></div>';
+    var rows=(st.nvrs||[]).map(function(n){var bad=n.err>0||n.rtsp<n.cams;return '<tr><td>'+esc(n.name)+'<br><small>'+esc(n.host)+'</small></td><td>'+n.cams+'</td><td>'+n.rtsp+'</td><td>'+n.ready+'</td><td>'+(n.err?'<span class="badge bad">'+n.err+'</span>':'0')+'</td><td><span class="badge '+(bad?'warn':'ok')+'">'+(bad?'Perlu dicek':'Baik')+'</span></td></tr>'}).join('');
+    h+='<table style="margin-top:12px"><thead><tr><th>NVR</th><th>Kamera</th><th>Dengan RTSP</th><th>Siap di relay</th><th>Error</th><th>Status</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6" class="empty">Belum ada NVR.</td></tr>')+'</tbody></table>';
+    var pr=st.problems||[];
+    if(pr.length)h+='<h4 style="margin:14px 0 6px">Kamera bermasalah ('+pr.length+(pr.length>=200?'+':'')+')</h4><table><thead><tr><th>NVR</th><th>Kanal</th><th>Nama</th><th>Masalah</th></tr></thead><tbody>'+pr.map(function(p){return '<tr><td>'+esc(p.nvr)+'</td><td>'+p.ch+'</td><td>'+esc(p.name)+'</td><td>'+esc(p.why)+'</td></tr>'}).join('')+'</tbody></table>';
+    e.innerHTML=h;
+  }).catch(function(){var e=document.getElementById('hl');if(e)e.textContent='Status sistem tidak tersedia.'})
+}
+function auditPage(){
+  var w=document.createElement('div');w.appendChild(head('Log audit','Log audit'));
+  var c=$('<div class="card nt"><div class="ct"><h3>Siapa mengubah apa</h3></div><div class="cb"><div class="f1" style="margin-bottom:8px"><input id="aq" placeholder="Cari user, aksi, rincian, IP…" style="max-width:320px"> <button class="btn" id="ar">Muat ulang</button></div><div id="at">Memuat...</div></div></div>');
+  w.appendChild(c);
+  function load(){var q=c.querySelector('#aq').value;api('GET','/api/audit?n=500&q='+encodeURIComponent(q)).then(function(l){
+    var t='<table><thead><tr><th>Waktu</th><th>User</th><th>IP</th><th>Aksi</th><th>Rincian</th></tr></thead><tbody>'+l.map(function(r){return '<tr><td style="white-space:nowrap">'+esc(r.time)+'</td><td>'+esc(r.user)+'</td><td>'+esc(r.ip)+'</td><td>'+(/gagal/.test(r.action)?'<span class="badge bad">'+esc(r.action)+'</span>':esc(r.action))+'</td><td>'+esc(r.detail)+'</td></tr>'}).join('')+(l.length?'':'<tr><td colspan="5" class="empty">Belum ada catatan.</td></tr>')+'</tbody></table>';
+    c.querySelector('#at').innerHTML=t}).catch(function(e){c.querySelector('#at').textContent=e.message})}
+  setTimeout(function(){var q=c.querySelector('#aq');q.oninput=function(){clearTimeout(q._t);q._t=setTimeout(load,300)};c.querySelector('#ar').onclick=load;load()},0);
+  return w}
 
 /* ---------- dashboard ---------- */
 function home(){
@@ -187,11 +223,9 @@ function home(){
       +(me.is_admin==1&&r.enabled?' <button class="btn sm" id="rls">Sinkron ulang</button>':'');
     var b=document.getElementById('rls');if(b)b.onclick=function(){api('POST','/api/relay').then(function(){e.textContent='Sinkron ulang dijadwalkan...'})}
   }).catch(function(){var e=document.getElementById('rly');if(e)e.textContent='Status relay tidak tersedia.'});
-  var c=$('<div class="card nt"><div class="ct"><h3>Ringkasan per NVR</h3></div><div class="cb"></div></div>');
-  var t='<table><thead><tr><th>NVR</th><th>Alamat</th><th>Kamera</th><th>Dengan RTSP</th></tr></thead><tbody>';
-  (data.nvrs||[]).forEach(function(n){var k=cams.filter(function(x){return x.nvr_id==n.id});var r=k.filter(function(x){return x.rtsp_url}).length;t+='<tr><td>'+esc(n.name)+'</td><td>'+esc(n.host)+':'+n.port+'</td><td>'+k.length+' / '+n.max_channels+'</td><td><span class="badge '+(k.length&&r==k.length?'ok':'warn')+'">'+r+' / '+k.length+'</span></td></tr>'});
-  if(!(data.nvrs||[]).length)t+='<tr><td colspan="4" class="empty">Belum ada NVR. Buka menu NVR untuk mendaftarkan.</td></tr>';
-  c.querySelector('.cb').innerHTML=t+'</tbody></table>';w.appendChild(c);return w}
+  var hc=$('<div class="card nt"><div class="ct"><h3>Kesehatan sistem</h3></div><div class="cb" id="hl">Memuat...</div></div>');w.appendChild(hc);
+  loadHealth();hp=setInterval(function(){if(page=='home')loadHealth();else{clearInterval(hp);hp=null}},15000);
+  return w}
 
 /* ---------- daftar ---------- */
 function cellFor(r,row){

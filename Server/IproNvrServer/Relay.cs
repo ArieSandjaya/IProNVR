@@ -358,6 +358,35 @@ namespace IproNvrServer
         public void Resync() { lastVersion = -1; }
 
         /// <summary>Info untuk client (user sudah login).</summary>
+        /// <summary>Kondisi path di MediaMTX: nama -> [siap (1/0), jumlah pembaca, byte diterima]. Kosong bila relay tidak aktif / API tidak menjawab.</summary>
+        public Dictionary<string, long[]> LivePaths()
+        {
+            var res = new Dictionary<string, long[]>();
+            if (!Running) return res;
+            try
+            {
+                int code;
+                string r = Api("GET", "/v3/paths/list?itemsPerPage=5000", null, out code);
+                if (code != 200 || string.IsNullOrEmpty(r)) return res;
+                var d = new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Deserialize<Dictionary<string, object>>(r);
+                object io;
+                var items = d.TryGetValue("items", out io) ? io as System.Collections.IList : null;
+                if (items == null) return res;
+                foreach (object o in items)
+                {
+                    var it = o as Dictionary<string, object>;
+                    if (it == null) continue;
+                    object nm, rd, rs, br;
+                    it.TryGetValue("name", out nm); it.TryGetValue("ready", out rd); it.TryGetValue("readers", out rs); it.TryGetValue("bytesReceived", out br);
+                    long bytes = 0; if (br != null) long.TryParse(Convert.ToString(br, System.Globalization.CultureInfo.InvariantCulture), out bytes);
+                    var rl = rs as System.Collections.IList;
+                    if (nm != null) res[Convert.ToString(nm)] = new long[] { rd is bool && (bool)rd ? 1 : 0, rl == null ? 0 : rl.Count, bytes };
+                }
+            }
+            catch { }
+            return res;
+        }
+
         public Dictionary<string, object> Info(bool admin)
         {
             var o = new Dictionary<string, object>();
