@@ -118,6 +118,34 @@ pre.log{margin:8px 0 0;max-height:240px;overflow:auto;font:12px ui-monospace,Con
 .ctree .ci em{margin-left:auto;font-style:normal;font-size:11px}
 .ghint{color:var(--mut);font-size:12px;margin-top:6px}
 @media(max-width:900px){.ge{grid-template-columns:1fr}}
+
+.x3{display:grid;grid-template-columns:280px minmax(0,1fr) 400px;gap:10px;height:calc(100vh - 170px);min-height:480px}
+.p3{background:#fff;border:1px solid var(--line);border-top:3px solid var(--acc);border-radius:3px;display:flex;flex-direction:column;min-height:0}
+.p3 .ph{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);background:#fafbfc}
+.p3 .pb{overflow:auto;flex:1;padding:0}
+.p3 .dq{width:calc(100% - 16px);margin:8px;padding:5px 8px;border:1px solid #ced4da;border-radius:4px}
+.th{padding:6px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);background:#f4f6f8;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.tn{padding:5px 10px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn:hover{background:#eef4fb}.tn.sel{background:#d9e9fb;font-weight:600}.tn.c2{padding-left:34px;font-weight:400}
+.tn em{margin-left:auto;font-style:normal;font-size:11px;color:var(--mut)}.tn .ar{width:14px;display:inline-block;color:var(--mut)}
+.bd{background:var(--bad);color:#fff;border-radius:8px;padding:0 5px;font-size:11px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#adb5bd}.dot.g{background:var(--ok)}.dot.r{background:var(--bad)}
+.p3 table{width:100%;border-collapse:collapse}.p3 th,.p3 td{padding:6px 10px;text-align:left;border-bottom:1px solid #eef0f2}
+.p3 th{position:sticky;top:0;background:#fafbfc;font-size:12px;color:var(--mut)}
+.p3 tr.rw{cursor:pointer}.p3 tr.rw:hover{background:#eef4fb}.p3 tr.rw.sel{background:#d9e9fb}
+.p3 .tb{padding:8px 10px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.p3 .em{padding:18px 14px;color:var(--mut)}
+.pt{padding:10px 12px 4px;font-size:17px;font-weight:600}.pt small{font-weight:400;color:var(--mut);font-size:12px;margin-left:6px}
+.pvw{margin:6px 10px;background:#0c0f14;border-radius:4px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pvw img{width:100%;height:100%;object-fit:contain}.pvw .pm{color:#9aa3b5;padding:10px;text-align:center}
+.tabs{display:flex;border-bottom:1px solid var(--line);padding:0 10px;margin-top:4px}
+.tabs a{padding:7px 12px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}.tabs a.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;padding:10px 12px}.kv span{color:var(--mut)}.kv b{font-weight:500;word-break:break-all}
+.mono{font-family:Consolas,monospace;font-size:12px}
+.fm{padding:8px 12px}.fm label{display:block;font-weight:600;margin:8px 0 2px;font-size:13px}.fm input{width:100%;padding:5px 8px;border:1px solid #ced4da;border-radius:4px}
+.dt{margin:10px 12px;padding:8px;background:#f4f6f8;border-radius:4px;white-space:pre-wrap;font-size:12px}
+.p3 table.mini td{vertical-align:top}
+@media(max-width:1100px){.x3{grid-template-columns:1fr;height:auto}.p3 .pb{max-height:420px}}
 </style></head><body>
 <div id="app"></div>
 <div id="modal"></div>
@@ -157,7 +185,7 @@ function render(){
   if(!tok){loginView();return}
   if(!me){a.innerHTML='';return}
   var admin=me.is_admin==1,cnt=function(r){return (data[r]||[]).length};
-  var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Konfigurasi</div>';
+  var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Konfigurasi</div><a data-p="devices" class="'+(page=='devices'?'on':'')+'"><span class="ic">⊞</span>Perangkat</a>';
   ['nvrs','cameras','groups','users'].forEach(function(r){if(!data[r])return;menu+='<a data-p="'+r+'" class="'+(page==r?'on':'')+'"><span class="ic">'+META[r].ic+'</span>'+META[r].t+'<em>'+cnt(r)+'</em></a>'});
   if(admin)menu+='<div class="hd">Sistem</div><a data-p="audit" class="'+(page=='audit'?'on':'')+'"><span class="ic">≡</span>Log audit</a>';
   a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">A3</div><span><b>AMAN 300</b> Server</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (hanya baca)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Versi konfigurasi: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Keluar</button></div><div id="content"></div></div></div>';
@@ -166,7 +194,7 @@ function render(){
   a.querySelector('#lo').onclick=function(){api('POST','/api/logout').then(logout,logout)};
   var c=a.querySelector('#content');
   if(hp){clearInterval(hp);hp=null}
-  var body=page=='home'?home():page=='audit'?auditPage():listPage(page);
+  var body=page=='home'?home():page=='audit'?auditPage():page=='devices'?devPage():listPage(page);
   c.appendChild(body);
   body.insertBefore($('<div id="job" class="card" style="display:none"></div>'),body.children[1]);   // di bawah judul halaman
   if(msg){c.insertBefore($('<div class="alert '+(msg.bad?'er':'ok')+(msg.busy?' busy':'')+'">'+(msg.busy?'<span class="spin"></span>':'')+esc(msg.t)+'</div>'),c.firstChild);msg=null}
@@ -441,6 +469,138 @@ function genChannels(){
   var todo=[];for(var i=1;i<=n;i++)if(!have[i])todo.push(i);
   (function next(){if(!todo.length){msg={t:'Kanal dibuat. Isi IP kamera di tiap baris (Edit), lalu jalankan Deteksi RTSP.'};reload();return}
     var ch=todo.shift();api('POST','/api/cameras',{nvr_id:nv,channel:ch,name:'CH'+ch}).then(next).catch(function(e){say(e.message,true)})})()}
+
+/* ---------- halaman Perangkat: tata letak 3 panel ala XProtect Management Client (Navigasi situs | Ikhtisar | Properti + Preview) ---------- */
+var dev={sel:null,open:{},gopen:{},q:'',tab:'info',live:0};
+function devCams(nid){return (data.cameras||[]).filter(function(c){return c.nvr_id==nid})}
+function devFind(t,id){return (t=='nvr'?data.nvrs:t=='cam'?data.cameras:data.groups||[]).filter(function(x){return x.id==id})[0]}
+function devDot(c){return '<i class="dot '+(c.reg_status==1?'g':c.reg_status==2?'r':'')+'" title="'+(c.reg_status==1?'Normal di NVR':c.reg_status==2?'Koneksi error':'Belum terdaftar di NVR')+'"></i>'}
+function devPage(){
+  var w=$('<div></div>');w.appendChild(head('Perangkat','Perangkat'));
+  var x=$('<div class="x3"></div>');w.appendChild(x);x.onclick=function(e){devClick(x,e)};
+  devFill(x);return w}
+function devStop(){dev.live++;var b=document.getElementById('dvbox');if(b){var im=b.querySelector('img');if(im){im.src='';}}}
+function devFill(x){
+  devStop();
+  x.innerHTML='<div class="p3"><div class="ph">Navigasi situs</div><div class="pb">'+devNav()+'</div></div>'+
+    '<div class="p3"><div class="ph">Ikhtisar</div><div class="pb">'+devOver()+'</div></div>'+
+    '<div class="p3"><div class="ph">Properti</div><div class="pb">'+devProps()+'</div></div>';
+  var q=x.querySelector('#dvq');if(q){q.oninput=function(){dev.q=q.value;var p=q.selectionStart;devFill(x);var n=x.querySelector('#dvq');n.focus();n.setSelectionRange(p,p)}}
+  var sv=x.querySelector('[data-a=save]');if(sv)sv.onclick=function(){devSave(x)}}
+function devNav(){
+  var q=dev.q.trim().toLowerCase(),h='<input id="dvq" class="dq" placeholder="Cari kamera / NVR / group" value="'+esc(dev.q)+'">';
+  h+='<div class="th">▣ Perangkat</div>';
+  (data.nvrs||[]).forEach(function(n){
+    var cams=devCams(n.id),hit=cams.filter(function(c){return !q||(c.name+' '+c.ip_address+' '+c.location).toLowerCase().indexOf(q)>=0});
+    if(q&&!hit.length&&n.name.toLowerCase().indexOf(q)<0)return;
+    var open=q?true:!!dev.open[n.id],sel=dev.sel&&dev.sel.t=='nvr'&&dev.sel.id==n.id,bad=cams.filter(function(c){return c.reg_status==2}).length;
+    h+='<div class="tn'+(sel?' sel':'')+'" data-a="sel" data-t="nvr" data-i="'+n.id+'"><span class="ar" data-a="tog" data-i="'+n.id+'">'+(open?'▾':'▸')+'</span>▣ '+esc(n.name)+'<em>'+(bad?'<b class="bd">'+bad+'</b> ':'')+cams.length+'</em></div>';
+    if(open)(q?hit:cams).forEach(function(c){var s=dev.sel&&dev.sel.t=='cam'&&dev.sel.id==c.id;
+      h+='<div class="tn c2'+(s?' sel':'')+'" data-a="sel" data-t="cam" data-i="'+c.id+'">'+devDot(c)+' '+esc(c.name||('CH'+c.channel))+'</div>'});
+  });
+  h+='<div class="th">▦ Group</div>';
+  var gs=data.groups||[],byP={};gs.forEach(function(g){var p=g.parent_id&&gs.some(function(x){return x.id==g.parent_id})?g.parent_id:0;(byP[p]=byP[p]||[]).push(g)});
+  function rec(p,d,seen){(byP[p]||[]).forEach(function(g){
+    if(seen[g.id])return;var kids=byP[g.id]||[],open=!!dev.gopen[g.id]||(q&&true),sel=dev.sel&&dev.sel.t=='grp'&&dev.sel.id==g.id;
+    if(q&&g.name.toLowerCase().indexOf(q)<0&&!kids.length)return;
+    h+='<div class="tn'+(sel?' sel':'')+'" style="padding-left:'+(10+d*16)+'px" data-a="sel" data-t="grp" data-i="'+g.id+'"><span class="ar" data-a="gtog" data-i="'+g.id+'">'+(kids.length?(open?'▾':'▸'):'&nbsp;')+'</span>▦ '+esc(g.name)+'</div>';
+    if(kids.length&&open){var s2={};for(var k in seen)s2[k]=1;s2[g.id]=1;rec(g.id,d+1,s2)}})}
+  rec(0,0,{});
+  if(!gs.length)h+='<div class="em">Belum ada group.</div>';
+  return h}
+function devOver(){
+  var s=dev.sel,admin=me.is_admin==1,h='';
+  if(!s){
+    h+='<table><thead><tr><th>NVR</th><th>Alamat</th><th>Merek</th><th>Kamera</th><th>RTSP</th></tr></thead><tbody>';
+    (data.nvrs||[]).forEach(function(n){var c=devCams(n.id);h+='<tr class="rw" data-a="sel" data-t="nvr" data-i="'+n.id+'"><td>'+esc(n.name)+'</td><td>'+esc(n.host)+':'+n.port+'</td><td>'+esc(n.brand||'ipro')+'</td><td>'+c.length+' / '+n.max_channels+'</td><td>'+c.filter(function(x){return x.rtsp_url}).length+'</td></tr>'});
+    if(!(data.nvrs||[]).length)h+='<tr><td colspan="5" class="empty">Belum ada NVR.</td></tr>';
+    h+='</tbody></table>';
+    if(admin)h='<div class="tb"><button class="btn p" data-a="wiz">＋ Tambah perangkat (wizard)</button><button class="btn" data-a="addnvr">＋ NVR</button></div>'+h;
+    return h}
+  if(s.t=='grp'){
+    var g=devFind('grp',s.id);if(!g)return '';
+    var kids=(data.groups||[]).filter(function(x){return x.parent_id==g.id});
+    h+='<table><thead><tr><th>Item</th><th>Jenis</th><th>Keterangan</th></tr></thead><tbody>';
+    kids.forEach(function(k){h+='<tr class="rw" data-a="sel" data-t="grp" data-i="'+k.id+'"><td>▦ '+esc(k.name)+'</td><td>Group</td><td>'+(k.slots||'').split(',').filter(function(z){return z}).length+' area</td></tr>'});
+    (g.slots||'').split(',').forEach(function(sl){var p=sl.split(':');if(p.length!=2)return;var c=(data.cameras||[]).filter(function(x){return x.nvr_id==p[0]&&x.channel==p[1]})[0];if(c)h+='<tr class="rw" data-a="sel" data-t="cam" data-i="'+c.id+'"><td>'+devDot(c)+' '+esc(c.name)+'</td><td>Kamera</td><td>'+esc(nvrName(c.nvr_id))+' CH'+c.channel+'</td></tr>'});
+    h+='</tbody></table>';return h}
+  var nid=s.t=='nvr'?s.id:(devFind('cam',s.id)||{}).nvr_id,cams=devCams(nid);
+  if(admin)h+='<div class="tb"><button class="btn p" data-a="wiz">＋ Tambah perangkat</button><button class="btn i" data-a="disc" data-i="'+nid+'">Deteksi RTSP</button><button class="btn" data-a="fetch" data-i="'+nid+'">Deteksi kamera dari NVR</button><button class="btn" data-a="addcam" data-i="'+nid+'">＋ Kamera</button></div>';
+  h+='<table><thead><tr><th>Ch</th><th>Nama</th><th>IP</th><th>Stream</th><th>Lokasi</th></tr></thead><tbody>';
+  cams.forEach(function(c){var on=s.t=='cam'&&s.id==c.id;
+    h+='<tr class="rw'+(on?' sel':'')+'" data-a="sel" data-t="cam" data-i="'+c.id+'"><td>'+devDot(c)+' '+c.channel+'</td><td>'+esc(c.name)+'</td><td>'+esc(c.ip_address)+'</td><td>'+(c.codec?'<span class="badge ok">'+esc(c.codec)+(c.width?' '+c.width+'×'+c.height:'')+'</span>':(c.rtsp_url?'<span class="badge info">URL ada</span>':'<span class="badge warn">belum</span>'))+'</td><td>'+esc(c.location)+'</td></tr>'});
+  if(!cams.length)h+='<tr><td colspan="5" class="empty">NVR ini belum punya kamera.</td></tr>';
+  return h+'</tbody></table>'}
+function devTabs(list){return '<div class="tabs">'+list.map(function(t){return '<a data-a="tab" data-i="'+t[0]+'" class="'+(dev.tab==t[0]?'on':'')+'">'+t[1]+'</a>'}).join('')+'</div>'}
+function devFld(l,n,v,t){return '<label>'+l+'</label><input data-f="'+n+'" type="'+(t||'text')+'" value="'+esc(v)+'"'+(t=='password'?' autocomplete="new-password" placeholder="(kosong = tidak diubah)"':'')+'>'}
+function devProps(){
+  var s=dev.sel,admin=me.is_admin==1;
+  if(!s)return '<div class="em">Pilih NVR, kamera, atau group di panel kiri.<br>Klik dua kali tidak diperlukan; satu klik sudah menampilkan propertinya.</div>';
+  if(s.t=='grp'){
+    var g=devFind('grp',s.id);if(!g)return '';
+    var n=(g.slots||'').split(',').filter(function(z){return z}).length;
+    return '<div class="pt">▦ '+esc(g.name)+'</div><div class="kv"><span>Jalur</span><b>'+esc(grpPath(g))+'</b><span>Layout</span><b>'+layIcon(g.layout)+esc(g.layout)+'</b><span>Area terisi</span><b>'+n+'</b><span>Pemilik</span><b>'+esc(g.owner||'Semua user')+'</b></div>'+
+      (admin?'<div class="tb"><button class="btn p" data-a="edit" data-t="grp" data-i="'+g.id+'">Ubah group…</button><button class="btn d" data-a="del" data-t="grp" data-i="'+g.id+'">Hapus</button></div>':'')}
+  if(s.t=='nvr'){
+    var v=devFind('nvr',s.id);if(!v)return '';var c=devCams(v.id);
+    return '<div class="pt">▣ '+esc(v.name)+'</div>'+devTabs([['info','Info'],['cams','Kamera']])+
+      (dev.tab=='cams'?'<div class="kv"><span>Kamera</span><b>'+c.length+' / '+v.max_channels+'</b><span>Dengan URL RTSP</span><b>'+c.filter(function(x){return x.rtsp_url}).length+'</b><span>Normal di NVR</span><b>'+c.filter(function(x){return x.reg_status==1}).length+'</b><span>Error</span><b>'+c.filter(function(x){return x.reg_status==2}).length+'</b></div>'+
+        (admin?'<div class="tb"><button class="btn i" data-a="disc" data-i="'+v.id+'">Deteksi RTSP</button><button class="btn" data-a="fetch" data-i="'+v.id+'">Deteksi kamera dari NVR</button></div>':''):
+       '<div class="kv"><span>Alamat</span><b>'+esc(v.host)+':'+v.port+(v.use_https?' (https)':'')+'</b><span>Merek</span><b>'+esc(v.brand||'ipro')+'</b><span>Model</span><b>'+esc(v.model)+'</b><span>Lokasi</span><b>'+esc(v.location)+'</b><span>User NVR</span><b>'+esc(v.username)+'</b><span>User kamera</span><b>'+esc(v.cam_user)+'</b><span>Template RTSP</span><b class="mono">'+esc(v.rtsp_template)+'</b><span>Catatan</span><b>'+esc(v.notes)+'</b></div>'+
+        (admin?'<div class="tb"><button class="btn p" data-a="edit" data-t="nvr" data-i="'+v.id+'">Ubah NVR…</button><button class="btn" data-a="pass" data-i="'+v.id+'">Password</button><button class="btn d" data-a="del" data-t="nvr" data-i="'+v.id+'">Hapus</button></div>':''))}
+  var k=devFind('cam',s.id);if(!k)return '';
+  var tab=dev.tab=='cams'?'info':dev.tab,h='<div class="pt">◉ '+esc(k.name||('CH'+k.channel))+' <small>'+esc(nvrName(k.nvr_id))+' · CH'+k.channel+'</small></div>';
+  h+='<div class="pvw" id="dvbox"><div class="pm">Pratinjau live belum dimulai.</div></div><div class="tb"><button class="btn i" data-a="live" data-i="'+k.id+'">▶ Live</button><button class="btn" data-a="stop">■ Stop</button></div>';
+  h+=devTabs([['info','Info'],['str','Stream'],['det','Deteksi']]);
+  if(tab=='str'){
+    var L=(k.rtsp_streams||'').split('\n').filter(function(z){return z.trim()});
+    h+=L.length?'<table class="mini"><thead><tr><th>Stream</th><th></th></tr></thead><tbody>'+L.map(function(l,i){var p=l.split('\t');return '<tr><td><div class="mono">'+esc(p[0].replace(/\/\/[^@\/]*@/,'//'))+'</div><span class="badge info">'+esc(p[1]||'')+'</span></td><td><button class="btn sm i" data-a="live" data-i="'+k.id+'" data-s="'+i+'">▶</button></td></tr>'}).join('')+'</tbody></table>':'<div class="em">Belum ada daftar stream. Jalankan Deteksi RTSP.</div>';
+    h+='<div class="kv"><span>Substream</span><b class="mono">'+esc((k.rtsp_url||'').replace(/\/\/[^@\/]*@/,'//'))+'</b><span>Stream utama</span><b class="mono">'+esc((k.rtsp_main_url||'').replace(/\/\/[^@\/]*@/,'//'))+'</b></div>'}
+  else if(tab=='det'){
+    h+='<div class="kv"><span>Codec</span><b>'+esc(k.codec||'-')+'</b><span>Resolusi</span><b>'+(k.width?k.width+'×'+k.height:'-')+'</b><span>Status di NVR</span><b>'+(k.reg_status==1?'Normal':k.reg_status==2?'Error koneksi':'Belum terdaftar')+'</b></div><pre class="dt">'+esc(k.scan_detail||'Belum pernah dideteksi.')+'</pre>'+
+      (admin?'<div class="tb"><button class="btn i" data-a="disc1" data-i="'+k.id+'">Deteksi kamera ini</button></div>':'')}
+  else{
+    h+=admin?'<div class="fm">'+devFld('Nama','name',k.name)+devFld('IP kamera','ip_address',k.ip_address)+devFld('Lokasi','location',k.location)+devFld('User kamera (khusus)','cam_user',k.cam_user)+devFld('Password kamera (khusus)','cam_pass','','password')+devFld('URL RTSP substream','rtsp_url',k.rtsp_url)+devFld('URL RTSP stream utama','rtsp_main_url',k.rtsp_main_url)+devFld('Catatan','note',k.note)+'</div><div class="tb"><button class="btn p" data-a="save">Simpan</button><button class="btn" data-a="edit" data-t="cam" data-i="'+k.id+'">Ubah lengkap…</button><button class="btn d" data-a="del" data-t="cam" data-i="'+k.id+'">Hapus</button></div>':
+      '<div class="kv"><span>IP</span><b>'+esc(k.ip_address)+'</b><span>Lokasi</span><b>'+esc(k.location)+'</b><span>Catatan</span><b>'+esc(k.note)+'</b></div>'}
+  return h}
+function devSave(x){
+  var s=dev.sel,b={id:s.id},ok=true;
+  [].forEach.call(x.querySelectorAll('[data-f]'),function(i){if(i.dataset.f=='cam_pass'&&!i.value)return;b[i.dataset.f]=i.value});
+  api('POST','/api/cameras',b).then(function(){msg={t:'Tersimpan.'};return reload()}).catch(function(e){alert(e.message)})}
+function devLive(x,id,si){
+  var k=devFind('cam',id);if(!k)return;devStop();var my=dev.live,box=document.getElementById('dvbox');if(!box)return;
+  var b={nvr_id:k.nvr_id,ip_address:k.ip_address,cam_user:k.cam_user||'',cam_pass:'',rtsp_url:k.rtsp_url||'',channel:k.channel};
+  if(si!=null){var L=(k.rtsp_streams||'').split('\n').filter(function(z){return z.trim()});if(L[si])b.rtsp_url=L[si].split('\t')[0]}
+  box.innerHTML='<div class="pm">Menghubungkan ke kamera…</div>';
+  api('POST','/api/preview',b).then(function(r2){
+    if(dev.live!=my)return;
+    var im=new Image();
+    im.onerror=function(){if(dev.live!=my)return;fetch('/api/preview/'+r2.key,{headers:{Authorization:'Bearer '+tok}}).then(function(z){return z.json()}).then(function(j){box.innerHTML='<div class="pm">'+esc(j.error||'Stream berhenti.')+'</div>'})};
+    im.src='/api/stream?k='+r2.key+'&t='+tok+'&w=640';
+    var first=setInterval(function(){if(dev.live!=my){clearInterval(first);im.src='';return}if(im.naturalWidth>0){clearInterval(first);box.innerHTML='';box.appendChild(im)}},300);
+    setTimeout(function(){clearInterval(first)},25000)
+  }).catch(function(e){box.innerHTML='<div class="pm">'+esc(e.message)+'</div>'})}
+function devClick(x,e){
+  var t=e.target.closest('[data-a]');if(!t||!x.contains(t))return;
+  var a=t.dataset.a,i=+t.dataset.i,admin=me.is_admin==1;
+  if(a=='tog'){dev.open[i]=!dev.open[i];devFill(x);return}
+  if(a=='gtog'){dev.gopen[i]=!dev.gopen[i];devFill(x);return}
+  if(a=='sel'){dev.sel={t:t.dataset.t,id:i};if(dev.sel.t=='nvr')dev.open[i]=true;if(dev.sel.t=='cam'){var c=devFind('cam',i);if(c)dev.open[c.nvr_id]=true;if(dev.tab=='cams')dev.tab='info'}if(dev.sel.t=='nvr'&&dev.tab!='info'&&dev.tab!='cams')dev.tab='info';if(dev.sel.t=='grp')dev.gopen[i]=true;devFill(x);return}
+  if(a=='tab'){dev.tab=t.dataset.i;devFill(x);return}
+  if(a=='live'){devLive(x,i,t.dataset.s!=null?+t.dataset.s:null);return}
+  if(a=='stop'){devStop();var b=document.getElementById('dvbox');if(b)b.innerHTML='<div class="pm">Dihentikan.</div>';return}
+  if(!admin)return;
+  if(a=='wiz'){flt.nvr=dev.sel&&dev.sel.t!='grp'?String(dev.sel.t=='nvr'?dev.sel.id:(devFind('cam',dev.sel.id)||{}).nvr_id):'';wizOpen();return}
+  if(a=='addnvr'){edit('nvrs',null);return}
+  if(a=='addcam'){flt.nvr=String(i);edit('cameras',null);return}
+  if(a=='disc'){askDisc(i,[]);return}
+  if(a=='fetch'){fetchCams(i);return}
+  if(a=='disc1'){var c1=devFind('cam',i);if(c1)startDisc(c1.nvr_id,[c1.id],true);return}
+  if(a=='pass'){showNvrPass(devFind('nvr',i));return}
+  if(a=='edit'){edit(t.dataset.t=='nvr'?'nvrs':t.dataset.t=='cam'?'cameras':'groups',devFind(t.dataset.t,i));return}
+  if(a=='del'){var tt=t.dataset.t,r=tt=='nvr'?'nvrs':tt=='cam'?'cameras':'groups',row=devFind(tt,i);
+    if(row&&confirm('Hapus "'+(row.name||row.id)+'"?'+(tt=='nvr'?'\n\nSemua kamera NVR ini ikut terhapus.':'')))api('DELETE','/api/'+r+'/'+i).then(function(){dev.sel=null;msg={t:'Dihapus.'};return reload()}).catch(function(er){say(er.message,true)});return}
+}
 
 /* ---------- wizard tambah perangkat (ala Add Hardware XProtect) ---------- */
 var W=null,wpoll=null;
