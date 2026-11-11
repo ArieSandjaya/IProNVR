@@ -197,8 +197,8 @@ namespace IproNvrServer
                     return 0;
                 case "install":
                     Run("netsh", "http add urlacl url=http://+:" + cfg.Port + "/ user=Everyone");
-                    Run("sc", "create " + SvcName + " binPath= \"\\\"" + exe + "\\\" --service\" start= auto DisplayName= \"IPRO NVR Server\"");
-                    Run("sc", "description " + SvcName + " \"Server konfigurasi IPRO NVR (registrasi NVR/kamera, user, group)\"");
+                    Run("sc", "create " + SvcName + " binPath= \"\\\"" + exe + "\\\" --service\" start= auto DisplayName= \"AMAN 300 Server\"");
+                    Run("sc", "description " + SvcName + " \"Server konfigurasi AMAN 300 (registrasi NVR/kamera, user, group)\"");
                     Run("sc", "failure " + SvcName + " reset= 86400 actions= restart/5000/restart/5000/restart/30000");
                     Run("netsh", "advfirewall firewall add rule name=\"IPRO NVR Server\" dir=in action=allow protocol=TCP localport=" + cfg.Port);
                     Run("netsh", "advfirewall firewall add rule name=\"IPRO NVR Relay RTSP\" dir=in action=allow protocol=TCP localport=" + cfg.RelayPort);

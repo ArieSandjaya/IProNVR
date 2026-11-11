@@ -1,4 +1,4 @@
-# IPRO NVR Server
+# AMAN 300 Server
 
 Server konfigurasi terpisah dari aplikasi client (`IproNvrTool`). Menyimpan registrasi NVR, kamera, user, group, dan sequence.
 Video **tidak** lewat server; client tetap tersambung langsung ke NVR.

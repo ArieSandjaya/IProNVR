@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Plaza Indonesia VMS</title>
+<title>AMAN 300 Server</title>
 <style>
 :root{--side:#343a40;--side2:#3f474e;--acc:#007bff;--bg:#f4f6f9;--line:#dee2e6;--fg:#212529;--mut:#6c757d;--ok:#28a745;--warn:#ffc107;--bad:#dc3545;--info:#17a2b8}
 *{box-sizing:border-box}
@@ -143,7 +143,7 @@ function sch(r){return schema.filter(function(x){return x.route==r})[0]}
 /* ---------- login ---------- */
 function loginView(){
   var a=document.getElementById('app');
-  a.innerHTML='<div id="login"><div class="lbox"><h1><b>PIR</b> VMS Server</h1><p>Masuk untuk mengelola konfigurasi</p><input id="u" placeholder="Nama user" autofocus><input id="p" type="password" placeholder="Password"><button class="btn p" id="go" style="width:100%;justify-content:center">Masuk</button><p id="e" style="color:var(--bad);margin:10px 0 0"></p></div></div>';
+  a.innerHTML='<div id="login"><div class="lbox"><h1><b>AMAN 300</b> Server</h1><p>Masuk untuk mengelola konfigurasi</p><input id="u" placeholder="Nama user" autofocus><input id="p" type="password" placeholder="Password"><button class="btn p" id="go" style="width:100%;justify-content:center">Masuk</button><p id="e" style="color:var(--bad);margin:10px 0 0"></p></div></div>';
   var u=a.querySelector('#u'),p=a.querySelector('#p'),e=a.querySelector('#e');
   function go(){fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:u.value,pass:p.value})}).then(function(r){return r.json().then(function(j){if(!r.ok){e.textContent=j.error;return}tok=j.token;me=j.user;sessionStorage.setItem('tok',tok);boot()})})}
   a.querySelector('#go').onclick=go;p.onkeydown=function(ev){if(ev.key=='Enter')go()}
@@ -160,7 +160,7 @@ function render(){
   var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Konfigurasi</div>';
   ['nvrs','cameras','groups','users'].forEach(function(r){if(!data[r])return;menu+='<a data-p="'+r+'" class="'+(page==r?'on':'')+'"><span class="ic">'+META[r].ic+'</span>'+META[r].t+'<em>'+cnt(r)+'</em></a>'});
   if(admin)menu+='<div class="hd">Sistem</div><a data-p="audit" class="'+(page=='audit'?'on':'')+'"><span class="ic">≡</span>Log audit</a>';
-  a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">IP</div><span><b>IPRO</b> NVR</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (hanya baca)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Versi konfigurasi: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Keluar</button></div><div id="content"></div></div></div>';
+  a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">A3</div><span><b>AMAN 300</b> Server</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (hanya baca)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Versi konfigurasi: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Keluar</button></div><div id="content"></div></div></div>';
   [].forEach.call(a.querySelectorAll('#side a'),function(x){x.onclick=function(){page=x.dataset.p;msg=null;document.body.classList.remove('open');render()}});
   a.querySelector('.burger').onclick=function(){document.body.classList.toggle('open')};
   a.querySelector('#lo').onclick=function(){api('POST','/api/logout').then(logout,logout)};
