@@ -87,7 +87,7 @@ namespace IproNvrServer
                     if (slash > 0)
                     {
                         int bits = int.Parse(part.Substring(slash + 1));
-                        if (!IPAddress.TryParse(part.Substring(0, slash), out ip) || bits < 22 || bits > 32) { error = "Rentang tidak valid: " + part + " (CIDR minimal /22)"; return null; }
+                        if (!IPAddress.TryParse(part.Substring(0, slash), out ip) || bits < 22 || bits > 32) { error = "Invalid range: " + part + " (CIDR minimal /22)"; return null; }
                         uint mask = bits == 32 ? 0xFFFFFFFF : ~(0xFFFFFFFFu >> bits);
                         a = ToU(ip) & mask; b = a | ~mask;
                         if (bits < 31) { a++; b--; }
@@ -95,28 +95,28 @@ namespace IproNvrServer
                     else if (dash > 0)
                     {
                         string l = part.Substring(0, dash), r = part.Substring(dash + 1);
-                        if (!IPAddress.TryParse(l, out ip)) { error = "IP tidak valid: " + l; return null; }
+                        if (!IPAddress.TryParse(l, out ip)) { error = "Invalid IP: " + l; return null; }
                         a = ToU(ip);
                         IPAddress ip2;
-                        if (r.IndexOf('.') < 0) { int last; if (!int.TryParse(r, out last) || last < 0 || last > 255) { error = "Rentang tidak valid: " + part; return null; } b = (a & 0xFFFFFF00u) | (uint)last; }
-                        else { if (!IPAddress.TryParse(r, out ip2)) { error = "IP tidak valid: " + r; return null; } b = ToU(ip2); }
+                        if (r.IndexOf('.') < 0) { int last; if (!int.TryParse(r, out last) || last < 0 || last > 255) { error = "Invalid range: " + part; return null; } b = (a & 0xFFFFFF00u) | (uint)last; }
+                        else { if (!IPAddress.TryParse(r, out ip2)) { error = "Invalid IP: " + r; return null; } b = ToU(ip2); }
                     }
                     else
                     {
-                        if (!IPAddress.TryParse(part, out ip) || ip.AddressFamily != AddressFamily.InterNetwork) { error = "IP tidak valid: " + part; return null; }
+                        if (!IPAddress.TryParse(part, out ip) || ip.AddressFamily != AddressFamily.InterNetwork) { error = "Invalid IP: " + part; return null; }
                         a = b = ToU(ip);
                     }
                 }
-                catch { error = "Rentang tidak valid: " + part; return null; }
-                if (b < a) { error = "Rentang terbalik: " + part; return null; }
+                catch { error = "Invalid range: " + part; return null; }
+                if (b < a) { error = "Reversed range: " + part; return null; }
                 for (uint u = a; u <= b; u++)
                 {
-                    if (res.Count >= 1024) { error = "Terlalu banyak alamat (maksimal 1024 per pemindaian)."; return null; }
+                    if (res.Count >= 1024) { error = "Too many addresses (maximum 1024 per scan)."; return null; }
                     string s = FromU(u);
                     if (seen.Add(s)) res.Add(s);
                 }
             }
-            if (res.Count == 0) error = "Tidak ada alamat IP untuk dipindai.";
+            if (res.Count == 0) error = "No IP addresses to scan.";
             return res.Count == 0 ? null : res;
         }
 
@@ -149,13 +149,13 @@ namespace IproNvrServer
         {
             error = null;
             string exe = disc.FindFfmpeg();
-            if (exe == null) { error = "ffmpeg tidak ditemukan di server. Letakkan ffmpeg.exe di folder server atau isi FfmpegPath di server.json."; return null; }
+            if (exe == null) { error = "ffmpeg not found on the server. Put ffmpeg.exe in the server folder or set FfmpegPath in server.json."; return null; }
             string mode = S(body, "mode");
             List<string> hosts;
             if (mode == "express")
             {
                 var sn = LocalSubnets();
-                if (sn.Count == 0) { error = "Kartu jaringan server tidak ditemukan."; return null; }
+                if (sn.Count == 0) { error = "No server network card found."; return null; }
                 hosts = ParseRange(string.Join(",", sn.ToArray()), out error);
             }
             else hosts = ParseRange(S(body, mode == "manual" ? "ips" : "range"), out error);
@@ -183,7 +183,7 @@ namespace IproNvrServer
             WizJob job;
             lock (lk)
             {
-                foreach (WizJob j in jobs.Values) if (j.State == "running") { error = "Masih ada pemindaian yang berjalan."; return null; }
+                foreach (WizJob j in jobs.Values) if (j.State == "running") { error = "A scan is still running."; return null; }
                 job = new WizJob();
                 job.Id = (++seq).ToString();
                 job.Mode = mode; job.By = by; job.Total = hosts.Count;
@@ -278,7 +278,7 @@ namespace IproNvrServer
         {
             error = null;
             WizJob j;
-            lock (lk) { if (!jobs.TryGetValue(S(body, "job"), out j)) { error = "Hasil pemindaian sudah kedaluwarsa, pindai ulang."; return null; } }
+            lock (lk) { if (!jobs.TryGetValue(S(body, "job"), out j)) { error = "The scan result has expired, please scan again."; return null; } }
             var picks = new List<KeyValuePair<WizItem, string>>();
             object o;
             if (body.TryGetValue("items", out o) && o is System.Collections.IEnumerable && !(o is string))
@@ -289,7 +289,7 @@ namespace IproNvrServer
                     string ip = S(d, "ip");
                     lock (lk) foreach (WizItem it in j.Items) if (it.Ip == ip) { picks.Add(new KeyValuePair<WizItem, string>(it, S(d, "name"))); break; }
                 }
-            if (picks.Count == 0) { error = "Tidak ada perangkat yang dipilih."; return null; }
+            if (picks.Count == 0) { error = "No devices selected."; return null; }
 
             long nvrId = 0;
             long.TryParse(S(body, "nvr_id"), out nvrId);
@@ -297,7 +297,7 @@ namespace IproNvrServer
             if (nvrId == 0)
             {
                 string nm = S(body, "new_name").Trim();
-                if (nm.Length == 0) { error = "Isi nama NVR/kelompok baru."; return null; }
+                if (nm.Length == 0) { error = "Enter a name for the new NVR/group."; return null; }
                 WizItem f = picks[0].Key;
                 var nb = new Dictionary<string, object>();
                 nb["name"] = nm; nb["host"] = f.Ip; nb["port"] = 80; nb["brand"] = "ipro";

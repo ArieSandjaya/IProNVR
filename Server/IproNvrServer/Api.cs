@@ -77,11 +77,11 @@ namespace IproNvrServer
             string b64 = body.TryGetValue("file", out o) && o != null ? Convert.ToString(o) : "";
             string fname = body.TryGetValue("name", out o) && o != null ? Convert.ToString(o) : "";
             bool dry = body.TryGetValue("dry", out o) && o != null && (o is bool ? (bool)o : Convert.ToString(o) == "true");
-            if (b64.Length == 0) { error = "File kosong."; return null; }
+            if (b64.Length == 0) { error = "The file is empty."; return null; }
             List<string[]> rows;
             try { rows = ExcelIo.Read(Convert.FromBase64String(b64), fname); }
-            catch (Exception ex) { error = "File tidak bisa dibaca (harus .xlsx atau .csv): " + ex.Message; return null; }
-            if (rows.Count == 0) { error = "File tidak berisi data."; return null; }
+            catch (Exception ex) { error = "The file cannot be read (must be .xlsx or .csv): " + ex.Message; return null; }
+            if (rows.Count == 0) { error = "The file contains no data."; return null; }
 
             // indeks kolom: 0 nvr, 1 channel, 2 ip, 3 nama kamera, 4 user, 5 password
             int[] col = { 0, 1, 2, 3, 4, 5 };
@@ -103,7 +103,7 @@ namespace IproNvrServer
                     else if (t.Contains("kamera") || t.Contains("camera") || t.Contains("nama") || t == "name") k = 3;
                     if (k >= 0 && col[k] < 0) col[k] = i;
                 }
-                if (col[0] < 0 || col[1] < 0) { error = "Judul kolom tidak dikenali. Perlu minimal kolom 'Nama NVR' dan 'Channel' (gunakan template)."; return null; }
+                if (col[0] < 0 || col[1] < 0) { error = "Column headers not recognised. At least the 'Nama NVR' and 'Channel' columns are required (use the template)."; return null; }
             }
             var nvrByName = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             foreach (Row n in store.List(Schema.ByRoute("nvrs")))
@@ -129,12 +129,12 @@ namespace IproNvrServer
                 Action<string> skip = delegate(string why) { skipped.Add(new Dictionary<string, object> { { "row", line }, { "reason", why } }); };
                 long nid; int ch;
                 if (nn.Length == 0 && cs.Length == 0 && ip.Length == 0 && cname.Length == 0 && cuser.Length == 0 && cpass.Length == 0) continue;
-                if (!nvrByName.TryGetValue(nn, out nid)) { skip("NVR \"" + nn + "\" tidak ditemukan (nama harus sama dengan di menu NVR)"); continue; }
-                if (!IsInt(cs, out ch)) { skip("Channel \"" + cs + "\" tidak valid (angka 1-256)"); continue; }
-                if (ip.Length == 0 && cname.Length == 0 && cuser.Length == 0 && cpass.Length == 0) { skip("Tidak ada data yang diisi (IP, nama, user, password kosong)"); continue; }
-                if (ip.Length > 0 && !re.IsMatch(ip)) { skip("IP \"" + ip + "\" tidak valid (tanpa spasi / http://)"); continue; }
+                if (!nvrByName.TryGetValue(nn, out nid)) { skip("NVR \"" + nn + "\" not found (the name must match the NVR menu)"); continue; }
+                if (!IsInt(cs, out ch)) { skip("Channel \"" + cs + "\" is not valid (number 1-256)"); continue; }
+                if (ip.Length == 0 && cname.Length == 0 && cuser.Length == 0 && cpass.Length == 0) { skip("No data filled in (IP, name, user and password are empty)"); continue; }
+                if (ip.Length > 0 && !re.IsMatch(ip)) { skip("IP \"" + ip + "\" is not valid (no spaces / http://)"); continue; }
                 string key = nid + ":" + ch;
-                if (work.ContainsKey(key)) { skip("Baris ganda untuk kanal " + ch + " (dipakai baris terakhir)"); order.Remove(key); }
+                if (work.ContainsKey(key)) { skip("Duplicate row for channel " + ch + " (the last row is used)"); order.Remove(key); }
                 work[key] = new[] { ip, cname, cuser, cpass };
                 order.Add(key);
                 nvrOf[key] = new KeyValuePair<long, int>(nid, ch);
@@ -170,7 +170,7 @@ namespace IproNvrServer
             if (body.TryGetValue("nvr_id", out o) && o != null) nvrId = Convert.ToInt64(Convert.ToDouble(o, System.Globalization.CultureInfo.InvariantCulture));
             Row nvr = null;
             foreach (Row r in store.List(Schema.ByRoute("nvrs"))) if (Convert.ToInt64(r["id"]) == nvrId) nvr = r;
-            if (nvr == null) { error = "NVR tidak ditemukan."; return null; }
+            if (nvr == null) { error = "NVR not found."; return null; }
             string host = Convert.ToString(nvr["host"]);
             int port = Convert.ToInt32(nvr["port"]);
             bool https = Convert.ToInt32(nvr["use_https"]) != 0;
@@ -196,11 +196,11 @@ namespace IproNvrServer
                     cl = BrandCgi.Cameras(brand, get, out text);
                 }
             }
-            catch (Exception ex) { error = "Gagal menghubungi NVR " + host + ":" + port + " - " + NvrList.Explain(ex) + BrandCgi.PortHint(brand, port); return null; }
+            catch (Exception ex) { error = "Failed to contact NVR " + host + ":" + port + " - " + NvrList.Explain(ex) + BrandCgi.PortHint(brand, port); return null; }
             if (cl.Count == 0)
             {
                 string raw = (text ?? "").Replace("\r", " ").Replace("\n", " | ");
-                error = "NVR menjawab tetapi tidak ada daftar kamera. Cuplikan respons: " + (raw.Length > 200 ? raw.Substring(0, 200) : raw);
+                error = "The NVR answered but returned no camera list. Response excerpt: " + (raw.Length > 200 ? raw.Substring(0, 200) : raw);
                 return null;
             }
             var have = new HashSet<long>();
@@ -277,7 +277,7 @@ namespace IproNvrServer
             if (tpl.Length == 0 && nvr != null) tpl = Convert.ToString(nvr["rtsp_template"]);
             if (user.Length == 0 && nvr != null) { user = Convert.ToString(nvr["cam_user"]); pass = Convert.ToString(nvr["cam_pass"]); }
             string url = Rtsp.Build(tpl, user, pass, g("ip_address"));
-            if (url.Length == 0) { error = "URL RTSP belum ada: isi IP kamera dan URL RTSP (atau template RTSP di data NVR), atau jalankan Deteksi."; return null; }
+            if (url.Length == 0) { error = "No RTSP URL yet: fill in the camera IP and RTSP URL (or the RTSP template in the NVR data), or run Detect."; return null; }
             string key = NewKey();
             lock (previews)
             {
@@ -297,7 +297,7 @@ namespace IproNvrServer
             Preview pv;
             string key = ctx.Request.QueryString["k"] ?? "";
             lock (previews) { if (!previews.TryGetValue(key, out pv) || pv.Expires < DateTime.UtcNow) pv = null; }
-            if (pv == null) { Err(rs, 404, "Pratinjau kedaluwarsa, klik Live lagi."); return; }
+            if (pv == null) { Err(rs, 404, "Preview expired, click Live again."); return; }
             string exe = disc.FindFfmpeg();
             if (exe == null) { string m = "ffmpeg tidak ditemukan di server (letakkan ffmpeg.exe di folder server atau isi FfmpegPath di server.json)."; SetPreviewError(pv, m); Err(rs, 500, m); return; }
             int w = 640, fps = 8;
@@ -475,12 +475,12 @@ namespace IproNvrServer
                 if (path == "/api/ping") { Json(rs, 200, new Dictionary<string, object> { { "ok", true }, { "version", store.Version } }); return; }
                 if (path == "/api/login" && rq.HttpMethod == "POST")
                 {
-                    if (Locked(ip)) { Err(rs, 429, "Terlalu banyak percobaan, coba lagi 1 menit."); return; }
+                    if (Locked(ip)) { Err(rs, 429, "Too many attempts, try again in 1 minute."); return; }
                     Dictionary<string, object> b = ReadBody(rq);
                     object n, p;
                     b.TryGetValue("name", out n); b.TryGetValue("pass", out p);
                     Row u = store.Login(Convert.ToString(n), Convert.ToString(p));
-                    if (u == null) { Fail(ip); Log.Write("Login gagal: " + n + " dari " + ip); Audit.Add(Convert.ToString(n), ip, "login gagal", ""); Err(rs, 401, "Nama atau password salah."); return; }
+                    if (u == null) { Fail(ip); Log.Write("Login gagal: " + n + " dari " + ip); Audit.Add(Convert.ToString(n), ip, "login failed", ""); Err(rs, 401, "Wrong username or password."); return; }
                     Log.Write("Login: " + u["name"] + " dari " + ip); Audit.Add(Convert.ToString(u["name"]), ip, "login", "");
                     var o = new Dictionary<string, object>();
                     o["token"] = NewToken(u);
@@ -488,10 +488,10 @@ namespace IproNvrServer
                     Json(rs, 200, o);
                     return;
                 }
-                if (!path.StartsWith("/api/", StringComparison.Ordinal)) { Err(rs, 404, "Tidak ditemukan."); return; }
+                if (!path.StartsWith("/api/", StringComparison.Ordinal)) { Err(rs, 404, "Not found."); return; }
 
                 Session s = Auth(rq);
-                if (s == null) { Err(rs, 401, "Belum login."); return; }
+                if (s == null) { Err(rs, 401, "Not signed in."); return; }
 
                 string[] seg = path.Substring(5).Trim('/').Split('/');
                 string head = seg[0];
@@ -523,7 +523,7 @@ namespace IproNvrServer
 
                 if (head == "audit")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     int an = 300; int.TryParse(rq.QueryString["n"], out an); if (an < 1 || an > 2000) an = 300;
                     Json(rs, 200, Audit.List(an, rq.QueryString["q"]));
                     return;
@@ -534,9 +534,9 @@ namespace IproNvrServer
                     if (relay == null) { Json(rs, 200, new Dictionary<string, object> { { "enabled", false }, { "status", "Relay tidak aktif" } }); return; }
                     if (rq.HttpMethod == "POST")
                     {
-                        if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                        if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                         relay.Resync();
-                        Audit.Add(s.User["name"] + "", ip, "sinkron ulang relay", "");
+                        Audit.Add(s.User["name"] + "", ip, "relay resync", "");
                         Json(rs, 200, new Dictionary<string, object> { { "ok", true } });
                         return;
                     }
@@ -546,7 +546,7 @@ namespace IproNvrServer
                 if (head == "stream") { Stream(ctx); return; }
                 if (head == "preview")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     if (rq.HttpMethod == "POST")
                     {
                         string pe;
@@ -557,12 +557,12 @@ namespace IproNvrServer
                     }
                     Preview pp;
                     lock (previews) { previews.TryGetValue(seg.Length > 1 ? seg[1] : "", out pp); }
-                    Json(rs, 200, new Dictionary<string, object> { { "error", pp == null ? "Pratinjau kedaluwarsa." : pp.Error } });
+                    Json(rs, 200, new Dictionary<string, object> { { "error", pp == null ? "Preview expired." : pp.Error } });
                     return;
                 }
                 if (head == "ip-template" && rq.HttpMethod == "GET")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     byte[] xb = BuildIpTemplate();
                     rs.StatusCode = 200;
                     rs.ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -574,17 +574,17 @@ namespace IproNvrServer
                 }
                 if (head == "import-ip" && rq.HttpMethod == "POST")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     string ie;
                     object ir = ImportIps(ReadBody(rq), s.User["name"] + "", out ie);
                     if (ir == null) { Err(rs, 400, ie); return; }
-                    Audit.Add(s.User["name"] + "", ip, "impor IP kamera", "");
+                    Audit.Add(s.User["name"] + "", ip, "camera IP import", "");
                     Json(rs, 200, ir);
                     return;
                 }
                 if (head == "nvr-cameras" && rq.HttpMethod == "POST")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     string fe;
                     object fr = FetchNvrCameras(ReadBody(rq), s.User["name"] + "", out fe);
                     if (fr == null) { Err(rs, 400, fe); return; }
@@ -593,42 +593,42 @@ namespace IproNvrServer
                 }
                 if (head == "discover" && rq.HttpMethod == "POST")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     Dictionary<string, object> b = ReadBody(rq);
                     string e;
                     string jid = disc.Start(b, s.User["name"] + "", out e);
                     if (jid == null) { Err(rs, 400, e); return; }
-                    Audit.Add(s.User["name"] + "", ip, "deteksi RTSP", "job " + jid);
+                    Audit.Add(s.User["name"] + "", ip, "RTSP detection", "job " + jid);
                     Json(rs, 200, new Dictionary<string, object> { { "job", jid } });
                     return;
                 }
                 if (head == "wizard")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     if (rq.HttpMethod == "POST")
                     {
                         string we;
                         string wj = wiz.Start(ReadBody(rq), s.User["name"] + "", out we);
                         if (wj == null) { Err(rs, 400, we); return; }
-                        Audit.Add(s.User["name"] + "", ip, "wizard tambah perangkat", "pindai job " + wj);
+                        Audit.Add(s.User["name"] + "", ip, "add-devices wizard", "scan job " + wj);
                         Json(rs, 200, new Dictionary<string, object> { { "job", wj } });
                         return;
                     }
                     if (seg.Length < 2) { Json(rs, 200, new Dictionary<string, object> { { "subnets", WizardManager.LocalSubnets() } }); return; }
                     if (rq.HttpMethod == "DELETE") { wiz.Cancel(seg[1]); Json(rs, 200, new Dictionary<string, object> { { "ok", true } }); return; }
                     object wo = wiz.Get(seg[1]);
-                    if (wo == null) { Err(rs, 404, "Pemindaian tidak ada."); return; }
+                    if (wo == null) { Err(rs, 404, "Scan not found."); return; }
                     Json(rs, 200, wo);
                     return;
                 }
                 if (head == "wizard-add" && rq.HttpMethod == "POST")
                 {
-                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     string ae;
                     object ar = wiz.Add(ReadBody(rq), out ae);
                     if (ar == null) { Err(rs, 400, ae); return; }
                     var ad = (Dictionary<string, object>)ar;
-                    Audit.Add(s.User["name"] + "", ip, "wizard tambah perangkat", ad["added"] + " kamera ditambahkan ke NVR #" + ad["nvr_id"]);
+                    Audit.Add(s.User["name"] + "", ip, "add-devices wizard", ad["added"] + " cameras added to NVR #" + ad["nvr_id"]);
                     ad["version"] = store.Version;
                     Json(rs, 200, ar);
                     return;
@@ -638,48 +638,48 @@ namespace IproNvrServer
                     if (seg.Length < 2) { Json(rs, 200, disc.Latest()); return; }
                     if (rq.HttpMethod == "DELETE")
                     {
-                        if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                        if (!IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                         disc.Cancel(seg[1]);
                         Json(rs, 200, new Dictionary<string, object> { { "ok", true } });
                         return;
                     }
                     object jo = disc.Get(seg[1]);
-                    if (jo == null) { Err(rs, 404, "Job tidak ada."); return; }
+                    if (jo == null) { Err(rs, 404, "Job not found."); return; }
                     Json(rs, 200, jo);
                     return;
                 }
 
                 TableDef td = Schema.ByRoute(head);
-                if (td == null) { Err(rs, 404, "Tidak ditemukan."); return; }
+                if (td == null) { Err(rs, 404, "Not found."); return; }
 
                 if (rq.HttpMethod == "GET")
                 {
-                    if (td.AdminOnlyRead && !IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (td.AdminOnlyRead && !IsAdmin(s)) { Err(rs, 403, "Admins only."); return; }
                     Json(rs, 200, store.List(td));
                     return;
                 }
                 // tulis: hanya admin
-                if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin yang boleh mengubah konfigurasi."); return; }
+                if (!IsAdmin(s)) { Err(rs, 403, "Only admins can change the configuration."); return; }
                 if (rq.HttpMethod == "POST" || rq.HttpMethod == "PUT")
                 {
                     Dictionary<string, object> wb = ReadBody(rq);
                     long id = store.Upsert(td, wb);
                     Log.Write(s.User["name"] + " simpan " + td.Route + " #" + id);
-                    Audit.Add(s.User["name"] + "", ip, (wb.ContainsKey("id") ? "ubah " : "tambah ") + td.Route, "#" + id + (wb.ContainsKey("name") ? " " + wb["name"] : ""));
+                    Audit.Add(s.User["name"] + "", ip, (wb.ContainsKey("id") ? "edit " : "add ") + td.Route, "#" + id + (wb.ContainsKey("name") ? " " + wb["name"] : ""));
                     Json(rs, 200, new Dictionary<string, object> { { "id", id }, { "version", store.Version } });
                     return;
                 }
                 if (rq.HttpMethod == "DELETE")
                 {
                     long id;
-                    if (seg.Length < 2 || !long.TryParse(seg[1], out id)) { Err(rs, 400, "id wajib: DELETE /api/" + head + "/{id}"); return; }
+                    if (seg.Length < 2 || !long.TryParse(seg[1], out id)) { Err(rs, 400, "id required: DELETE /api/" + head + "/{id}"); return; }
                     store.Delete(td, id);
                     Log.Write(s.User["name"] + " hapus " + td.Route + " #" + id);
-                    Audit.Add(s.User["name"] + "", ip, "hapus " + td.Route, "#" + id);
+                    Audit.Add(s.User["name"] + "", ip, "delete " + td.Route, "#" + id);
                     Json(rs, 200, new Dictionary<string, object> { { "ok", true }, { "version", store.Version } });
                     return;
                 }
-                Err(rs, 405, "Metode tidak didukung.");
+                Err(rs, 405, "Method not supported.");
             }
             catch (Exception ex)
             {
@@ -755,15 +755,15 @@ namespace IproNvrServer
                 int cc; codecs.TryGetValue(cd, out cc); codecs[cd] = cc + 1;
                 string why = null;
                 long[] lv = null;
-                if (!hasUrl) why = "Belum ada URL RTSP (jalankan Deteksi)";
-                else if (reg == 2) why = "NVR melaporkan kamera error";
+                if (!hasUrl) why = "No RTSP URL yet (run Detect)";
+                else if (reg == 2) why = "NVR reports a camera error";
                 if (relayOn)
                 {
                     string pn = MediaMtxRelay.PathName(RS(n, "host"), (int)RL(n, "port"), (int)RL(c, "channel"), false);
                     if (live.TryGetValue(pn, out lv))
                     {
                         if (lv[0] == 1) p[4]++;
-                        else if (why == null && lv[1] > 0) why = "Relay: stream belum siap, ada penonton";
+                        else if (why == null && lv[1] > 0) why = "Relay: stream not ready, but there are viewers";
                     }
                 }
                 if (why != null && problems.Count < 200)

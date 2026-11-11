@@ -66,13 +66,13 @@ namespace IproNvrServer
         {
             error = null;
             string exe = FindFfmpeg();
-            if (exe == null) { error = "ffmpeg tidak ditemukan di server. Letakkan ffmpeg.exe di folder IproNvrServer.exe atau isi FfmpegPath di server.json."; return null; }
+            if (exe == null) { error = "ffmpeg not found on the server. Put ffmpeg.exe in the IproNvrServer.exe folder or set FfmpegPath in server.json."; return null; }
             object o;
             long nvrId = 0;
             if (body.TryGetValue("nvr_id", out o) && o != null) nvrId = Convert.ToInt64(Convert.ToDouble(o, System.Globalization.CultureInfo.InvariantCulture));
             Row nvr = null;
             foreach (Row r in store.List(Schema.ByRoute("nvrs"))) if (Convert.ToInt64(r["id"]) == nvrId) nvr = r;
-            if (nvr == null) { error = "NVR tidak ditemukan."; return null; }
+            if (nvr == null) { error = "NVR not found."; return null; }
 
             var want = new HashSet<long>();
             if (body.TryGetValue("camera_ids", out o) && o is System.Collections.IEnumerable && !(o is string))
@@ -95,7 +95,7 @@ namespace IproNvrServer
             DiscoJob job;
             lock (lk)
             {
-                foreach (DiscoJob j in jobs.Values) if (j.State == "running") { error = "Masih ada deteksi yang berjalan (job " + j.Id + ")."; return null; }
+                foreach (DiscoJob j in jobs.Values) if (j.State == "running") { error = "A detection is still running (job " + j.Id + ")."; return null; }
                 job = new DiscoJob();
                 job.Id = (++seq).ToString();
                 job.Total = todo.Count;
@@ -149,12 +149,12 @@ namespace IproNvrServer
                             upd["width"] = r.Sub.Width;
                             upd["height"] = r.Sub.Height;
                             lock (lk) job.Found++;
-                            line = "OK   " + label + (own ? " [login kamera]" : "") + ": " + r.Summary() + (had && !overwrite ? "  (URL lama dipertahankan)" : "");
+                            line = "OK   " + label + (own ? " [camera login]" : "") + ": " + r.Summary() + (had && !overwrite ? "  (existing URL kept)" : "");
                         }
-                        else line = "GAGAL " + label + ": " + r.Note;
+                        else line = "FAILED " + label + ": " + r.Note;
                         store.Upsert(Schema.ByRoute("cameras"), upd);
                     }
-                    catch (OperationCanceledException) { line = "BATAL " + label; }
+                    catch (OperationCanceledException) { line = "CANCELLED " + label; }
                     catch (Exception ex) { line = "ERROR " + label + ": " + ex.Message; }
                     Add(job, line);
                     lock (lk) job.Done++;
@@ -199,7 +199,7 @@ namespace IproNvrServer
                                 du2["codec"] = dr.Sub.Codec; du2["width"] = dr.Sub.Width; du2["height"] = dr.Sub.Height;
                                 store.Upsert(Schema.ByRoute("cameras"), du2);
                                 lock (lk) job.Found++;
-                                Add(job, "OK   " + label + " [langsung ke kamera]: " + dr.Summary());
+                                Add(job, "OK   " + label + " [direct to camera]: " + dr.Summary());
                                 lock (lk) job.Done++;
                                 return;
                             }
@@ -226,11 +226,11 @@ namespace IproNvrServer
                         else
                         {
                             upd["scan_detail"] = "RTSP tidak terbaca: " + (e1 ?? e2);
-                            line = "GAGAL " + label + ": " + upd["scan_detail"];
+                            line = "FAILED " + label + ": " + upd["scan_detail"];
                         }
                         store.Upsert(Schema.ByRoute("cameras"), upd);
                     }
-                    catch (OperationCanceledException) { line = "BATAL " + label; }
+                    catch (OperationCanceledException) { line = "CANCELLED " + label; }
                     catch (Exception ex) { line = "ERROR " + label + ": " + ex.Message; }
                     Add(job, line);
                     lock (lk) job.Done++;
