@@ -247,7 +247,7 @@ function listPage(r){
     sel.onchange=function(){flt.nvr=sel.value;render()};tools.appendChild(sel);
     var q=$('<input placeholder="Cari nama / IP" value="'+esc(flt.q)+'">');q.onchange=function(){flt.q=q.value;render()};tools.appendChild(q);
     rows=rows.filter(function(c){return (!flt.nvr||c.nvr_id==flt.nvr)&&(!flt.q||(c.name+' '+c.ip_address+' '+c.location).toLowerCase().indexOf(flt.q.toLowerCase())>=0)});
-    if(admin){var dn=$('<button class="btn i">Deteksi RTSP (NVR terpilih)</button>');dn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}askDisc(+flt.nvr,[])};tools.appendChild(dn);
+    if(admin){var wz=$('<button class="btn p">＋ Tambah perangkat (wizard)</button>');wz.onclick=wizOpen;tools.appendChild(wz);var dn=$('<button class="btn i">Deteksi RTSP (NVR terpilih)</button>');dn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}askDisc(+flt.nvr,[])};tools.appendChild(dn);
       var fn=$('<button class="btn p">Deteksi kamera dari NVR</button>');fn.onclick=function(){if(!flt.nvr){alert('Pilih NVR dulu pada filter.');return}fetchCams(+flt.nvr)};tools.appendChild(fn);
       var tp=$('<button class="btn">⇩ Template Excel</button>');tp.onclick=dlTemplate;tools.appendChild(tp);
       var up=$('<button class="btn s">⇧ Upload Excel (kamera)</button>');up.onclick=upIp;tools.appendChild(up);
@@ -441,6 +441,92 @@ function genChannels(){
   var todo=[];for(var i=1;i<=n;i++)if(!have[i])todo.push(i);
   (function next(){if(!todo.length){msg={t:'Kanal dibuat. Isi IP kamera di tiap baris (Edit), lalu jalankan Deteksi RTSP.'};reload();return}
     var ch=todo.shift();api('POST','/api/cameras',{nvr_id:nv,channel:ch,name:'CH'+ch}).then(next).catch(function(e){say(e.message,true)})})()}
+
+/* ---------- wizard tambah perangkat (ala Add Hardware XProtect) ---------- */
+var W=null,wpoll=null;
+function wizOpen(){
+  W={step:1,mode:'express',range:'',ips:'',port:80,creds:[{u:'admin',p:''}],job:null,sel:{},names:{},nvr:(flt&&flt.nvr)||'',newName:'',subnets:[],busy:false};
+  api('GET','/api/wizard').then(function(r){W.subnets=r.subnets||[];if(W.step==1||W.step==2)wizDraw()}).catch(function(){});
+  wizDraw()}
+function wizClose(){clearTimeout(wpoll);if(W&&W.job&&W.job.state=='running')api('DELETE','/api/wizard/'+W.job.job).catch(function(){});W=null;document.getElementById('modal').style.display='none';document.getElementById('modal').innerHTML=''}
+function wizDraw(){
+  if(!W)return;var el=document.getElementById('modal');el.style.display='flex';
+  var names=['Metode','Alamat & login','Hasil & tambah'];
+  var hd='<div class="m wide"><div class="mh"><h3>Tambah perangkat</h3><button class="btn sm" id="wx">✕</button></div><div style="display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap">'+
+    names.map(function(n,i){var on=W.step==i+1;return '<span class="badge '+(on?'info':(W.step>i+1?'ok':''))+'" style="padding:4px 12px">'+(i+1)+'. '+n+'</span>'}).join('')+'</div>';
+  var body='',ft='';
+  if(W.step==1){
+    var M=[['express','Cepat (disarankan)','Pindai otomatis jaringan lokal server (subnet kartu jaringan server).'+(W.subnets.length?'<br><small>Rentang: '+esc(W.subnets.join(', '))+'</small>':'')],
+      ['range','Rentang IP','Pindai rentang alamat yang Anda tentukan, mis. 192.168.1.1-192.168.1.254 atau 10.0.5.0/24. Cocok untuk sebagian jaringan.'],
+      ['manual','Manual','Ketik daftar IP kamera satu per satu (satu per baris). Dipakai bila alamatnya sudah diketahui atau pemindaian tidak menemukannya.']];
+    body='<div style="padding:16px;display:grid;gap:10px">'+M.map(function(m){return '<label style="display:flex;gap:10px;align-items:flex-start;border:1px solid '+(W.mode==m[0]?'var(--acc)':'var(--line)')+';border-radius:6px;padding:12px;cursor:pointer;background:'+(W.mode==m[0]?'#eaf3fb':'#fff')+'"><input type="radio" name="wm" value="'+m[0]+'"'+(W.mode==m[0]?' checked':'')+' style="margin-top:4px"><span><b>'+m[1]+'</b><br>'+m[2]+'</span></label>'}).join('')+'</div>';
+    ft='<button class="btn" id="wc">Batal</button><button class="btn p" id="wn">Lanjut ›</button>'}
+  else if(W.step==2){
+    var addr=W.mode=='express'?'<div class="f1"><label>Rentang yang dipindai</label><div style="padding:8px 10px;background:#f4f6f8;border-radius:4px">'+(W.subnets.length?esc(W.subnets.join(', ')):'(subnet server tidak terbaca)')+'</div></div>':
+      W.mode=='range'?'<div class="f1"><label>Rentang IP</label><input id="wr" value="'+esc(W.range)+'" placeholder="192.168.1.1-192.168.1.254"><small>Boleh beberapa, dipisah koma: 10.0.1.1-254, 10.0.2.0/24. Maksimal 1024 alamat.</small></div>':
+      '<div class="f1"><label>Daftar IP kamera</label><textarea id="wi" rows="5" placeholder="192.168.1.64&#10;192.168.1.65">'+esc(W.ips)+'</textarea></div>';
+    var cr=W.creds.map(function(c,i){return '<div style="display:flex;gap:6px;margin-bottom:6px"><input data-cu="'+i+'" placeholder="Username" value="'+esc(c.u)+'"><input data-cp="'+i+'" type="password" placeholder="Password" value="'+esc(c.p)+'"><button class="btn sm" data-cd="'+i+'"'+(W.creds.length<2?' disabled':'')+'>✕</button></div>'}).join('');
+    body='<div class="mb">'+addr+'<div><label>Port HTTP</label><input id="wp" type="number" value="'+W.port+'"><small>Port 554/8000/443/8080 ikut diperiksa.</small></div><div></div>'+
+      '<div class="f1"><label>Login kamera (dicoba bergantian)</label>'+cr+'<button class="btn sm" id="wa"'+(W.creds.length>=8?' disabled':'')+'>＋ Tambah login</button><small>Server mencoba tiap login sampai stream terbaca. Kamera yang loginnya berbeda-beda cukup dimasukkan semua kemungkinannya.</small></div></div>';
+    ft='<button class="btn" id="wb">‹ Kembali</button><button class="btn p" id="wn">Mulai pindai</button>'}
+  else{
+    var j=W.job||{state:'running',total:0,done:0,found:0,items:[]},run=j.state=='running';
+    var pct=j.total?Math.round(100*j.done/j.total):0;
+    var prog='<div style="padding:12px 16px;border-bottom:1px solid var(--line)"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>'+(run?'<span class="spin"></span> Memindai… ':(j.state=='done'?'Pemindaian selesai. ':'Pemindaian '+esc(j.state)+'. '))+j.done+' / '+j.total+' alamat · <b>'+(j.items||[]).length+'</b> perangkat ditemukan · <b>'+j.found+'</b> RTSP terbaca</span>'+(run?'<button class="btn sm" id="wst">Hentikan</button>':'')+'</div><div style="height:6px;background:#e3e8ee;border-radius:3px"><div style="height:6px;width:'+pct+'%;background:var(--acc);border-radius:3px"></div></div></div>';
+    var rows=(j.items||[]).map(function(it){
+      var chk=!!W.sel[it.ip];var st=it.exists?'<span class="badge warn">Sudah terdaftar</span>':(it.ok?'<span class="badge ok">RTSP terbaca</span>':'<span class="badge bad">Login/RTSP gagal</span>');
+      return '<tr><td><input type="checkbox" data-s="'+esc(it.ip)+'"'+(chk?' checked':'')+(it.exists?' disabled':'')+'></td><td><b>'+esc(it.ip)+'</b></td><td>'+st+'</td><td>'+esc(it.method||'')+'</td><td>'+esc(it.summary||'')+'</td><td>'+esc(it.user||'')+'</td><td><input data-n="'+esc(it.ip)+'" value="'+esc(W.names[it.ip]||'')+'" placeholder="Kamera '+esc(it.ip)+'" style="min-width:140px"></td></tr>'}).join('');
+    var tbl='<div style="max-height:380px;overflow:auto;padding:0 16px"><table><thead><tr><th><input type="checkbox" id="wall"></th><th>IP</th><th>Status</th><th>Terdeteksi via</th><th>Stream</th><th>Login</th><th>Nama kamera</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7" style="text-align:center;color:var(--mut);padding:24px">'+(run?'Belum ada perangkat ditemukan…':'Tidak ada perangkat ditemukan.')+'</td></tr>')+'</tbody></table></div>';
+    var nv='<option value="0"'+(!W.nvr||W.nvr=='0'?' selected':'')+'>＋ NVR / kelompok baru…</option>'+(data.nvrs||[]).map(function(n){return '<option value="'+n.id+'"'+(W.nvr==n.id?' selected':'')+'>'+esc(n.name)+'</option>'}).join('');
+    var dest='<div style="padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:end;flex-wrap:wrap"><div><label style="font-weight:600;display:block;margin-bottom:3px">Tambahkan ke</label><select id="wnv">'+nv+'</select></div>'+
+      '<div id="wnn" style="'+(W.nvr&&W.nvr!='0'?'display:none':'')+'"><label style="font-weight:600;display:block;margin-bottom:3px">Nama NVR / kelompok baru</label><input id="wnm" value="'+esc(W.newName)+'" placeholder="mis. Kamera Lobby"></div></div>';
+    body=prog+tbl+dest;
+    var n=Object.keys(W.sel).filter(function(k){return W.sel[k]}).length;
+    ft='<button class="btn" id="wb">‹ Ubah pengaturan</button><button class="btn p" id="wd"'+(n&&!W.busy?'':' disabled')+'>Tambahkan '+n+' kamera</button>'}
+  el.innerHTML=hd+body+'<div class="mf">'+ft+'</div></div>';
+  wizBind()}
+function wizBind(){
+  var el=document.getElementById('modal'),$=function(i){return document.getElementById(i)};
+  $('wx').onclick=wizClose;
+  if(W.step==1){
+    Array.prototype.forEach.call(el.querySelectorAll('input[name=wm]'),function(r){r.onchange=function(){W.mode=r.value;wizDraw()}});
+    $('wc').onclick=wizClose;$('wn').onclick=function(){W.step=2;wizDraw()}}
+  else if(W.step==2){
+    var keep=function(){if($('wr'))W.range=$('wr').value;if($('wi'))W.ips=$('wi').value;W.port=+$('wp').value||80;
+      Array.prototype.forEach.call(el.querySelectorAll('[data-cu]'),function(i){W.creds[+i.dataset.cu].u=i.value});
+      Array.prototype.forEach.call(el.querySelectorAll('[data-cp]'),function(i){W.creds[+i.dataset.cp].p=i.value})};
+    $('wa').onclick=function(){keep();W.creds.push({u:'',p:''});wizDraw()};
+    Array.prototype.forEach.call(el.querySelectorAll('[data-cd]'),function(b){b.onclick=function(){keep();W.creds.splice(+b.dataset.cd,1);wizDraw()}});
+    $('wb').onclick=function(){keep();W.step=1;wizDraw()};
+    $('wn').onclick=function(){keep();
+      var body={mode:W.mode,range:W.range,ips:W.ips,port:W.port,creds:W.creds.map(function(c){return{u:c.u,p:c.p}})};
+      if(W.mode=='range'&&!W.range.trim()){alert('Isi rentang IP.');return}
+      if(W.mode=='manual'&&!W.ips.trim()){alert('Isi daftar IP kamera.');return}
+      api('POST','/api/wizard',body).then(function(r){W.job={job:r.job,state:'running',total:0,done:0,found:0,items:[]};W.sel={};W.step=3;wizDraw();wizPoll()}).catch(function(e){alert(e.message)})}}
+  else{
+    $('wb').onclick=function(){if(W.job&&W.job.state=='running')api('DELETE','/api/wizard/'+W.job.job).catch(function(){});clearTimeout(wpoll);W.step=2;wizDraw()};
+    var st=$('wst');if(st)st.onclick=function(){api('DELETE','/api/wizard/'+W.job.job).catch(function(){})};
+    Array.prototype.forEach.call(el.querySelectorAll('[data-s]'),function(c){c.onchange=function(){W.sel[c.dataset.s]=c.checked;wizDraw()}});
+    Array.prototype.forEach.call(el.querySelectorAll('[data-n]'),function(i){i.onchange=function(){W.names[i.dataset.n]=i.value}});
+    var all=$('wall');if(all)all.onchange=function(){((W.job&&W.job.items)||[]).forEach(function(it){if(!it.exists)W.sel[it.ip]=all.checked});wizDraw()};
+    $('wnv').onchange=function(){W.nvr=this.value;wizDraw()};
+    var nm=$('wnm');if(nm)nm.oninput=function(){W.newName=nm.value};
+    $('wd').onclick=function(){
+      var items=Object.keys(W.sel).filter(function(k){return W.sel[k]}).map(function(ip){return{ip:ip,name:W.names[ip]||''}});
+      if((!W.nvr||W.nvr=='0')&&!W.newName.trim()){alert('Isi nama NVR / kelompok baru.');nm&&nm.focus();return}
+      W.busy=true;wizDraw();
+      api('POST','/api/wizard-add',{job:W.job.job,nvr_id:+W.nvr||0,new_name:W.newName,items:items}).then(function(r){
+        var t='Wizard: '+r.added+' kamera ditambahkan'+(r.skipped?', '+r.skipped+' dilewati (IP sudah ada di NVR itu)':'')+'.';
+        clearTimeout(wpoll);W=null;document.getElementById('modal').style.display='none';document.getElementById('modal').innerHTML='';
+        msg={t:t};return reload()}).catch(function(e){W.busy=false;wizDraw();alert(e.message)})}}}
+function wizPoll(){
+  clearTimeout(wpoll);if(!W||!W.job)return;var id=W.job.job;
+  api('GET','/api/wizard/'+id).then(function(j){
+    if(!W||W.job.job!=id)return;
+    (j.items||[]).forEach(function(it){if(!(it.ip in W.sel))W.sel[it.ip]=!!it.ok&&!it.exists});
+    W.job=j;
+    var a=document.activeElement;if(!(a&&a.tagName=='INPUT'&&a.type!='checkbox'))wizDraw();
+    if(j.state=='running')wpoll=setTimeout(wizPoll,1500);else wizDraw()}).catch(function(){wpoll=setTimeout(wizPoll,3000)})}
 
 /* ---------- deteksi RTSP ---------- */
 function askDisc(nvrId,ids){

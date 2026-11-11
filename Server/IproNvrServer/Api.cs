@@ -229,7 +229,8 @@ namespace IproNvrServer
         }
 
         readonly DiscoveryManager disc;
-        public ApiServer(Store s, ServerConfig c, MediaMtxRelay relay) { store = s; cfg = c; this.relay = relay; disc = new DiscoveryManager(s, c); }
+        readonly WizardManager wiz;
+        public ApiServer(Store s, ServerConfig c, MediaMtxRelay relay) { store = s; cfg = c; this.relay = relay; disc = new DiscoveryManager(s, c); wiz = new WizardManager(s, disc); }
 
         public void Start()
         {
@@ -599,6 +600,37 @@ namespace IproNvrServer
                     if (jid == null) { Err(rs, 400, e); return; }
                     Audit.Add(s.User["name"] + "", ip, "deteksi RTSP", "job " + jid);
                     Json(rs, 200, new Dictionary<string, object> { { "job", jid } });
+                    return;
+                }
+                if (head == "wizard")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    if (rq.HttpMethod == "POST")
+                    {
+                        string we;
+                        string wj = wiz.Start(ReadBody(rq), s.User["name"] + "", out we);
+                        if (wj == null) { Err(rs, 400, we); return; }
+                        Audit.Add(s.User["name"] + "", ip, "wizard tambah perangkat", "pindai job " + wj);
+                        Json(rs, 200, new Dictionary<string, object> { { "job", wj } });
+                        return;
+                    }
+                    if (seg.Length < 2) { Json(rs, 200, new Dictionary<string, object> { { "subnets", WizardManager.LocalSubnets() } }); return; }
+                    if (rq.HttpMethod == "DELETE") { wiz.Cancel(seg[1]); Json(rs, 200, new Dictionary<string, object> { { "ok", true } }); return; }
+                    object wo = wiz.Get(seg[1]);
+                    if (wo == null) { Err(rs, 404, "Pemindaian tidak ada."); return; }
+                    Json(rs, 200, wo);
+                    return;
+                }
+                if (head == "wizard-add" && rq.HttpMethod == "POST")
+                {
+                    if (!IsAdmin(s)) { Err(rs, 403, "Hanya admin."); return; }
+                    string ae;
+                    object ar = wiz.Add(ReadBody(rq), out ae);
+                    if (ar == null) { Err(rs, 400, ae); return; }
+                    var ad = (Dictionary<string, object>)ar;
+                    Audit.Add(s.User["name"] + "", ip, "wizard tambah perangkat", ad["added"] + " kamera ditambahkan ke NVR #" + ad["nvr_id"]);
+                    ad["version"] = store.Version;
+                    Json(rs, 200, ar);
                     return;
                 }
                 if (head == "jobs")
