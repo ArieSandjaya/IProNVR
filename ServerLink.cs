@@ -362,8 +362,8 @@ namespace IproNvrTool
                 {
                     long gid = Lng(g, "id");
                     groupIds.Add(gid);
-                    Exec(c, tx, "INSERT INTO grp (id, name, layout, owner, sort) VALUES (@id, @n, @l, @o, @s)",
-                        "@id", gid, "@n", Str(g, "name"), "@l", Str(g, "layout"), "@o", Str(g, "owner"), "@s", (int)Lng(g, "sort"));
+                    Exec(c, tx, "INSERT INTO grp (id, name, layout, owner, parent_id, sort) VALUES (@id, @n, @l, @o, @p, @s)",
+                        "@id", gid, "@n", Str(g, "name"), "@l", Str(g, "layout"), "@o", Str(g, "owner"), "@p", Lng(g, "parent_id"), "@s", (int)Lng(g, "sort"));
                     string[] parts = Str(g, "slots").Split(',');
                     for (int i = 0; i < parts.Length; i++)
                     {
@@ -424,7 +424,7 @@ namespace IproNvrTool
                 CamRef r = g.Slots[i];
                 if (r != null && r.NvrId > 0 && r.Channel > 0) sb.Append(r.NvrId).Append(':').Append(r.Channel);
             }
-            var body = new Dictionary<string, object> { { "name", g.Name }, { "layout", g.Layout }, { "slots", sb.ToString() }, { "owner", g.Owner ?? "" } };
+            var body = new Dictionary<string, object> { { "name", g.Name }, { "layout", g.Layout }, { "slots", sb.ToString() }, { "owner", g.Owner ?? "" }, { "parent_id", g.ParentId } };
             if (g.Id > 0) body["id"] = g.Id;
             long id = Saved(Write("POST", "/api/groups", body));
             if (id > 0) { g.Id = id; SyncNow(true, 15000); }

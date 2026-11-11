@@ -327,26 +327,64 @@ namespace IproNvrTool
                 using (var b = new SolidBrush(sel ? Asm.BarOpen : Asm.Panel)) e.Graphics.FillRectangle(b, e.Bounds);
                 // ikon = gambar kecil pola layar group ini
                 int iw = Asm.S(30), ih = Asm.S(20);
-                Rectangle ir = new Rectangle(e.Bounds.X + Asm.S(6), e.Bounds.Y + (e.Bounds.Height - ih) / 2, iw, ih);
+                int depth = e.Index < nodes.Count ? nodes[e.Index].Depth : 0;
+                int indent = depth * Asm.S(16);
+                // panah buka/tutup untuk group yang punya group di dalamnya
+                if (e.Index < nodes.Count && nodes[e.Index].HasChildren)
+                {
+                    bool closed = collapsed.Contains(nodes[e.Index].G.Id) && filter.Length == 0;
+                    Rectangle ar = new Rectangle(e.Bounds.X + Asm.S(2) + indent, e.Bounds.Y, Asm.S(16), e.Bounds.Height);
+                    TextRenderer.DrawText(e.Graphics, closed ? "\u25B8" : "\u25BE", lb.Font, ar, Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
+                }
+                Rectangle ir = new Rectangle(e.Bounds.X + Asm.S(20) + indent, e.Bounds.Y + (e.Bounds.Height - ih) / 2, iw, ih);
                 if (e.Index < shown.Count)
                 {
                     Bitmap pv = LayoutIcon(shown[e.Index].Layout, iw, ih);
-                    if (pv != null) e.Graphics.DrawImage(pv, ir);
+                    if (pv != null && (!nodes[e.Index].HasChildren || GroupTree.HasSlots(shown[e.Index]))) e.Graphics.DrawImage(pv, ir);
+                    else if (nodes[e.Index].HasChildren)
+                    {
+                        // group besar (hanya berisi group lain): ikon map
+                        using (var fb = new SolidBrush(Color.FromArgb(200, 160, 60)))
+                        {
+                            e.Graphics.FillRectangle(fb, ir.X, ir.Y + ih / 4, iw * 2 / 5, ih / 4);
+                            e.Graphics.FillRectangle(fb, ir.X, ir.Y + ih / 3 + 1, iw, ih * 2 / 3 - 1);
+                        }
+                    }
                 }
                 Rectangle tr = new Rectangle(ir.Right + Asm.S(8), e.Bounds.Y, e.Bounds.Width - ir.Right - Asm.S(8), e.Bounds.Height);
                 TextRenderer.DrawText(e.Graphics, Convert.ToString(lb.Items[e.Index]), lb.Font, tr, Asm.Text,
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
             };
+            lb.MouseDown += delegate(object s, MouseEventArgs e)
+            {
+                int i = lb.IndexFromPoint(e.Location);
+                if (i < 0 || i >= nodes.Count || !nodes[i].HasChildren || filter.Length > 0) return;
+                int ax = Asm.S(2) + nodes[i].Depth * Asm.S(16);
+                if (e.X >= ax && e.X < ax + Asm.S(18)) Toggle(nodes[i].G.Id, i);
+            };
             lb.DoubleClick += delegate
             {
                 int i = lb.SelectedIndex;
-                if (i >= 0 && i < shown.Count && GroupChosen != null) GroupChosen(shown[i]);
+                if (i < 0 || i >= shown.Count) return;
+                // group besar tanpa kamera: klik ganda = buka / tutup isinya
+                if (nodes[i].HasChildren && !GroupTree.HasSlots(shown[i])) { if (filter.Length == 0) Toggle(shown[i].Id, i); return; }
+                if (GroupChosen != null) GroupChosen(shown[i]);
             };
             Controls.Add(lb);
             Reload();
         }
 
         readonly List<GroupRec> shown = new List<GroupRec>();
+        readonly List<GroupTree.Node> nodes = new List<GroupTree.Node>();
+        readonly HashSet<long> collapsed = new HashSet<long>();
+
+        void Toggle(long id, int keepIndex)
+        {
+            if (!collapsed.Remove(id)) collapsed.Add(id);
+            Apply();
+            if (keepIndex >= 0 && keepIndex < lb.Items.Count) lb.SelectedIndex = keepIndex;
+        }
+
         readonly Dictionary<string, Bitmap> icons = new Dictionary<string, Bitmap>();
 
         Bitmap LayoutIcon(string layoutId, int w, int h)
@@ -375,14 +413,40 @@ namespace IproNvrTool
         void Apply()
         {
             shown.Clear();
+            nodes.Clear();
             lb.Items.Clear();
+            var vis = new List<GroupRec>();
             foreach (GroupRec g in groups)
+                if (g.Owner.Length == 0 || g.Owner == AsmApp.UserKey) vis.Add(g);
+            // pohon group (group dalam group); saat mencari, semua dibuka dan yang tampil hanya yang cocok beserta induknya
+            List<GroupTree.Node> all = GroupTree.Flatten(vis, filter.Length > 0 ? null : collapsed);
+            HashSet<long> keep = null;
+            if (filter.Length > 0)
             {
-                if (g.Owner.Length > 0 && g.Owner != AsmApp.UserKey) continue;
-                if (filter.Length > 0 && g.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                shown.Add(g);
-                lb.Items.Add(g.Name + "   (" + g.Layout + ")");
+                keep = new HashSet<long>();
+                var byId = new Dictionary<long, GroupRec>();
+                foreach (GroupRec g in vis) byId[g.Id] = g;
+                foreach (GroupRec g in vis)
+                {
+                    if (g.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    GroupRec c = g; int guard = 0;
+                    while (c != null && keep.Add(c.Id) && guard++ < 50) { GroupRec p; c = c.ParentId > 0 && byId.TryGetValue(c.ParentId, out p) ? p : null; }
+                }
             }
+            foreach (GroupTree.Node n in all)
+            {
+                if (keep != null && !keep.Contains(n.G.Id)) continue;
+                shown.Add(n.G);
+                nodes.Add(n);
+                lb.Items.Add(n.G.Name + (GroupTree.HasSlots(n.G) || !n.HasChildren ? "   (" + n.G.Layout + ")" : "   [" + CountKids(vis, n.G.Id) + " group]"));
+            }
+        }
+
+        static int CountKids(List<GroupRec> list, long id)
+        {
+            int n = 0;
+            foreach (GroupRec g in list) if (g.ParentId == id) n++;
+            return n;
         }
 
         public bool Filter(string t)

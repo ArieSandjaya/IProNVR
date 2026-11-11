@@ -606,6 +606,8 @@ namespace IproNvrTool
             var cmbLay = new ComboBox(); cmbLay.Dock = DockStyle.Top; cmbLay.DropDownStyle = ComboBoxStyle.DropDownList;
             foreach (ScreenLayout l in ScreenLayout.All) cmbLay.Items.Add(l.Id);
             cmbLay.SelectedItem = "4";
+            var cmbParent = new ComboBox(); cmbParent.Dock = DockStyle.Top; cmbParent.DropDownStyle = ComboBoxStyle.DropDownList;
+            var parentIds = new List<long>();
             var lv = new ListView(); lv.Dock = DockStyle.Fill; lv.View = View.Details; lv.FullRowSelect = true; lv.HideSelection = false;
             lv.Columns.Add("Area", Asm.S(60)); lv.Columns.Add("Kamera", Asm.S(300));
             var slots = new List<CamRef>();
@@ -625,11 +627,33 @@ namespace IproNvrTool
             cmbLay.SelectedIndexChanged += delegate { drawSlots(); };
             drawSlots();
             GroupRec cur = null;
+            // induk: group lain yang bukan dirinya dan bukan turunannya (group dalam group)
+            Action fillParents = delegate
+            {
+                cmbParent.Items.Clear(); parentIds.Clear();
+                cmbParent.Items.Add("(tingkat atas)"); parentIds.Add(0);
+                HashSet<long> banned = cur != null ? GroupTree.Descendants(groups, cur.Id) : new HashSet<long>();
+                foreach (GroupTree.Node n in GroupTree.Flatten(groups, null))
+                {
+                    if (cur != null && (n.G.Id == cur.Id || banned.Contains(n.G.Id))) continue;
+                    cmbParent.Items.Add(new string(' ', n.Depth * 3) + n.G.Name);
+                    parentIds.Add(n.G.Id);
+                }
+                int pi = cur != null ? parentIds.IndexOf(cur.ParentId) : 0;
+                cmbParent.SelectedIndex = pi >= 0 ? pi : 0;
+            };
             Action reload = delegate
             {
-                try { groups = AsmDb.ListGroups(); } catch { groups = new List<GroupRec>(); }
+                List<GroupRec> raw;
+                try { raw = AsmDb.ListGroups(); } catch { raw = new List<GroupRec>(); }
+                groups = new List<GroupRec>();
                 lb.Items.Clear();
-                foreach (GroupRec g in groups) lb.Items.Add(g.Name + (g.Owner.Length > 0 ? "   (" + g.Owner + ")" : ""));
+                foreach (GroupTree.Node n in GroupTree.Flatten(raw, null))
+                {
+                    groups.Add(n.G);
+                    lb.Items.Add(new string(' ', n.Depth * 4) + (n.HasChildren ? "\u25BE " : "") + n.G.Name + (n.G.Owner.Length > 0 ? "   (" + n.G.Owner + ")" : ""));
+                }
+                fillParents();
             };
             reload();
             lb.SelectedIndexChanged += delegate
@@ -639,6 +663,7 @@ namespace IproNvrTool
                 if (cur == null) return;
                 txt.Text = cur.Name;
                 cmbLay.SelectedItem = ScreenLayout.Exists(cur.Layout) ? cur.Layout : "4";
+                fillParents();
                 slots.Clear();
                 foreach (CamRef r in cur.Slots) slots.Add(r);
                 drawSlots();
@@ -652,7 +677,7 @@ namespace IproNvrTool
             };
             lv.DoubleClick += delegate { pick(); };
             var bar = Buttons(
-                B("Baru", 70, delegate { cur = null; lb.ClearSelected(); txt.Text = ""; slots.Clear(); drawSlots(); }),
+                B("Baru", 70, delegate { cur = null; lb.ClearSelected(); txt.Text = ""; slots.Clear(); drawSlots(); fillParents(); }),
                 B("Pilih kamera...", 120, delegate { pick(); }),
                 B("Kosongkan area", 120, delegate { if (lv.SelectedIndices.Count > 0) { slots[lv.SelectedIndices[0]] = null; drawSlots(); } }),
                 B("Simpan", 80, delegate
@@ -662,6 +687,7 @@ namespace IproNvrTool
                     g.Name = txt.Text.Trim();
                     g.Layout = (string)cmbLay.SelectedItem;
                     g.Slots = slots.ToArray();
+                    g.ParentId = cmbParent.SelectedIndex >= 0 && cmbParent.SelectedIndex < parentIds.Count ? parentIds[cmbParent.SelectedIndex] : 0;
                     AsmDb.SaveGroup(g);
                     reload();
                 }),
@@ -676,6 +702,8 @@ namespace IproNvrTool
             right.Controls.Add(Lab("Area (klik ganda = pilih kamera):", DockStyle.Top));
             right.Controls.Add(cmbLay);
             right.Controls.Add(Lab("Pola layar:", DockStyle.Top));
+            right.Controls.Add(cmbParent);
+            right.Controls.Add(Lab("Masuk ke group besar (induk). Group besar = group tanpa kamera yang berisi group lain:", DockStyle.Top));
             right.Controls.Add(txt);
             right.Controls.Add(Lab("Nama group:", DockStyle.Top));
             return root;

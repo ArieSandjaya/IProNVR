@@ -425,6 +425,7 @@ VALUES (@id, @idx, @nvr, @ch, @name)";
                     {
                         cmd.ExecuteNonQuery();
                     }
+                    EnsureColumn(c, "grp", "parent_id", "INTEGER NOT NULL DEFAULT 0");      // group dalam group
                 }
                 _inited = true;
             }

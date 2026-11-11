@@ -340,6 +340,47 @@ namespace IproNvrTool
             UpdateUser();
         }
 
+        /// <summary>Menu group bertingkat (group dalam group): group besar menjadi submenu; group biasa memilih layar bila monitor lebih dari satu.</summary>
+        static void AddGroupMenus(ToolStripMenuItem root, List<GroupRec> all, Screen[] screens, Action<GroupRec, Screen> open)
+        {
+            var vis = new List<GroupRec>();
+            foreach (GroupRec g in all) if (g.Owner.Length == 0 || g.Owner == AsmApp.UserKey) vis.Add(g);
+            var stack = new Dictionary<int, ToolStripMenuItem>();   // kedalaman -> submenu induk
+            stack[-1] = root;
+            List<GroupTree.Node> nodes = GroupTree.Flatten(vis, null);
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                GroupTree.Node n = nodes[i];
+                GroupRec g = n.G;
+                ToolStripMenuItem parent = stack.ContainsKey(n.Depth - 1) ? stack[n.Depth - 1] : root;
+                bool openable = !n.HasChildren || GroupTree.HasSlots(g);
+                var item = new ToolStripMenuItem(g.Name + (n.HasChildren ? "  \u25B8" : ""));
+                parent.DropDownItems.Add(item);
+                if (n.HasChildren) stack[n.Depth] = item;
+                if (!openable) continue;
+                // grup yang bisa dibuka: langsung (1 monitor) atau pilih layar; untuk group besar bersama kamera, bukanya sebagai butir pertama submenu
+                ToolStripItemCollection target = n.HasChildren ? item.DropDownItems : null;
+                GroupRec gg = g;
+                if (screens.Length <= 1)
+                {
+                    if (n.HasChildren) { var oi = new ToolStripMenuItem("Buka group ini"); oi.Click += delegate { open(gg, Screen.PrimaryScreen); }; target.Add(oi); target.Add(new ToolStripSeparator()); }
+                    else item.Click += delegate { open(gg, Screen.PrimaryScreen); };
+                }
+                else
+                {
+                    ToolStripMenuItem holder = n.HasChildren ? new ToolStripMenuItem("Buka group ini") : item;
+                    for (int si = 0; si < screens.Length; si++)
+                    {
+                        Screen sc = screens[si];
+                        var li = new ToolStripMenuItem("Layar " + (si + 1) + (sc.Primary ? " (utama)" : ""));
+                        li.Click += delegate { open(gg, sc); };
+                        holder.DropDownItems.Add(li);
+                    }
+                    if (n.HasChildren) { target.Add(holder); target.Add(new ToolStripSeparator()); }
+                }
+            }
+        }
+
         void OpenMosaic(GroupRec g, Screen sc)
         {
             string r = null;
@@ -517,21 +558,7 @@ namespace IproNvrTool
             List<GroupRec> mgroups;
             try { mgroups = AsmDb.ListGroups(); } catch { mgroups = new List<GroupRec>(); }
             Screen[] mscreens = Screen.AllScreens;
-            foreach (GroupRec mg in mgroups)
-            {
-                GroupRec g3 = mg;
-                if (mscreens.Length <= 1) Asm.Sub(mz, g3.Name, delegate { OpenMosaic(g3, Screen.PrimaryScreen); });
-                else
-                {
-                    var gm = new ToolStripMenuItem(g3.Name);
-                    for (int si = 0; si < mscreens.Length; si++)
-                    {
-                        Screen sc3 = mscreens[si];
-                        Asm.Sub(gm, "Layar " + (si + 1) + (sc3.Primary ? " (utama)" : ""), delegate { OpenMosaic(g3, sc3); });
-                    }
-                    mz.DropDownItems.Add(gm);
-                }
-            }
+            AddGroupMenus(mz, mgroups, mscreens, OpenMosaic);
             if (mgroups.Count == 0) Asm.Sub(mz, "(belum ada group)", delegate { });
             m.Items.Add(mz);
 
@@ -545,21 +572,7 @@ namespace IproNvrTool
             Asm.Sub(mv, "Tutup semua multiview", delegate { MultiviewForm.CloseAll(); });
             m.Items.Add(mv);
             ToolStripMenuItem md = new ToolStripMenuItem("Wall Direct3D (dekode GPU)");
-            foreach (GroupRec mg in mgroups)
-            {
-                GroupRec g4 = mg;
-                if (mscreens.Length <= 1) Asm.Sub(md, g4.Name, delegate { OpenD3d(g4, Screen.PrimaryScreen); });
-                else
-                {
-                    var gd = new ToolStripMenuItem(g4.Name);
-                    for (int si = 0; si < mscreens.Length; si++)
-                    {
-                        Screen sc4 = mscreens[si];
-                        Asm.Sub(gd, "Layar " + (si + 1) + (sc4.Primary ? " (utama)" : ""), delegate { OpenD3d(g4, sc4); });
-                    }
-                    md.DropDownItems.Add(gd);
-                }
-            }
+            AddGroupMenus(md, mgroups, mscreens, OpenD3d);
             if (mgroups.Count == 0) Asm.Sub(md, "(belum ada group)", delegate { });
             m.Items.Add(md);
 

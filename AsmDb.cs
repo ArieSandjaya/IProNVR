@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS grp (
     name   TEXT NOT NULL COLLATE NOCASE,
     layout TEXT NOT NULL DEFAULT '4',
     owner  TEXT NOT NULL DEFAULT '',
+    parent_id INTEGER NOT NULL DEFAULT 0,
     sort   INTEGER NOT NULL DEFAULT 0,
     UNIQUE (name, owner)
 );
@@ -156,7 +157,90 @@ CREATE TABLE IF NOT EXISTS view_state (
         public string Name = "";
         public string Layout = "4";
         public string Owner = "";                       // '' = group umum; selain itu group milik user
+        public long ParentId;                           // 0 = group tingkat atas; selain itu id group induk (group dalam group)
         public CamRef[] Slots = new CamRef[0];          // indeks = nomor area; null = kosong
+    }
+
+    /// <summary>Susunan pohon group (group dalam group). Induk yang hilang / tidak terlihat / berputar dianggap tingkat atas.</summary>
+    public static class GroupTree
+    {
+        public class Node
+        {
+            public GroupRec G;
+            public int Depth;
+            public bool HasChildren;
+        }
+
+        static Dictionary<long, List<GroupRec>> ChildMap(List<GroupRec> all, out List<GroupRec> roots)
+        {
+            var byId = new Dictionary<long, GroupRec>();
+            foreach (GroupRec g in all) byId[g.Id] = g;
+            var map = new Dictionary<long, List<GroupRec>>();
+            roots = new List<GroupRec>();
+            foreach (GroupRec g in all)
+            {
+                GroupRec p;
+                if (g.ParentId > 0 && g.ParentId != g.Id && byId.TryGetValue(g.ParentId, out p) && !Cycle(byId, g))
+                {
+                    List<GroupRec> l;
+                    if (!map.TryGetValue(p.Id, out l)) map[p.Id] = l = new List<GroupRec>();
+                    l.Add(g);
+                }
+                else roots.Add(g);
+            }
+            return map;
+        }
+
+        static bool Cycle(Dictionary<long, GroupRec> byId, GroupRec g)
+        {
+            var seen = new HashSet<long>();
+            GroupRec c = g;
+            while (c != null && c.ParentId > 0)
+            {
+                if (!seen.Add(c.Id)) return true;
+                if (!byId.TryGetValue(c.ParentId, out c)) return false;
+            }
+            return false;
+        }
+
+        /// <summary>Urutan tampil (DFS). collapsed = id group yang ditutup (anaknya disembunyikan); null = semua terbuka.</summary>
+        public static List<Node> Flatten(List<GroupRec> all, HashSet<long> collapsed)
+        {
+            List<GroupRec> roots;
+            var map = ChildMap(all, out roots);
+            var res = new List<Node>();
+            foreach (GroupRec r in roots) Walk(r, 0, map, collapsed, res);
+            return res;
+        }
+
+        static void Walk(GroupRec g, int d, Dictionary<long, List<GroupRec>> map, HashSet<long> collapsed, List<Node> res)
+        {
+            List<GroupRec> kids;
+            bool has = map.TryGetValue(g.Id, out kids) && kids.Count > 0;
+            res.Add(new Node { G = g, Depth = d, HasChildren = has });
+            if (!has || (collapsed != null && collapsed.Contains(g.Id))) return;
+            foreach (GroupRec k in kids) Walk(k, d + 1, map, collapsed, res);
+        }
+
+        /// <summary>Semua turunan (anak, cucu, ...) dari sebuah group: tidak boleh dipilih sebagai induknya.</summary>
+        public static HashSet<long> Descendants(List<GroupRec> all, long id)
+        {
+            var res = new HashSet<long>();
+            var q = new Queue<long>();
+            q.Enqueue(id);
+            while (q.Count > 0)
+            {
+                long cur = q.Dequeue();
+                foreach (GroupRec g in all) if (g.ParentId == cur && g.Id != id && res.Add(g.Id)) q.Enqueue(g.Id);
+            }
+            return res;
+        }
+
+        public static bool HasSlots(GroupRec g)
+        {
+            foreach (CamRef c in g.Slots) if (c != null && c.NvrId > 0) return true;
+            return false;
+        }
     }
 
     public class SeqStep
@@ -405,6 +489,7 @@ CREATE TABLE IF NOT EXISTS view_state (
             g.Name = r.S("name");
             g.Layout = r.S("layout");
             g.Owner = r.S("owner");
+            g.ParentId = r.L("parent_id");
             int max = -1;
             List<Row> slots = Rows("SELECT * FROM grp_slot WHERE group_id = @id ORDER BY slot_index", "@id", g.Id);
             foreach (Row s in slots) max = Math.Max(max, s.I("slot_index"));
@@ -425,10 +510,10 @@ CREATE TABLE IF NOT EXISTS view_state (
             using (var t = new Tx())
             {
                 if (g.Id == 0)
-                    g.Id = t.Exec("INSERT INTO grp (name, layout, owner, sort) VALUES (@n, @l, @o, (SELECT IFNULL(MAX(sort),0)+1 FROM grp))",
-                        "@n", g.Name, "@l", g.Layout, "@o", g.Owner ?? "");
+                    g.Id = t.Exec("INSERT INTO grp (name, layout, owner, parent_id, sort) VALUES (@n, @l, @o, @p, (SELECT IFNULL(MAX(sort),0)+1 FROM grp))",
+                        "@n", g.Name, "@l", g.Layout, "@o", g.Owner ?? "", "@p", g.ParentId);
                 else
-                    t.Exec("UPDATE grp SET name = @n, layout = @l WHERE id = @id", "@n", g.Name, "@l", g.Layout, "@id", g.Id);
+                    t.Exec("UPDATE grp SET name = @n, layout = @l, parent_id = @p WHERE id = @id", "@n", g.Name, "@l", g.Layout, "@p", g.ParentId, "@id", g.Id);
                 t.Exec("DELETE FROM grp_slot WHERE group_id = @id", "@id", g.Id);
                 for (int i = 0; i < g.Slots.Length; i++)
                 {
@@ -445,6 +530,7 @@ CREATE TABLE IF NOT EXISTS view_state (
         public static void DeleteGroup(long id)
         {
             if (ServerLink.Enabled) { ServerLink.DeleteGroup(id); return; }
+            Exec("UPDATE grp SET parent_id = 0 WHERE parent_id = @id", "@id", id);   // anak group naik ke tingkat atas
             Exec("DELETE FROM grp WHERE id = @id", "@id", id);
         }
 

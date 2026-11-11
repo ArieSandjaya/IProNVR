@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS app_user (
 CREATE TABLE IF NOT EXISTS grp (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE, layout TEXT NOT NULL DEFAULT '4',
-    slots TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', sort INTEGER NOT NULL DEFAULT 0
+    slots TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', parent_id INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS seq (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS seq (
                 new Col("codec",'T',""), new Col("width",'I',0), new Col("height",'I',0), new Col("scan_detail",'T',""),
                 new Col("cam_user",'T',""), new Col("cam_pass",'T',"",true), new Col("reg_status",'I',0) } },
             new TableDef { Route = "groups", Table = "grp", Order = "sort, name", NatKey = new[] { "name" }, Cols = new Col[] {
-                new Col("name",'T',""), new Col("layout",'T',"4"), new Col("slots",'T',""), new Col("owner",'T',""), new Col("sort",'I',0) } },
+                new Col("name",'T',""), new Col("layout",'T',"4"), new Col("slots",'T',""), new Col("owner",'T',""), new Col("parent_id",'I',0), new Col("sort",'I',0) } },
             new TableDef { Route = "sequences", Table = "seq", Order = "sort, name", NatKey = new[] { "name" }, Cols = new Col[] {
                 new Col("name",'T',""), new Col("steps",'T',""), new Col("sort",'I',0) } },
             new TableDef { Route = "users", Table = "app_user", Order = "is_admin DESC, name", NatKey = new[] { "name" }, AdminOnlyRead = true, Cols = new Col[] {
@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS seq (
                 try { Exec(c, "ALTER TABLE camera ADD COLUMN cam_pass TEXT NOT NULL DEFAULT ''"); } catch { }
                 try { Exec(c, "ALTER TABLE camera ADD COLUMN reg_status INTEGER NOT NULL DEFAULT 0"); } catch { }
                 try { Exec(c, "ALTER TABLE camera ADD COLUMN rtsp_main_url TEXT NOT NULL DEFAULT ''"); } catch { }
+                try { Exec(c, "ALTER TABLE grp ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0"); } catch { }
                 try { Exec(c, "ALTER TABLE camera ADD COLUMN rtsp_streams TEXT NOT NULL DEFAULT ''"); } catch { }
                 try { Exec(c, "ALTER TABLE nvr ADD COLUMN brand TEXT NOT NULL DEFAULT 'ipro'"); } catch { }
                 Exec(c, "INSERT OR IGNORE INTO meta (k, v) VALUES ('version', '1')");

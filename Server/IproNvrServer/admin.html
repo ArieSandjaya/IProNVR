@@ -124,7 +124,7 @@ var META={
  nvrs:{t:'NVR',ic:'▣',lbl:{name:'Nama',host:'Host / IP',port:'Port',use_https:'HTTPS',username:'User NVR',password:'Password NVR',max_channels:'Jumlah kanal',brand:'Merek',model:'Model',location:'Lokasi',notes:'Catatan',cam_user:'User kamera (RTSP)',cam_pass:'Password kamera (RTSP)',rtsp_template:'Template RTSP substream',substream_param:'Parameter substream NVR'},
   full:['rtsp_template','substream_param','notes'],hint:{rtsp_template:'Contoh: rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel=1&subtype=1'}},
  cameras:{t:'Kamera',ic:'◉',lbl:{nvr_id:'NVR',channel:'Kanal',name:'Nama',ip_address:'IP kamera',location:'Lokasi',note:'Catatan',cam_user:'User kamera (khusus)',cam_pass:'Password kamera (khusus)',rtsp_url:'URL RTSP substream',rtsp_main_url:'URL RTSP stream utama',rtsp_streams:'Semua stream kamera (hasil deteksi)',codec:'Codec',width:'Lebar',height:'Tinggi',scan_detail:'Hasil deteksi',reg_status:'Status di NVR (0 tidak terdaftar, 1 normal, 2 error koneksi)'},full:['rtsp_url','rtsp_streams','scan_detail','note'],hint:{cam_user:'Kosongkan bila sama dengan login kamera di data NVR.',rtsp_url:'Kosong = pakai template NVR + IP kamera. Dapat diisi otomatis lewat tombol Deteksi.'}},
- groups:{t:'Group',ic:'▦',lbl:{name:'Nama',layout:'Layout',slots:'Kamera per area',owner:'Pemilik',sort:'Urutan'},full:['slots'],hint:{slots:'Format: idNVR:kanal dipisah koma, area kosong dikosongkan. Contoh: 1:1,1:2,,1:5'}},
+ groups:{t:'Group',ic:'▦',lbl:{name:'Nama',layout:'Layout',slots:'Kamera per area',owner:'Pemilik',parent_id:'Group besar (induk)',sort:'Urutan'},full:['slots'],hint:{slots:'Format: idNVR:kanal dipisah koma, area kosong dikosongkan. Contoh: 1:1,1:2,,1:5'}},
  sequences:{t:'Sequence',ic:'↻',lbl:{name:'Nama',steps:'Langkah',sort:'Urutan'},full:['steps'],hint:{steps:'Format: idGroup:detik dipisah koma. Contoh: 1:10,2:10,3:15'}},
  users:{t:'User',ic:'☺',lbl:{name:'Nama',level:'Level (0 = admin penuh, 1-5)',is_admin:'Admin',use_group:'Pakai group sendiri',password:'Password'},full:[]}
 };
@@ -198,7 +198,7 @@ function cellFor(r,row){
   switch(r){
    case'nvrs':return[esc(row.name),esc(row.host)+':'+row.port+(row.use_https?' <span class="badge info">https</span>':''),esc(row.model),esc(row.location),(data.cameras||[]).filter(function(c){return c.nvr_id==row.id}).length+' / '+row.max_channels];
    case'cameras':return[row.channel+(row.reg_status==1?' <span class="badge ok" title="Terdaftar di NVR, koneksi normal">NVR</span>':row.reg_status==2?' <span class="badge warn" title="Terdaftar di NVR tetapi koneksi kamera error">error</span>':' <span class="badge" title="Tidak terdaftar di NVR (belum dideteksi atau sudah dihapus dari NVR)">-</span>'),esc(row.name),esc(row.ip_address)+(row.cam_user?' <span class="badge info" title="Login khusus kamera">login khusus</span>':''),esc(nvrName(row.nvr_id)),esc(row.location),row.rtsp_url?'<span class="mono" title="'+esc(row.rtsp_url)+'">'+esc(row.rtsp_url)+'</span>':'<span class="badge">belum</span>',row.width?'<span class="badge ok">'+esc(row.codec)+' '+row.width+'×'+row.height+'</span>':'-'];
-   case'groups':return[layIcon(row.layout)+esc(row.name),esc(row.layout),(row.slots||'').split(',').filter(function(x){return x}).length,esc(row.owner)];
+   case'groups':return[layIcon(row.layout)+esc(grpPath(row)),esc(row.layout),(row.slots||'').split(',').filter(function(x){return x}).length,esc(row.owner)];
    case'sequences':return[esc(row.name),(row.steps||'').split(',').filter(function(x){return x}).length+' langkah',esc(row.steps)];
    case'users':return[esc(row.name),row.level,row.is_admin?'<span class="badge ok">Admin</span>':'<span class="badge">Operator</span>',row.use_group?'Ya':'Tidak'];
   }}
@@ -284,6 +284,8 @@ var LAYOUTS=[["1",1,1,[[0,0,1,1]]],["2A",2,1,[[0,0,1,1],[1,0,1,1]]],["2B",1,2,[[
 function layById(id){for(var i=0;i<LAYOUTS.length;i++)if(LAYOUTS[i][0]==id)return LAYOUTS[i];return LAYOUTS[6]}
 function layIcon(id){var L=layById(id);return '<span class="lay" style="display:inline-block;width:34px;vertical-align:middle;margin-right:8px;padding:2px"><span class="pv" style="display:grid;gap:1px;background:#8a95a8;aspect-ratio:16/10;grid-template-columns:repeat('+L[1]+',1fr);grid-template-rows:repeat('+L[2]+',1fr)">'+L[3].map(function(r){return '<i style="background:#1e232e;grid-column:'+(r[0]+1)+'/span '+r[2]+';grid-row:'+(r[1]+1)+'/span '+r[3]+'"></i>'}).join('')+'</span></span>'}
 function camTitle(nid,ch){var c=(data.cameras||[]).filter(function(x){return x.nvr_id==nid&&x.channel==ch})[0];return nvrName(nid)+' - CH'+ch+(c&&c.name&&c.name!='CH'+ch?' '+c.name:'')}
+function grpDesc(id){var out={},q=[id];while(q.length){var c=q.pop();(data.groups||[]).forEach(function(g){if(g.parent_id==c&&g.id!=id&&!out[g.id]){out[g.id]=1;q.push(g.id)}})}return out}
+function grpPath(g){var n=g.name,c=g,k=0;while(c&&c.parent_id&&k++<20){c=(data.groups||[]).filter(function(x){return x.id==c.parent_id})[0];if(c)n=c.name+' \u203A '+n}return n}
 function editGroup(row){
   var isNew=!row,v=row||{},lay=layById(v.layout||'4'),slots=[];
   (v.slots||'').split(',').forEach(function(s){var p=s.split(':');slots.push(p.length==2&&+p[0]>0&&+p[1]>0?{n:+p[0],c:+p[1]}:null)});
@@ -296,6 +298,8 @@ function editGroup(row){
   function draw(){
     fit();
     var users=(data.users||[]).map(function(u){return '<option'+(v.owner==u.name?' selected':'')+'>'+esc(u.name)+'</option>'}).join('');
+    var banned=row?grpDesc(row.id):{};
+    var pars=(data.groups||[]).filter(function(g){return !(row&&g.id==row.id)&&!banned[g.id]}).map(function(g){return '<option value="'+g.id+'"'+(v.parent_id==g.id?' selected':'')+'>'+esc(grpPath(g))+'</option>'}).join('');
     var lh=LAYOUTS.map(function(L){return '<div class="lay'+(L[0]==lay[0]?' on':'')+'" data-l="'+L[0]+'" title="Pola '+L[0]+' ('+L[3].length+' area)"><div class="pv" style="grid-template-columns:repeat('+L[1]+',1fr);grid-template-rows:repeat('+L[2]+',1fr)">'+L[3].map(function(r){return '<i style="grid-column:'+(r[0]+1)+'/span '+r[2]+';grid-row:'+(r[1]+1)+'/span '+r[3]+'"></i>'}).join('')+'</div>'+L[0]+'</div>'}).join('');
     var gv=lay[3].map(function(r,i){var s=slots[i];return '<div class="ga'+(s?' has':'')+(i==sel?' sel':'')+'" data-i="'+i+'" style="grid-column:'+(r[0]+1)+'/span '+r[2]+';grid-row:'+(r[1]+1)+'/span '+r[3]+'">'+(s?'<b>'+esc(camTitle(s.n,s.c))+'</b><span class="x" data-x="'+i+'" title="Kosongkan area">✕</span>':'<b>'+(i+1)+'</b>')+'</div>'}).join('');
     var tree=(data.nvrs||[]).map(function(n){
@@ -303,7 +307,7 @@ function editGroup(row){
       if(!cams.length)return '';
       return '<div class="nh">'+esc(n.name)+' <small>('+cams.length+')</small></div>'+cams.map(function(c){var u=used(n.id,c.channel);return '<div class="ci'+(u?' used':'')+'" draggable="true" data-n="'+n.id+'" data-c="'+c.channel+'">CH'+c.channel+' '+esc(c.name&&c.name!='CH'+c.channel?c.name:'')+(u?'<em>area '+u+'</em>':(c.reg_status==2?'<em style="color:#dc3545">error</em>':''))+'</div>'}).join('')}).join('')||'<div class="ci">Tidak ada kamera. Tambahkan kamera di menu NVR / Kamera.</div>';
     el.innerHTML='<div class="m wide"><div class="mh"><h3>'+(isNew?'Tambah Group':'Ubah Group')+'</h3><button class="btn sm" id="mx">✕</button></div>'+
-     '<div class="ge"><div><label>Nama group</label><input id="gn" value="'+esc(v.name||'')+'"><label style="margin-top:10px">Pemilik</label><select id="go"><option value="">Semua user</option>'+users+'</select><label style="margin-top:10px">Pola layar</label><div class="lays">'+lh+'</div></div>'+
+     '<div class="ge"><div><label>Nama group</label><input id="gn" value="'+esc(v.name||'')+'"><label style="margin-top:10px">Pemilik</label><select id="go"><option value="">Semua user</option>'+users+'</select><label style="margin-top:10px">Masuk ke group besar (group dalam group)</label><select id="gpar"><option value="0">(tingkat atas)</option>'+pars+'</select><label style="margin-top:10px">Pola layar</label><div class="lays">'+lh+'</div></div>'+
      '<div><label>Tampilan ('+lay[3].length+' area)</label><div class="gv" style="grid-template-columns:repeat('+lay[1]+',1fr);grid-template-rows:repeat('+lay[2]+',1fr)">'+gv+'</div><div class="ghint">Klik area untuk memilih (bingkai emas), lalu klik kamera di daftar kanan, atau seret kamera ke area. Seret antar area untuk menukar.</div></div>'+
      '<div><label>Kamera</label><select id="gf" style="margin-bottom:6px"><option value="">Semua NVR</option>'+(data.nvrs||[]).map(function(n){return '<option value="'+n.id+'"'+(String(n.id)===fn?' selected':'')+'>'+esc(n.name)+'</option>'}).join('')+'</select><input id="gq" placeholder="Cari kamera…" value="'+esc(q)+'"><div class="ctree">'+tree+'</div></div></div>'+
      '<div class="mf"><button class="btn" id="gclr">Kosongkan semua</button><span style="flex:1"></span><button class="btn" id="mc">Batal</button><button class="btn p" id="ms">Simpan</button></div></div>';
@@ -312,6 +316,7 @@ function editGroup(row){
     el.querySelector('#mx').onclick=el.querySelector('#mc').onclick=close;
     el.querySelector('#gn').oninput=function(){v.name=this.value};
     el.querySelector('#go').onchange=function(){v.owner=this.value};
+    el.querySelector('#gpar').onchange=function(){v.parent_id=+this.value};
     el.querySelector('#gclr').onclick=function(){slots=slots.map(function(){return null});draw()};
     [].forEach.call(el.querySelectorAll('.lay'),function(d){d.onclick=function(){lay=layById(d.dataset.l);draw()}});
     [].forEach.call(el.querySelectorAll('.ga'),function(d){
@@ -332,7 +337,7 @@ function editGroup(row){
     keepq.oninput=function(){q=this.value.toLowerCase();var pos=this.selectionStart;draw();var nq=el.querySelector('#gq');nq.focus();nq.setSelectionRange(pos,pos)};
     el.querySelector('#ms').onclick=function(){
       var name=(v.name||'').trim();if(!name){alert('Isi nama group.');return}
-      var b={name:name,layout:lay[0],slots:slots.map(function(s){return s?s.n+':'+s.c:''}).join(','),owner:v.owner||''};
+      var b={name:name,layout:lay[0],slots:slots.map(function(s){return s?s.n+':'+s.c:''}).join(','),owner:v.owner||'',parent_id:+v.parent_id||0};
       if(row){b.id=row.id;b.sort=row.sort}
       api('POST','/api/groups',b).then(function(){close();msg={t:'Group tersimpan.'};return reload()}).catch(function(e){alert(e.message)})}
   }
