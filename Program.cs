@@ -17,7 +17,7 @@ namespace IproNvrTool
             {
                 if (!AppLifecycle.AcquireSingleInstance())
                 {
-                    MessageBox.Show("Aplikasi sudah berjalan.", "i-PRO NVR Tool");
+                    MessageBox.Show("Aplikasi sudah berjalan.", "AMAN 300");
                     return;
                 }
                 bool sup = false;
@@ -61,7 +61,7 @@ namespace IproNvrTool
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Gagal memulai tampilan ASM300: " + ex.Message + "\n\nMembuka tampilan klasik.", "i-PRO NVR Tool");
+                MessageBox.Show("Gagal memulai tampilan ASM300: " + ex.Message + "\n\nMembuka tampilan klasik.", "AMAN 300");
                 Application.Run(new MainForm());
                 return;
             }

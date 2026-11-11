@@ -468,7 +468,7 @@ namespace IproNvrTool
             foreach (AsmTab t in strip.Tabs) if (t.Key == key) title = t.Title;
             strip.Remove(key);
             host.Controls.Remove(v);
-            var f = new AsmWindow(title + " - i-PRO NVR Tool", AppIcon.Get());
+            var f = new AsmWindow(title + " - AMAN 300", AppIcon.Get());
             v.Visible = true;
             f.Body.Controls.Add(v);
             detached[key] = f;
@@ -585,7 +585,7 @@ namespace IproNvrTool
             Asm.Item(m, "Tutup semua notifikasi", delegate { NotifyForm.CloseAll(); });
             Asm.Item(m, "Version", delegate
             {
-                MessageBox.Show("i-PRO NVR Tool - tampilan bergaya ASM300 (v7.80)\nBackend: CGI Interface i-PRO v1.3R1\nFitur ASM300 yang tidak punya CGI (pencarian event REC/VMD/wajah, heat map, decoder, license, dewarp fisheye) tidak tersedia.", "Version");
+                MessageBox.Show("AMAN 300 - tampilan bergaya ASM300 (v7.80)\nBackend: CGI Interface i-PRO v1.3R1\nFitur ASM300 yang tidak punya CGI (pencarian event REC/VMD/wajah, heat map, decoder, license, dewarp fisheye) tidak tersedia.", "Version");
             });
             Asm.Item(m, "Help", delegate
             {

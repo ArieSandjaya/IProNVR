@@ -185,7 +185,7 @@ namespace IproNvrTool
                 {
                     using (var cmd = new SQLiteCommand("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('nvr','camera')", c))
                     {
-                        if (Convert.ToInt32(cmd.ExecuteScalar()) < 2) return "Bukan berkas database i-PRO NVR Tool (tabel nvr/camera tidak ada).";
+                        if (Convert.ToInt32(cmd.ExecuteScalar()) < 2) return "Bukan berkas database AMAN 300 (tabel nvr/camera tidak ada).";
                     }
                     foreach (SecretRow s in ReadSecrets(c))
                         if (s.Pw.StartsWith(Prefix, StringComparison.Ordinal) || s.CamPw.StartsWith(Prefix, StringComparison.Ordinal)) needsPass = true;

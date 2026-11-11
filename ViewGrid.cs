@@ -1453,7 +1453,7 @@ namespace IproNvrTool
     {
         public event Action ExitClicked;
         public event Action MinimizeClicked;
-        public string Caption = "i-PRO NVR Tool";
+        public string Caption = "AMAN 300";
         readonly Control host;
         readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         bool pinned, shown = true;

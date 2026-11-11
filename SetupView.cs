@@ -986,7 +986,7 @@ namespace IproNvrTool
             }
             using (var d = new SaveFileDialog())
             {
-                d.Filter = "Database i-PRO NVR Tool (*.iprodb)|*.iprodb";
+                d.Filter = "Database AMAN 300 (*.iprodb)|*.iprodb";
                 d.FileName = "iprotool_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".iprodb";
                 if (d.ShowDialog(this) != DialogResult.OK) return;
                 try
@@ -1004,7 +1004,7 @@ namespace IproNvrTool
         {
             using (var d = new OpenFileDialog())
             {
-                d.Filter = "Database i-PRO NVR Tool (*.iprodb;*.db)|*.iprodb;*.db|Semua berkas|*.*";
+                d.Filter = "Database AMAN 300 (*.iprodb;*.db)|*.iprodb;*.db|Semua berkas|*.*";
                 if (d.ShowDialog(this) != DialogResult.OK) return;
                 bool needs;
                 string err = DbTransfer.Inspect(d.FileName, out needs);

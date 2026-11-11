@@ -14,7 +14,7 @@ namespace IproNvrTool
 
         public MainForm()
         {
-            Text = "i-PRO NVR Tool (CGI Interface v1.3R1)";
+            Text = "AMAN 300 (CGI Interface v1.3R1)";
             Width = 1350;
             Height = 860;
             StartPosition = FormStartPosition.CenterScreen;
