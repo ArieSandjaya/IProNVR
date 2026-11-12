@@ -199,6 +199,7 @@ body.rsz{user-select:none;cursor:col-resize}body.rsz iframe{pointer-events:none}
 [data-theme="light"] .dt{background:rgba(0,0,0,.04)}
 .p3 table.mini td{vertical-align:top}
 .themebtn{font-size:16px}
+.btn.ib{width:38px;height:38px;padding:0;justify-content:center;border-radius:12px}.btn.ib svg{width:18px;height:18px}
 @media(max-width:1100px){.x3{grid-template-columns:1fr;height:auto}.spl{display:none}.p3{margin-bottom:12px}.p3 .pb{max-height:420px}}
 @media(max-width:900px){.ge{grid-template-columns:1fr}}
 @media(max-width:800px){#side{position:fixed;inset:0 auto 0 0;z-index:10;margin-left:calc(var(--side-w) * -1);background:var(--panel)}body.open #side{margin-left:0}#modal .mb{grid-template-columns:1fr}#content,#top{padding-left:16px;padding-right:16px}}
@@ -534,6 +535,13 @@ function genChannels(){
 
 /* ---------- halaman Perangkat: tata letak 3 panel ala XProtect Management Client (Site navigation | Ikhtisar | Properti + Preview) ---------- */
 var dev={sel:null,open:{},gopen:{},q:'',tab:'info',live:0};
+var ICO={
+ wiz:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+ rtsp:'<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8.5 11h5M11 8.5v5"/>',
+ fetch:'<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/>',
+ cam:'<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h8A1.5 1.5 0 0 1 15 8.5v7a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 4 15.5zM15 11l5-3v8l-5-3"/>',
+ nvr:'<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M8 7h.01M8 17h.01"/>'};
+function ib(act,ico,title,cls,attr){return '<button class="btn ib'+(cls?' '+cls:'')+'" data-a="'+act+'"'+(attr||'')+' title="'+title+'" aria-label="'+title+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO[ico]+'</svg></button>'}
 function devCams(nid){return (data.cameras||[]).filter(function(c){return c.nvr_id==nid})}
 function devFind(t,id){return (t=='nvr'?data.nvrs:t=='cam'?data.cameras:data.groups||[]).filter(function(x){return x.id==id})[0]}
 function devDot(c){return '<i class="dot '+(c.reg_status==1?'g':c.reg_status==2?'r':'')+'" title="'+(c.reg_status==1?'Normal on NVR':c.reg_status==2?'Connection error':'Not registered on NVR')+'"></i>'}
@@ -591,7 +599,7 @@ function devOver(){
     (data.nvrs||[]).forEach(function(n){var c=devCams(n.id);h+='<tr class="rw" data-a="sel" data-t="nvr" data-i="'+n.id+'"><td>'+esc(n.name)+'</td><td>'+esc(n.host)+':'+n.port+'</td><td>'+esc(n.brand||'ipro')+'</td><td>'+c.length+' / '+n.max_channels+'</td><td>'+c.filter(function(x){return x.rtsp_url}).length+'</td></tr>'});
     if(!(data.nvrs||[]).length)h+='<tr><td colspan="5" class="empty">No NVRs yet.</td></tr>';
     h+='</tbody></table>';
-    if(admin)h='<div class="tb"><button class="btn p" data-a="wiz">＋ Add devices (wizard)</button><button class="btn" data-a="addnvr">＋ NVR</button></div>'+h;
+    if(admin)h='<div class="tb">'+ib('wiz','wiz','Add devices (wizard)','p')+ib('addnvr','nvr','Add NVR')+'</div>'+h;
     return h}
   if(s.t=='grp'){
     var g=devFind('grp',s.id);if(!g)return '';
@@ -601,7 +609,7 @@ function devOver(){
     (g.slots||'').split(',').forEach(function(sl){var p=sl.split(':');if(p.length!=2)return;var c=(data.cameras||[]).filter(function(x){return x.nvr_id==p[0]&&x.channel==p[1]})[0];if(c)h+='<tr class="rw" data-a="sel" data-t="cam" data-i="'+c.id+'"><td>'+devDot(c)+' '+esc(c.name)+'</td><td>Camera</td><td>'+esc(nvrName(c.nvr_id))+' CH'+c.channel+'</td></tr>'});
     h+='</tbody></table>';return h}
   var nid=s.t=='nvr'?s.id:(devFind('cam',s.id)||{}).nvr_id,cams=devCams(nid);
-  if(admin)h+='<div class="tb"><button class="btn p" data-a="wiz">＋ Add devices</button><button class="btn i" data-a="disc" data-i="'+nid+'">Detect RTSP</button><button class="btn" data-a="fetch" data-i="'+nid+'">Detect cameras from NVR</button><button class="btn" data-a="addcam" data-i="'+nid+'">＋ Camera</button></div>';
+  if(admin)h+='<div class="tb">'+ib('wiz','wiz','Add devices (wizard)','p')+ib('disc','rtsp','Detect RTSP for this NVR','i',' data-i="'+nid+'"')+ib('fetch','fetch','Detect cameras from NVR','',' data-i="'+nid+'"')+ib('addcam','cam','Add camera manually','',' data-i="'+nid+'"')+'</div>';
   h+='<table><thead><tr><th>Ch</th><th>Name</th><th>IP</th><th>Stream</th><th>Location</th></tr></thead><tbody>';
   cams.forEach(function(c){var on=s.t=='cam'&&s.id==c.id;
     h+='<tr class="rw'+(on?' sel':'')+'" data-a="sel" data-t="cam" data-i="'+c.id+'"><td>'+devDot(c)+' '+c.channel+'</td><td>'+esc(c.name)+'</td><td>'+esc(c.ip_address)+'</td><td>'+(c.codec?'<span class="badge ok">'+esc(c.codec)+(c.width?' '+c.width+'×'+c.height:'')+'</span>':(c.rtsp_url?'<span class="badge info">URL set</span>':'<span class="badge warn">none</span>'))+'</td><td>'+esc(c.location)+'</td></tr>'});
@@ -621,7 +629,7 @@ function devProps(){
     var v=devFind('nvr',s.id);if(!v)return '';var c=devCams(v.id);
     return '<div class="pt">▣ '+esc(v.name)+'</div>'+devTabs([['info','Info'],['cams','Cameras']])+
       (dev.tab=='cams'?'<div class="dkv"><span>Cameras</span><b>'+c.length+' / '+v.max_channels+'</b><span>With RTSP URL</span><b>'+c.filter(function(x){return x.rtsp_url}).length+'</b><span>Normal on NVR</span><b>'+c.filter(function(x){return x.reg_status==1}).length+'</b><span>Errors</span><b>'+c.filter(function(x){return x.reg_status==2}).length+'</b></div>'+
-        (admin?'<div class="tb"><button class="btn i" data-a="disc" data-i="'+v.id+'">Detect RTSP</button><button class="btn" data-a="fetch" data-i="'+v.id+'">Detect cameras from NVR</button></div>':''):
+        (admin?'<div class="tb">'+ib('disc','rtsp','Detect RTSP for this NVR','i',' data-i="'+v.id+'"')+ib('fetch','fetch','Detect cameras from NVR','',' data-i="'+v.id+'"')+'</div>':''):
        '<div class="dkv"><span>Address</span><b>'+esc(v.host)+':'+v.port+(v.use_https?' (https)':'')+'</b><span>Brand</span><b>'+esc(v.brand||'ipro')+'</b><span>Model</span><b>'+esc(v.model)+'</b><span>Location</span><b>'+esc(v.location)+'</b><span>NVR user</span><b>'+esc(v.username)+'</b><span>Camera user</span><b>'+esc(v.cam_user)+'</b><span>RTSP template</span><b class="mono">'+esc(v.rtsp_template)+'</b><span>Notes</span><b>'+esc(v.notes)+'</b></div>'+
         (admin?'<div class="tb"><button class="btn p" data-a="edit" data-t="nvr" data-i="'+v.id+'">Edit NVR…</button><button class="btn" data-a="pass" data-i="'+v.id+'">Password</button><button class="btn d" data-a="del" data-t="nvr" data-i="'+v.id+'">Delete</button></div>':''))}
   var k=devFind('cam',s.id);if(!k)return '';
