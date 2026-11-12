@@ -165,7 +165,7 @@ namespace IproNvrTool
             _lbl.Text = "CAM " + cam + " - menghubungkan...";
             _lbl.Dock = DockStyle.Fill;
             _lbl.ForeColor = Color.White;
-            _lbl.BackColor = Color.FromArgb(34, 37, 45);
+            _lbl.BackColor = Asm.Panel2;
             _hdr = new Panel();
             _hdr.Dock = DockStyle.Top;
             _hdr.Height = 18;

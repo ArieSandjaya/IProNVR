@@ -54,7 +54,7 @@ namespace IproNvrTool
             using (var b = new SolidBrush(Asm.Panel2)) g.FillRectangle(b, r);
             Rectangle head = new Rectangle(r.X, r.Y, r.Width, HeadH);
             using (var b = new SolidBrush(Asm.Label)) g.FillRectangle(b, head);
-            Color ink = Color.FromArgb(48, 54, 67);
+            Color ink = Asm.Bar;
             TextRenderer.DrawText(g, month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture), Asm.F(11f, true), head, ink,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
             int ah = Asm.S(8);
@@ -85,7 +85,7 @@ namespace IproNvrTool
                 {
                     int s = Math.Min(cr.Width, cr.Height) - Asm.S(4);
                     var circle = new Rectangle(cr.X + (cr.Width - s) / 2, cr.Y + (cr.Height - s) / 2, s, s);
-                    using (var b = new SolidBrush(sel ? Color.FromArgb(23, 41, 58) : Color.FromArgb(44, 54, 74))) g.FillEllipse(b, circle);
+                    using (var b = new SolidBrush(sel ? Color.FromArgb(14, 66, 48) : Asm.BarHot)) g.FillEllipse(b, circle);
                 }
                 if (today && !sel) fg = Asm.Accent;
                 TextRenderer.DrawText(g, d.Day.ToString(), Asm.F(11f, false), cr, fg,

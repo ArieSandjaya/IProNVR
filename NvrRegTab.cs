@@ -124,7 +124,7 @@ namespace IproNvrTool
             var banner = new Panel();
             banner.Dock = DockStyle.Top;
             banner.Height = Asm.S(40);
-            banner.BackColor = Color.FromArgb(60, 48, 20);
+            banner.BackColor = Color.FromArgb(55, 42, 28);
             var lbl = new Label();
             lbl.Dock = DockStyle.Fill;
             lbl.UseMnemonic = false;

@@ -118,7 +118,7 @@ namespace IproNvrTool
 
             toolbar.Dock = DockStyle.Top;
             toolbar.Height = Asm.S(73);
-            toolbar.BackColor = Color.FromArgb(29, 33, 40);
+            toolbar.BackColor = Asm.Panel;
             toolbar.Tag = "nostyle";
             statusBar.Dock = DockStyle.Bottom;
             statusBar.Height = Asm.S(26);

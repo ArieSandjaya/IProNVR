@@ -25,7 +25,7 @@ namespace IproNvrTool
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            g.Clear(hot ? (K == Kind.Close ? Color.FromArgb(196, 43, 28) : Color.FromArgb(40, 44, 54)) : Asm.Bg);
+            g.Clear(hot ? (K == Kind.Close ? Color.FromArgb(196, 43, 28) : Asm.BarHot) : Asm.Bg);
             using (var p = new Pen(Asm.Text, Math.Max(1.5f, Asm.S(2) * 0.75f)))
             {
                 int cx = Width / 2, cy = Height / 2, d = Asm.S(6);
@@ -305,8 +305,10 @@ namespace IproNvrTool
             fitStrip();
             titleBar.Paint += delegate(object o, PaintEventArgs pe)
             {
-                using (var ln = new Pen(Color.FromArgb(104, 146, 191))) pe.Graphics.DrawLine(ln, 0, titleBar.Height - 2, titleBar.Width, titleBar.Height - 2);
-                using (var ln = new Pen(Asm.TabLine)) pe.Graphics.DrawLine(ln, 0, titleBar.Height - 1, titleBar.Width, titleBar.Height - 1);
+                if (titleBar.Width > 2)
+                    using (var gb = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, titleBar.Height - 2, titleBar.Width, 2),
+                        Color.FromArgb(5, 150, 105), Color.FromArgb(212, 165, 116), 0f))
+                        pe.Graphics.FillRectangle(gb, 0, titleBar.Height - 2, titleBar.Width, 2);
             };
             Controls.Add(topBar);
 

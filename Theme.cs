@@ -34,21 +34,21 @@ namespace IproNvrTool
 
         public static readonly Palette Dark = new Palette
         {
-            Bg = Color.FromArgb(16, 17, 21),
-            Surface = Color.FromArgb(30, 32, 39),
-            Text = Color.FromArgb(226, 232, 240),
-            Muted = Color.FromArgb(148, 163, 184),
-            Accent = Color.FromArgb(59, 130, 246),
-            AccentHover = Color.FromArgb(96, 165, 250),
-            Border = Color.FromArgb(55, 60, 72),
-            Hover = Color.FromArgb(44, 48, 60),
-            HeaderBg = Color.FromArgb(36, 39, 48),
-            SelRow = Color.FromArgb(37, 64, 112),
-            AltRow = Color.FromArgb(34, 36, 44),
-            Console = Color.FromArgb(10, 11, 14),
+            Bg = Color.FromArgb(10, 15, 13),
+            Surface = Color.FromArgb(18, 29, 23),
+            Text = Color.FromArgb(214, 224, 218),
+            Muted = Color.FromArgb(135, 152, 143),
+            Accent = Color.FromArgb(5, 150, 105),
+            AccentHover = Color.FromArgb(52, 211, 153),
+            Border = Color.FromArgb(42, 62, 52),
+            Hover = Color.FromArgb(32, 50, 40),
+            HeaderBg = Color.FromArgb(24, 38, 30),
+            SelRow = Color.FromArgb(14, 66, 48),
+            AltRow = Color.FromArgb(20, 32, 26),
+            Console = Color.FromArgb(7, 11, 9),
             ConsoleText = Color.FromArgb(190, 200, 215),
-            Danger = Color.FromArgb(248, 113, 113),
-            Tile = Color.FromArgb(24, 26, 32)
+            Danger = Color.FromArgb(224, 122, 95),
+            Tile = Color.FromArgb(14, 22, 18)
         };
 
         static Font _ui;

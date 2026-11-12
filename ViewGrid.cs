@@ -151,7 +151,7 @@ namespace IproNvrTool
             lblName.Dock = DockStyle.Top;
             lblName.Height = Asm.S(18);
             lblName.ForeColor = Color.White;
-            lblName.BackColor = Color.FromArgb(40, 46, 60);
+            lblName.BackColor = Asm.Bar;
             lblName.Font = Asm.F(8.5f, false);
             lblName.TextAlign = ContentAlignment.MiddleLeft;
             lblName.AutoEllipsis = true;
@@ -164,7 +164,7 @@ namespace IproNvrTool
             lblRec.Text = "\u25CF";
             lblRec.Font = Asm.F(11f, false);
             lblRec.ForeColor = Color.FromArgb(235, 30, 30);   // ikon rekam: bulat merah, tanpa latar
-            lblRec.BackColor = Color.FromArgb(40, 46, 60);
+            lblRec.BackColor = Asm.Bar;
             lblRec.TextAlign = ContentAlignment.MiddleCenter;
             lblRec.Tag = "nostyle";
             lblRec.Visible = false;
@@ -437,7 +437,7 @@ namespace IproNvrTool
         public void SetSelected(bool sel)
         {
             Selected = sel;
-            BackColor = sel ? Color.FromArgb(254, 155, 0) : Asm.CellFrame;   // area terpilih: bingkai emas; lainnya abu-abu tipis
+            BackColor = sel ? Asm.Accent : Asm.CellFrame;   // area terpilih: bingkai emas; lainnya abu-abu tipis
         }
 
         // ---------- isi ----------
@@ -1531,7 +1531,7 @@ namespace IproNvrTool
             Rectangle r = new Rectangle(0, -Asm.S(10), Width - 1, Height + Asm.S(10) - 1);
             using (var gp = AsmUi.RoundRect(r, Asm.S(8)))
             {
-                using (var b = new SolidBrush(Color.FromArgb(29, 33, 40))) g.FillPath(b, gp);
+                using (var b = new SolidBrush(Asm.Panel)) g.FillPath(b, gp);
                 using (var p = new Pen(Asm.TabLine)) g.DrawPath(p, gp);
             }
             TextRenderer.DrawText(g, Caption, Asm.F(10.5f, false), new Rectangle(Asm.S(14), 0, Width - Asm.S(14) - 3 * Asm.S(40) - Asm.S(8), Height), Asm.Label,
@@ -1541,7 +1541,7 @@ namespace IproNvrTool
                 for (int i = 0; i < 3; i++)
                 {
                     Rectangle b = Btn(i);
-                    if (i == hotBtn) using (var hb = new SolidBrush(i == 2 ? Color.FromArgb(196, 43, 28) : Color.FromArgb(48, 54, 67))) g.FillRectangle(hb, b.X, 0, b.Width, Height - 1);
+                    if (i == hotBtn) using (var hb = new SolidBrush(i == 2 ? Color.FromArgb(196, 43, 28) : Asm.BarHot)) g.FillRectangle(hb, b.X, 0, b.Width, Height - 1);
                     int cx = b.X + b.Width / 2, cy = Height / 2, d = Asm.S(6);
                     if (i == 0)
                     {

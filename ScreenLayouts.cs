@@ -98,8 +98,8 @@ namespace IproNvrTool
             var bmp = new Bitmap(w, h);
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                g.Clear(Color.FromArgb(30, 35, 46));
-                using (var pen = new Pen(Color.FromArgb(150, 170, 200)))
+                g.Clear(Asm.Panel2);
+                using (var pen = new Pen(Color.FromArgb(52, 211, 153)))
                 {
                     float cw = (w - 2f) / Cols, ch = (h - 2f) / Rows;
                     foreach (Rectangle c in Cells)

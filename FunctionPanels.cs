@@ -555,7 +555,7 @@ namespace IproNvrTool
             {
                 c.DropDownStyle = ComboBoxStyle.DropDownList;
                 c.FlatStyle = FlatStyle.Flat;
-                c.BackColor = Color.FromArgb(18, 22, 31);
+                c.BackColor = Asm.Panel;
                 c.ForeColor = Asm.Text;
                 c.Font = Asm.F(12f, false);
                 c.MaxDropDownItems = 12;

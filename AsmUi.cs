@@ -10,27 +10,27 @@ namespace IproNvrTool
     public static class Asm
     {
         // palet disamplel dari screenshot ASM300
-        public static readonly Color Bg = Color.FromArgb(0, 0, 0);
-        public static readonly Color Panel = Color.FromArgb(21, 24, 31);       // #15181f badan panel samping
-        public static readonly Color Panel2 = Color.FromArgb(32, 34, 41);      // #202229 tombol / kolom
-        public static readonly Color Bar = Color.FromArgb(48, 54, 67);         // #303643 bar accordion
-        public static readonly Color BarHot = Color.FromArgb(58, 66, 82);
-        public static readonly Color BarOpen = Color.FromArgb(48, 54, 67);
-        public static readonly Color Border = Color.FromArgb(64, 74, 92);      // #404a5c
-        public static readonly Color Text = Color.FromArgb(182, 188, 210);     // #b6bcd2 teks & ikon
-        public static readonly Color Muted = Color.FromArgb(140, 146, 160);     // nonaktif / teks redup (cukup terang di latar gelap)
-        public static readonly Color Accent = Color.FromArgb(104, 146, 191);   // #6892bf
-        public static readonly Color TabBg = Color.FromArgb(30, 55, 77);       // #1e374d tab aktif
-        public static readonly Color TabLine = Color.FromArgb(69, 97, 128);    // #456180
-        public static readonly Color Input = Color.FromArgb(13, 14, 16);       // #0d0e10 kolom isian
-        public static readonly Color BtnBorder = Color.FromArgb(53, 62, 77);   // #353e4d
+        public static readonly Color Bg = Color.FromArgb(10, 15, 13);
+        public static readonly Color Panel = Color.FromArgb(16, 26, 21);       // #15181f badan panel samping
+        public static readonly Color Panel2 = Color.FromArgb(23, 35, 29);      // #202229 tombol / kolom
+        public static readonly Color Bar = Color.FromArgb(29, 43, 36);         // #303643 bar accordion
+        public static readonly Color BarHot = Color.FromArgb(38, 58, 47);
+        public static readonly Color BarOpen = Color.FromArgb(29, 43, 36);
+        public static readonly Color Border = Color.FromArgb(42, 62, 52);      // #404a5c
+        public static readonly Color Text = Color.FromArgb(214, 224, 218);     // #b6bcd2 teks & ikon
+        public static readonly Color Muted = Color.FromArgb(135, 152, 143);     // nonaktif / teks redup (cukup terang di latar gelap)
+        public static readonly Color Accent = Color.FromArgb(52, 211, 153);   // #6892bf
+        public static readonly Color TabBg = Color.FromArgb(14, 66, 48);       // #1e374d tab aktif
+        public static readonly Color TabLine = Color.FromArgb(5, 150, 105);    // #456180
+        public static readonly Color Input = Color.FromArgb(9, 15, 12);       // #0d0e10 kolom isian
+        public static readonly Color BtnBorder = Color.FromArgb(42, 62, 52);   // #353e4d
         public static readonly Color ViewBorder = Color.FromArgb(95, 95, 95);  // #5f5f5f
         public static readonly Color CellFrame = Color.FromArgb(95, 95, 95);   // bingkai tipis antar area gambar
-        public static readonly Color Label = Color.FromArgb(221, 221, 221);    // #dddddd label
-        public static readonly Color Danger = Color.FromArgb(236, 84, 84);
-        public static readonly Color Ok = Color.FromArgb(80, 200, 120);
-        public static readonly Color Warn = Color.FromArgb(245, 170, 50);
-        public static readonly Color Yellow = Color.FromArgb(250, 214, 70);
+        public static readonly Color Label = Color.FromArgb(225, 232, 228);    // #dddddd label
+        public static readonly Color Danger = Color.FromArgb(224, 122, 95);
+        public static readonly Color Ok = Color.FromArgb(52, 211, 153);
+        public static readonly Color Warn = Color.FromArgb(212, 165, 116);
+        public static readonly Color Yellow = Color.FromArgb(212, 165, 116);
 
         static readonly Dictionary<string, Font> fonts = new Dictionary<string, Font>();
         static string famReg, famBold;
@@ -110,7 +110,7 @@ namespace IproNvrTool
             b.Cursor = Cursors.Hand;
             b.FlatAppearance.BorderColor = BtnBorder;
             b.FlatAppearance.BorderSize = 1;
-            b.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, 46, 58);
+            b.FlatAppearance.MouseOverBackColor = Asm.BarHot;
             b.FlatAppearance.MouseDownBackColor = TabBg;
         }
 
@@ -401,10 +401,10 @@ namespace IproNvrTool
         {
             Graphics g = e.Graphics;
             Color bg = Asm.Panel2;
-            if (!Enabled) bg = Color.FromArgb(38, 41, 50);
+            if (!Enabled) bg = Asm.Panel2;
             else if (down) bg = Asm.TabBg;
             else if (isChecked || Highlight) bg = Asm.TabBg;
-            else if (hot) bg = Color.FromArgb(40, 46, 58);
+            else if (hot) bg = Asm.BarHot;
             using (var b = new SolidBrush(Borderless && !hot && !isChecked && !down ? Parent != null ? Parent.BackColor : Asm.Panel : bg))
                 g.FillRectangle(b, ClientRectangle);
             if (!Borderless)
@@ -542,7 +542,7 @@ namespace IproNvrTool
             Graphics g = e.Graphics;
             g.Clear(Asm.Bg);
             Layout2();
-            using (var ln = new Pen(Color.FromArgb(104, 146, 191))) g.DrawLine(ln, 0, Height - 2, Width, Height - 2);
+            using (var ln = new Pen(Asm.Accent)) g.DrawLine(ln, 0, Height - 2, Width, Height - 2);
             using (var ln = new Pen(Asm.TabLine)) g.DrawLine(ln, 0, Height - 1, Width, Height - 1);
             for (int i = 0; i < tabs.Count; i++)
             {
@@ -554,16 +554,16 @@ namespace IproNvrTool
                 if (sel)
                 {
                     using (var b = new SolidBrush(Asm.TabBg)) g.FillPolygon(b, poly);
-                    using (var p = new Pen(Color.FromArgb(137, 193, 253))) g.DrawLines(p, poly);
+                    using (var p = new Pen(Color.FromArgb(110, 231, 183))) g.DrawLines(p, poly);
                 }
                 else
                 {
-                    using (var b = new SolidBrush(i == hotIdx ? Color.FromArgb(30, 34, 44) : Color.FromArgb(21, 24, 31))) g.FillPolygon(b, poly);
+                    using (var b = new SolidBrush(i == hotIdx ? Asm.Bar : Asm.Panel)) g.FillPolygon(b, poly);
                     using (var p = new Pen(Asm.BtnBorder)) g.DrawLines(p, poly);
                 }
                 AsmIcons.Draw(g, AsmIcon.Live, new Rectangle(r.X + Asm.S(10), r.Y + (r.Height - Asm.S(22)) / 2, Asm.S(22), Asm.S(22)), sel ? Color.FromArgb(160, 205, 245) : Asm.Muted);
                 TextRenderer.DrawText(g, t.Title, Asm.F(12.5f, false), new Rectangle(r.X + Asm.S(40), r.Y, r.Width - Asm.S(40) - sl - (t.Closable ? Asm.S(22) : 0), r.Height),
-                    sel ? Color.FromArgb(200, 225, 248) : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+                    sel ? Color.FromArgb(209, 250, 229) : Asm.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
                 if (t.Closable)
                 {
                     Rectangle c = CloseRect(r);
@@ -671,8 +671,8 @@ namespace IproNvrTool
             Graphics g = e.Graphics;
             g.Clear(Asm.Bg);
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Color fill = hot ? Color.FromArgb(40, 46, 58) : Color.FromArgb(34, 39, 48);
-            Color edge = Color.FromArgb(48, 54, 67);
+            Color fill = hot ? Asm.BarHot : Asm.Panel2;
+            Color edge = Asm.Bar;
             int w = Width, h = Height;
             PointF[] poly;
             if (Horizontal)
@@ -680,13 +680,13 @@ namespace IproNvrTool
                 // tab trapesium di tengah, seperti ASM300
                 float cx = w / 2f, tw = Asm.S(31), bw = Asm.S(40), th = h - 1;
                 poly = new[] { new PointF(cx - bw, h), new PointF(cx - tw, 1), new PointF(cx + tw, 1), new PointF(cx + bw, h) };
-                using (var b = new SolidBrush(Color.FromArgb(10, 11, 13))) g.FillRectangle(b, 0, h - 1, w, 1);
+                using (var b = new SolidBrush(Asm.Bg)) g.FillRectangle(b, 0, h - 1, w, 1);
             }
             else
             {
                 float cy = h / 2f, tw = Asm.S(36), bw = Asm.S(46);
                 poly = new[] { new PointF(w, cy - bw), new PointF(1, cy - tw), new PointF(1, cy + tw), new PointF(w, cy + bw) };
-                using (var b = new SolidBrush(Color.FromArgb(38, 44, 53))) g.FillRectangle(b, 0, 0, 1, h);
+                using (var b = new SolidBrush(Asm.Border)) g.FillRectangle(b, 0, 0, 1, h);
             }
             using (var b = new SolidBrush(fill)) g.FillPolygon(b, poly);
             using (var p = new Pen(edge)) g.DrawPolygon(p, poly);
@@ -695,7 +695,7 @@ namespace IproNvrTool
             PointF[] ar;
             if (Horizontal) ar = Collapsed ? new[] { new PointF(ax - sz, ay + sz / 2), new PointF(ax + sz, ay + sz / 2), new PointF(ax, ay - sz / 2) } : new[] { new PointF(ax - sz, ay - sz / 2), new PointF(ax + sz, ay - sz / 2), new PointF(ax, ay + sz / 2) };
             else ar = Collapsed ? new[] { new PointF(ax - sz / 2, ay - sz), new PointF(ax - sz / 2, ay + sz), new PointF(ax + sz / 2, ay) } : new[] { new PointF(ax + sz / 2, ay - sz), new PointF(ax + sz / 2, ay + sz), new PointF(ax - sz / 2, ay) };
-            using (var b = new SolidBrush(Color.FromArgb(74, 123, 178))) g.FillPolygon(b, ar);
+            using (var b = new SolidBrush(Color.FromArgb(5, 150, 105))) g.FillPolygon(b, ar);
         }
     }
 
@@ -758,7 +758,7 @@ namespace IproNvrTool
             using (var gp = AsmUi.RoundRect(r, r.Height / 2))
             {
                 using (var b = new SolidBrush(Asm.Panel2)) g.FillPath(b, gp);
-                using (var p = new Pen(Box.Focused ? Asm.Accent : Color.FromArgb(40, 56, 74), 1.5f)) g.DrawPath(p, gp);
+                using (var p = new Pen(Box.Focused ? Asm.Accent : Asm.Border, 1.5f)) g.DrawPath(p, gp);
             }
             int s = Asm.S(22);
             AsmIcons.Draw(g, AsmIcon.Search, new Rectangle(Asm.S(14), (Height - s) / 2, s, s), Asm.Text);
