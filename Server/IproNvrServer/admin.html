@@ -246,14 +246,14 @@ function render(){
   var admin=me.is_admin==1,cnt=function(r){return (data[r]||[]).length};
   var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Configuration</div><a data-p="devices" class="'+(page=='devices'?'on':'')+'"><span class="ic">⊞</span>Devices</a>';
   ['nvrs','cameras','groups','users'].forEach(function(r){if(!data[r])return;menu+='<a data-p="'+r+'" class="'+(page==r?'on':'')+'"><span class="ic">'+META[r].ic+'</span>'+META[r].t+'<em>'+cnt(r)+'</em></a>'});
-  if(admin)menu+='<div class="hd">System</div><a data-p="audit" class="'+(page=='audit'?'on':'')+'"><span class="ic">≡</span>Audit log</a>';
+  if(admin)menu+='<div class="hd">System</div><a data-p="audit" class="'+(page=='audit'?'on':'')+'"><span class="ic">≡</span>Audit log</a><a data-p="settings" class="'+(page=='settings'?'on':'')+'"><span class="ic">⚙</span>Settings</a>';
   a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">A3</div><span><b>AMAN 300</b> Server</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (read-only)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Config version: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><button class="iconbtn themebtn" id="thm" title="Light / dark theme"></button><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Sign out</button></div><div id="content"></div></div></div>';
   [].forEach.call(a.querySelectorAll('#side a'),function(x){x.onclick=function(){page=x.dataset.p;msg=null;document.body.classList.remove('open');render()}});
   themeBtn(a.querySelector('#thm'));a.querySelector('.burger').onclick=function(){document.body.classList.toggle('open')};
   a.querySelector('#lo').onclick=function(){api('POST','/api/logout').then(logout,logout)};
   var c=a.querySelector('#content');
   if(hp){clearInterval(hp);hp=null}
-  var body=page=='home'?home():page=='audit'?auditPage():page=='devices'?devPage():listPage(page);
+  var body=page=='home'?home():page=='audit'?auditPage():page=='settings'?settingsPage():page=='devices'?devPage():listPage(page);
   c.appendChild(body);
   body.insertBefore($('<div id="job" class="card" style="display:none"></div>'),body.children[1]);   // di bawah judul halaman
   if(msg){c.insertBefore($('<div class="alert '+(msg.bad?'er':'ok')+(msg.busy?' busy':'')+'">'+(msg.busy?'<span class="spin"></span>':'')+esc(msg.t)+'</div>'),c.firstChild);msg=null}
@@ -293,6 +293,16 @@ function auditPage(){
   return w}
 
 /* ---------- dashboard ---------- */
+function settingsPage(){
+  var w=document.createElement('div');w.appendChild(head('Settings'));
+  var rc=$('<div class="card nt"><div class="ct"><h3>RTSP relay (MediaMTX)</h3></div><div class="cb" id="rly">Loading...</div></div>');w.appendChild(rc);
+  api('GET','/api/relay').then(function(r){var e=document.getElementById('rly');if(!e)return;
+    e.innerHTML='<span class="badge '+(r.enabled?'ok':'warn')+'">'+(r.enabled?'Active':'Disabled')+'</span> '+esc(r.status||'')
+      +(r.enabled?'<br><small>Clients read through rtsp://SERVER:'+r.port+'/... with a read-only login (created automatically and shared with signed-in clients).</small>':'')
+      +(me.is_admin==1&&r.enabled?' <button class="btn sm" id="rls">Resync</button>':'');
+    var b=document.getElementById('rls');if(b)b.onclick=function(){api('POST','/api/relay').then(function(){e.textContent='Resync scheduled...'})}
+  }).catch(function(){var e=document.getElementById('rly');if(e)e.textContent='Relay status unavailable.'});
+  return w}
 function home(){
   var w=document.createElement('div');w.appendChild(head('Dashboard'));
   var cams=data.cameras||[],withUrl=cams.filter(function(c){return c.rtsp_url}).length;
@@ -303,13 +313,6 @@ function home(){
   box('y',withUrl+' / '+cams.length,'Cameras with RTSP URL','▶','cameras');
   box('r',(data.groups||[]).length,'Display groups','▦','groups');
   w.appendChild(bx);
-  var rc=$('<div class="card nt"><div class="ct"><h3>RTSP relay (MediaMTX)</h3></div><div class="cb" id="rly">Loading...</div></div>');w.appendChild(rc);
-  api('GET','/api/relay').then(function(r){var e=document.getElementById('rly');if(!e)return;
-    e.innerHTML='<span class="badge '+(r.enabled?'ok':'warn')+'">'+(r.enabled?'Active':'Disabled')+'</span> '+esc(r.status||'')
-      +(r.enabled?'<br><small>Clients read through rtsp://SERVER:'+r.port+'/... with a read-only login (created automatically and shared with signed-in clients).</small>':'')
-      +(me.is_admin==1&&r.enabled?' <button class="btn sm" id="rls">Resync</button>':'');
-    var b=document.getElementById('rls');if(b)b.onclick=function(){api('POST','/api/relay').then(function(){e.textContent='Resync scheduled...'})}
-  }).catch(function(){var e=document.getElementById('rly');if(e)e.textContent='Relay status unavailable.'});
   var hc=$('<div class="card nt"><div class="ct"><h3>System health</h3></div><div class="cb" id="hl">Loading...</div></div>');w.appendChild(hc);
   loadHealth();hp=setInterval(function(){if(page=='home')loadHealth();else{clearInterval(hp);hp=null}},15000);
   return w}
