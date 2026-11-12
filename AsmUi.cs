@@ -32,6 +32,19 @@ namespace IproNvrTool
         public static readonly Color Warn = Color.FromArgb(212, 165, 116);
         public static readonly Color Yellow = Color.FromArgb(212, 165, 116);
 
+        public static GraphicsPath RoundRect(Rectangle r, int rad)
+        {
+            var gp = new GraphicsPath();
+            int d = Math.Max(2, rad * 2);
+            if (r.Width < d || r.Height < d) { gp.AddRectangle(r); return gp; }
+            gp.AddArc(r.X, r.Y, d, d, 180, 90);
+            gp.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            gp.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            gp.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            gp.CloseFigure();
+            return gp;
+        }
+
         static readonly Dictionary<string, Font> fonts = new Dictionary<string, Font>();
         static string famReg, famBold;
         static float fontScale = 1f;
@@ -405,12 +418,21 @@ namespace IproNvrTool
             else if (down) bg = Asm.TabBg;
             else if (isChecked || Highlight) bg = Asm.TabBg;
             else if (hot) bg = Asm.BarHot;
-            using (var b = new SolidBrush(Borderless && !hot && !isChecked && !down ? Parent != null ? Parent.BackColor : Asm.Panel : bg))
-                g.FillRectangle(b, ClientRectangle);
-            if (!Borderless)
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color flat = Borderless && !hot && !isChecked && !down ? (Parent != null ? Parent.BackColor : Asm.Panel) : bg;
+            bool glass = !(Borderless && !hot && !isChecked && !down);
+            int rad = Asm.S(6);
+            Rectangle rr = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var gp = Asm.RoundRect(rr, rad))
             {
-                using (var p = new Pen(isChecked || Highlight ? Asm.Accent : Asm.BtnBorder))
-                    g.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
+                if (glass && Width > 2 && Height > 2)
+                {
+                    Color top = Color.FromArgb(Math.Min(255, bg.R + 12), Math.Min(255, bg.G + 14), Math.Min(255, bg.B + 12));
+                    using (var lb = new LinearGradientBrush(new Rectangle(0, 0, Width, Height), top, bg, 90f)) g.FillPath(lb, gp);
+                }
+                else using (var b = new SolidBrush(flat)) g.FillPath(b, gp);
+                if (!Borderless)
+                    using (var p = new Pen(isChecked || Highlight ? Asm.Accent : Asm.BtnBorder)) g.DrawPath(p, gp);
             }
             Color fg = !Enabled ? Color.FromArgb(135, 141, 156) : (IconColor.HasValue ? IconColor.Value : Asm.Text);
             int pad = Asm.S(5);
@@ -553,7 +575,7 @@ namespace IproNvrTool
                 var poly = new[] { new Point(r.X, r.Bottom), new Point(r.X, r.Y), new Point(r.Right - sl, r.Y), new Point(r.Right, r.Bottom) };
                 if (sel)
                 {
-                    using (var b = new SolidBrush(Asm.TabBg)) g.FillPolygon(b, poly);
+                    using (var b = new LinearGradientBrush(new Rectangle(r.X, r.Y, Math.Max(1, r.Width), Math.Max(1, r.Height)), Color.FromArgb(18, 92, 66), Asm.TabBg, 90f)) g.FillPolygon(b, poly);
                     using (var p = new Pen(Color.FromArgb(110, 231, 183))) g.DrawLines(p, poly);
                 }
                 else
