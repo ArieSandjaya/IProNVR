@@ -329,7 +329,7 @@ namespace IproNvrTool
             lock (channels) list = new List<int>(channels);
             if (list.Count == 0) return;
             var po = new ParallelOptions();
-            po.MaxDegreeOfParallelism = Math.Max(1, Math.Min(4, list.Count)); // ambil beberapa kamera sekaligus: satu putaran tidak lagi menumpuk 16 unduhan berurutan
+            po.MaxDegreeOfParallelism = Math.Max(1, Math.Min(2, list.Count)); // ambil beberapa kamera sekaligus: satu putaran tidak lagi menumpuk 16 unduhan berurutan
             try
             {
                 Parallel.ForEach(list, po, delegate(int ch)
@@ -346,8 +346,26 @@ namespace IproNvrTool
             {
                 if (disposed || mode == "STOP") return;
                 byte[] data;
-                try { data = sess.CmdBytes("camera.cgi", "CAM=" + ch, 30000); }
-                catch (Exception ex) { Log.Write("Playback CAM " + ch + ": " + ex.Message); ChStatus(ch, "Gagal ambil data dari NVR: " + ex.Message); return; }
+                data = null;
+                Exception last = null;
+                for (int attempt = 0; attempt < 3 && data == null; attempt++)
+                {
+                    try { data = sess.CmdBytes("camera.cgi", "CAM=" + ch, 30000); }
+                    catch (Exception ex)
+                    {
+                        last = ex;
+                        // 503 = NVR sedang sibuk / batas sesi: tunggu sebentar lalu coba lagi
+                        if (ex.Message.IndexOf("(503)", StringComparison.Ordinal) < 0 || disposed || mode == "STOP") break;
+                        System.Threading.Thread.Sleep(600 * (attempt + 1));
+                    }
+                }
+                if (data == null)
+                {
+                    string m = last != null ? last.Message : "";
+                    Log.Write("Playback CAM " + ch + ": " + m);
+                    ChStatus(ch, "Gagal ambil data dari NVR: " + m + (m.IndexOf("(503)", StringComparison.Ordinal) >= 0 ? " (NVR sibuk; kurangi jumlah kamera playback atau tunggu sebentar)" : ""));
+                    return;
+                }
                 ParsedFrame f;
                 try { f = FrameParser.Parse(data); }
                 catch (Exception ex) { Log.Write("Playback CAM " + ch + " parse: " + ex.Message); ChStatus(ch, "Data playback tidak bisa dibaca: " + ex.Message); return; }
