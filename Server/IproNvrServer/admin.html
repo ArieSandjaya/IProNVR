@@ -202,6 +202,7 @@ body.rsz{user-select:none;cursor:col-resize}body.rsz iframe{pointer-events:none}
 .btn.ib{width:38px;height:38px;padding:0;justify-content:center;border-radius:12px}.btn.ib svg{width:18px;height:18px}
 @media(max-width:1100px){.x3{grid-template-columns:1fr;height:auto}.spl{display:none}.p3{margin-bottom:12px}.p3 .pb{max-height:420px}}
 @media(max-width:900px){.ge{grid-template-columns:1fr}}
+@media(min-width:801px){body.collapsed #side{margin-left:calc(var(--side-w) * -1)}}
 @media(max-width:800px){#side{position:fixed;inset:0 auto 0 0;z-index:10;margin-left:calc(var(--side-w) * -1);background:var(--panel)}body.open #side{margin-left:0}#modal .mb{grid-template-columns:1fr}#content,#top{padding-left:16px;padding-right:16px}}
 </style></head><body>
 <div class="background"></div><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
@@ -250,7 +251,8 @@ function render(){
   if(admin)menu+='<div class="hd">System</div><a data-p="audit" class="'+(page=='audit'?'on':'')+'"><span class="ic">≡</span>Audit log</a><a data-p="settings" class="'+(page=='settings'?'on':'')+'"><span class="ic">⚙</span>Settings</a>';
   a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">A3</div><span><b>AMAN 300</b> Server</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (read-only)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Config version: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><button class="iconbtn themebtn" id="thm" title="Light / dark theme"></button><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Sign out</button></div><div id="content"></div></div></div>';
   [].forEach.call(a.querySelectorAll('#side a'),function(x){x.onclick=function(){page=x.dataset.p;msg=null;document.body.classList.remove('open');render()}});
-  themeBtn(a.querySelector('#thm'));a.querySelector('.burger').onclick=function(){document.body.classList.toggle('open')};
+  themeBtn(a.querySelector('#thm'));a.querySelector('.burger').onclick=function(){if(window.innerWidth<=800)document.body.classList.toggle('open');else{var c=document.body.classList.toggle('collapsed');try{localStorage.setItem('sbc',c?'1':'')}catch(e){}}};
+  try{if(localStorage.getItem('sbc'))document.body.classList.add('collapsed')}catch(e){}
   a.querySelector('#lo').onclick=function(){api('POST','/api/logout').then(logout,logout)};
   var c=a.querySelector('#content');
   if(hp){clearInterval(hp);hp=null}
