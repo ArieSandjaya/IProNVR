@@ -357,9 +357,36 @@ namespace IproNvrTool
                     f.Codec = "JPEG";
                     f.Video.Add(Slice(d, js, d.Length, true));
                 }
+                else if (d[0] == 0xFF && d[1] == 0xD8 && d[2] == 0xFF && d[3] == 0xFE)
+                {
+                    // Awal FFD8FFFE = chunk info NVR saja, tanpa JPEG: isinya video H.264/H.265 (tanpa header Stream ID).
+                    f.Codec = GuessCodec(d);
+                    ParseWithoutStreamId(d, f);
+                    if (f.Video.Count == 0) GenericFallback(d, f);
+                    if (f.Video.Count == 0) f.Codec = "JPEG";
+                }
             }
             if (f.Video.Count == 0 && (f.Codec == "H264" || f.Codec == "H265")) GenericFallback(d, f);
             return f;
+        }
+
+        /// <summary>Tebak H.264/H.265 dari NAL pertama setelah start code Annex-B (H.265: VPS/SPS/PPS/slice, tipe 32-34 atau 0-21).</summary>
+        static string GuessCodec(byte[] d)
+        {
+            for (int i = 4; i + 5 < d.Length; i++)
+            {
+                if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1)
+                {
+                    int b = d[i + 3];
+                    if ((b & 0x80) != 0) continue;
+                    int t265 = (b >> 1) & 0x3F;
+                    int t264 = b & 0x1F;
+                    if (t265 >= 32 && t265 <= 34 && (d[i + 4] & 0xF8) == 0) return "H265";
+                    if (t264 == 7 || t264 == 8 || t264 == 5 || t264 == 1 || t264 == 9) return "H264";
+                    return t265 <= 40 ? "H265" : "H264";
+                }
+            }
+            return "H264";
         }
 
         static bool ValidNal(byte[] d, int i, bool h265)
