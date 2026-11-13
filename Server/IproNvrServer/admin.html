@@ -325,11 +325,27 @@ function cellFor(r,row){
   switch(r){
    case'nvrs':return[esc(row.name),esc(row.host)+':'+row.port+(row.use_https?' <span class="badge info">https</span>':''),esc(row.model),esc(row.location),(data.cameras||[]).filter(function(c){return c.nvr_id==row.id}).length+' / '+row.max_channels];
    case'cameras':return[row.channel+(row.reg_status==1?' <span class="badge ok" title="Registered on NVR, connection normal">NVR</span>':row.reg_status==2?' <span class="badge warn" title="Registered on NVR but camera connection error">error</span>':' <span class="badge" title="Not registered on NVR (not detected yet or removed from the NVR)">-</span>'),esc(row.name),esc(row.ip_address)+(row.cam_user?' <span class="badge info" title="Camera-specific login">own login</span>':''),esc(nvrName(row.nvr_id)),esc(row.location),row.rtsp_url?'<span class="mono" title="'+esc(row.rtsp_url)+'">'+esc(row.rtsp_url)+'</span>':'<span class="badge">none</span>',row.width?'<span class="badge ok">'+esc(row.codec)+' '+row.width+'×'+row.height+'</span>':'-'];
-   case'groups':return[layIcon(row.layout)+esc(grpPath(row)),esc(row.layout),(row.slots||'').split(',').filter(function(x){return x}).length,esc(row.owner)];
+   case'groups':return[grpTreeCell(row),esc(row.layout),(row.slots||'').split(',').filter(function(x){return x}).length,esc(row.owner)];
    case'sequences':return[esc(row.name),(row.steps||'').split(',').filter(function(x){return x}).length+' steps',esc(row.steps)];
    case'users':return[esc(row.name),row.level,row.is_admin?'<span class="badge ok">Admin</span>':'<span class="badge">Operator</span>',row.use_group?'Yes':'No'];
   }}
 var HEADS={nvrs:['Name','Address','Model','Location','Cameras'],cameras:['Ch','Name','IP','NVR','Location','RTSP URL','Stream'],groups:['Name','Layout','Filled areas','Owner'],sequences:['Name','Steps','Detail'],users:['Name','Level','Role','Own groups']};
+var grpCol={};
+function grpTreeRows(list){
+  var ids={},byP={},out=[],seen={};list.forEach(function(g){ids[g.id]=1});
+  list.forEach(function(g){var p=g.parent_id&&ids[g.parent_id]&&g.parent_id!=g.id?g.parent_id:0;(byP[p]=byP[p]||[]).push(g)});
+  Object.keys(byP).forEach(function(k){byP[k].sort(function(a,b){return (a.sort||0)-(b.sort||0)||String(a.name).localeCompare(String(b.name))})});
+  function walk(p,d,last){(byP[p]||[]).forEach(function(g,i){if(seen[g.id])return;seen[g.id]=1;
+    var kids=(byP[g.id]||[]).length;g._d=d;g._k=kids;g._last=i==(byP[p].length-1);out.push(g);
+    if(!grpCol[g.id])walk(g.id,d+1);else hide(g.id)})}
+  function hide(p){(byP[p]||[]).forEach(function(g){if(!seen[g.id]){seen[g.id]=1;hide(g.id)}})}
+  walk(0,0);
+  list.forEach(function(g){if(!seen[g.id]){g._d=0;g._k=0;out.push(g)}});
+  return out}
+function grpTreeCell(row){
+  var d=row._d||0,k=row._k||0,pad=d*22;
+  var tg=k?'<span class="tgl" data-g="'+row.id+'" style="cursor:pointer;display:inline-block;width:18px;color:var(--emerald-light)">'+(grpCol[row.id]?'\u25B8':'\u25BE')+'</span>':'<span style="display:inline-block;width:18px;color:var(--text3)">'+(d?'\u2514':'')+'</span>';
+  return '<span style="display:inline-flex;align-items:center;padding-left:'+pad+'px">'+tg+layIcon(row.layout)+'<b style="font-weight:'+(k?600:400)+'">'+esc(row.name)+'</b>'+(k?' <span class="badge info" title="Child groups">'+k+'</span>':'')+'</span>'}
 function listPage(r){
   var admin=me.is_admin==1,w=document.createElement('div'),m=META[r];
   w.appendChild(head('Daftar '+m.t,m.t));
@@ -349,6 +365,7 @@ function listPage(r){
   if(admin){var add=$('<button class="btn p">＋ Add</button>');add.onclick=function(){edit(r,null)};tools.appendChild(add)}
   var t='<table><thead><tr>';HEADS[r].forEach(function(h){t+='<th>'+h+'</th>'});t+='<th></th></tr></thead><tbody></tbody></table>';
   card.querySelector('.cb').innerHTML=t;var tb=card.querySelector('tbody');
+  if(r=='groups')rows=grpTreeRows(rows);
   rows.forEach(function(row){
     var tr=document.createElement('tr'),cs=cellFor(r,row),h='';cs.forEach(function(x){h+='<td>'+x+'</td>'});h+='<td class="act"></td>';tr.innerHTML=h;
     var ac=tr.querySelector('.act');
@@ -361,6 +378,7 @@ function listPage(r){
       ac.appendChild(btn('Delete','d',function(){if(confirm('Delete "'+(row.name||row.id)+'"?'+(r=='nvrs'?'\n\nAll cameras of this NVR will be deleted too.':'')))api('DELETE','/api/'+r+'/'+row.id).then(function(){msg={t:'Deleted.'};return reload()}).catch(function(e){say(e.message,true)})}));
     }
     tb.appendChild(tr)});
+  if(r=='groups')[].forEach.call(tb.querySelectorAll('.tgl'),function(x){x.onclick=function(){var i=x.dataset.g;grpCol[i]=!grpCol[i];render()}});
   if(!rows.length)tb.innerHTML='<tr><td colspan="'+(HEADS[r].length+1)+'" class="empty">No data yet.</td></tr>';
   w.appendChild(card);return w}
 function showNvrPass(row){
