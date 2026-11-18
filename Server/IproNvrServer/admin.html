@@ -98,7 +98,9 @@ td{color:var(--text2)}
 thead th{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);border-bottom:1px solid var(--glass-border);white-space:nowrap}
 tbody tr{transition:background .2s}tbody tr:hover{background:var(--glass-hover)}
 td.act{white-space:nowrap;text-align:right}
-td .mono{font:12px "Space Mono",ui-monospace,Consolas,monospace;color:var(--text3);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.rt td.act,.rt thead th:last-child{position:sticky;right:0;background:var(--panel);box-shadow:-10px 0 14px -10px rgba(0,0,0,.45);z-index:1}
+.rt td{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rt td.act{max-width:none;overflow:visible}.rt td .mono{max-width:150px}.rt th,.rt td{padding-left:10px;padding-right:10px}
+td .mono{font:12px "Space Mono",ui-monospace,Consolas,monospace;color:var(--text3);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:20px;font-size:12px;font-weight:500;background:rgba(148,163,184,.15);color:var(--text2)}
 .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
 .badge.ok{background:rgba(34,197,94,.15);color:var(--success)}.badge.bad{background:rgba(220,38,38,.15);color:#f87171}.badge.info{background:rgba(14,165,233,.15);color:#38bdf8}.badge.warn{background:rgba(234,179,8,.15);color:var(--warning)}
@@ -208,7 +210,7 @@ body.rsz{user-select:none;cursor:col-resize}body.rsz iframe{pointer-events:none}
 .rt tr{display:block;margin:10px 12px;padding:8px 12px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass-bg)}
 .rt td{display:flex;gap:12px;justify-content:space-between;align-items:center;border:0!important;padding:6px 0!important;white-space:normal!important;text-align:right;word-break:break-word}
 .rt td[data-l]::before{content:attr(data-l);color:var(--text3);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;text-align:left;flex:none}
-.rt td.act{justify-content:flex-end;flex-wrap:wrap;padding-top:10px!important}
+.rt td.act{justify-content:flex-end;flex-wrap:wrap;padding-top:10px!important;position:static;background:none;box-shadow:none}.rt td{max-width:none;overflow:visible;white-space:normal}
 .rt td.empty{display:block;text-align:center}
 .tools{flex-wrap:wrap}.tools .btn,.tools select,.tools input{flex:1 1 calc(50% - 8px);min-width:0}
 }
