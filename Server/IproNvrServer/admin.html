@@ -202,6 +202,7 @@ body.rsz{user-select:none;cursor:col-resize}body.rsz iframe{pointer-events:none}
 .p3 table.mini td{vertical-align:top}
 .themebtn{font-size:16px}
 .btn.ib{width:38px;height:38px;padding:0;justify-content:center;border-radius:12px}.btn.ib svg{width:18px;height:18px}
+.btn.ib.sm{width:30px;height:30px;border-radius:9px}.btn.ib.sm svg{width:15px;height:15px}
 @media(max-width:1100px){.x3{grid-template-columns:1fr;height:auto}.spl{display:none}.p3{margin-bottom:12px}.p3 .pb{max-height:420px}}
 @media(max-width:900px){.ge{grid-template-columns:1fr}}
 @media(min-width:801px){body.collapsed #side{margin-left:calc(var(--side-w) * -1)}}
@@ -367,13 +368,13 @@ function listPage(r){
     sel.onchange=function(){flt.nvr=sel.value;render()};tools.appendChild(sel);
     var q=$('<input placeholder="Search name / IP" value="'+esc(flt.q)+'">');q.onchange=function(){flt.q=q.value;render()};tools.appendChild(q);
     rows=rows.filter(function(c){return (!flt.nvr||c.nvr_id==flt.nvr)&&(!flt.q||(c.name+' '+c.ip_address+' '+c.location).toLowerCase().indexOf(flt.q.toLowerCase())>=0)});
-    if(admin){var wz=$('<button class="btn p">＋ Add devices (wizard)</button>');wz.onclick=wizOpen;tools.appendChild(wz);var dn=$('<button class="btn i">Detect RTSP (selected NVR)</button>');dn.onclick=function(){if(!flt.nvr){alert('Select an NVR in the filter first.');return}askDisc(+flt.nvr,[])};tools.appendChild(dn);
-      var fn=$('<button class="btn p">Detect cameras from NVR</button>');fn.onclick=function(){if(!flt.nvr){alert('Select an NVR in the filter first.');return}fetchCams(+flt.nvr)};tools.appendChild(fn);
-      var tp=$('<button class="btn">⇩ Excel template</button>');tp.onclick=dlTemplate;tools.appendChild(tp);
-      var up=$('<button class="btn s">⇧ Upload Excel (cameras)</button>');up.onclick=upIp;tools.appendChild(up);
-      var gen=$('<button class="btn w">Create channels</button>');gen.onclick=genChannels;tools.appendChild(gen)}
+    if(admin){var wz=$('<button class="btn ib p" title="Add devices (wizard)" aria-label="Add devices (wizard)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO.wiz+'</svg></button>');wz.onclick=wizOpen;tools.appendChild(wz);var dn=$('<button class="btn ib i" title="Detect RTSP (selected NVR)" aria-label="Detect RTSP (selected NVR)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO.rtsp+'</svg></button>');dn.onclick=function(){if(!flt.nvr){alert('Select an NVR in the filter first.');return}askDisc(+flt.nvr,[])};tools.appendChild(dn);
+      var fn=$('<button class="btn ib p" title="Detect cameras from NVR" aria-label="Detect cameras from NVR"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO.fetch+'</svg></button>');fn.onclick=function(){if(!flt.nvr){alert('Select an NVR in the filter first.');return}fetchCams(+flt.nvr)};tools.appendChild(fn);
+      var tp=$('<button class="btn ib " title="Download Excel template" aria-label="Download Excel template"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO.dl+'</svg></button>');tp.onclick=dlTemplate;tools.appendChild(tp);
+      var up=$('<button class="btn ib s" title="Upload Excel (cameras)" aria-label="Upload Excel (cameras)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO.up+'</svg></button>');up.onclick=upIp;tools.appendChild(up);
+      var gen=$('<button class="btn ib w" title="Create channels" aria-label="Create channels"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO.gen+'</svg></button>');gen.onclick=genChannels;tools.appendChild(gen)}
   }
-  if(admin){var add=$('<button class="btn p">＋ Add</button>');add.onclick=function(){edit(r,null)};tools.appendChild(add)}
+  if(admin){var add=$('<button class="btn ib p" title="Add" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO.add+'</svg></button>');add.onclick=function(){edit(r,null)};tools.appendChild(add)}
   var t='<table class="rt"><thead><tr>';HEADS[r].forEach(function(h){t+='<th>'+h+'</th>'});t+='<th></th></tr></thead><tbody></tbody></table>';
   card.querySelector('.cb').innerHTML=t;var tb=card.querySelector('tbody');
   if(r=='groups')rows=grpTreeRows(rows);
@@ -381,12 +382,12 @@ function listPage(r){
     var tr=document.createElement('tr'),cs=cellFor(r,row),h='';cs.forEach(function(x,i){h+='<td data-l="'+esc(HEADS[r][i]||'')+'">'+x+'</td>'});h+='<td class="act"></td>';tr.innerHTML=h;
     var ac=tr.querySelector('.act');
     if(admin){
-      if(r=='nvrs')ac.appendChild(btn('Password','',function(){showNvrPass(row)}));
-      if(r=='nvrs')ac.appendChild(btn('Detect cameras','p',function(){fetchCams(row.id)}));
-      if(r=='nvrs')ac.appendChild(btn('Detect RTSP','i',function(){askDisc(row.id,[])}));
-      if(r=='cameras')ac.appendChild(btn('Detect','i',function(){startDisc(row.nvr_id,[row.id],true)}));
-      ac.appendChild(btn('Edit','p',function(){edit(r,row)}));
-      ac.appendChild(btn('Delete','d',function(){if(confirm('Delete "'+(row.name||row.id)+'"?'+(r=='nvrs'?'\n\nAll cameras of this NVR will be deleted too.':'')))api('DELETE','/api/'+r+'/'+row.id).then(function(){msg={t:'Deleted.'};return reload()}).catch(function(e){say(e.message,true)})}));
+      if(r=='nvrs')ac.appendChild(ibtn('key','Show NVR password','',function(){showNvrPass(row)}));
+      if(r=='nvrs')ac.appendChild(ibtn('fetch','Detect cameras from NVR','p',function(){fetchCams(row.id)}));
+      if(r=='nvrs')ac.appendChild(ibtn('rtsp','Detect RTSP','i',function(){askDisc(row.id,[])}));
+      if(r=='cameras')ac.appendChild(ibtn('rtsp','Detect RTSP','i',function(){startDisc(row.nvr_id,[row.id],true)}));
+      ac.appendChild(ibtn('edit','Edit','p',function(){edit(r,row)}));
+      ac.appendChild(ibtn('del','Delete','d',function(){if(confirm('Delete "'+(row.name||row.id)+'"?'+(r=='nvrs'?'\n\nAll cameras of this NVR will be deleted too.':'')))api('DELETE','/api/'+r+'/'+row.id).then(function(){msg={t:'Deleted.'};return reload()}).catch(function(e){say(e.message,true)})}));
     }
     tb.appendChild(tr)});
   if(r=='groups')[].forEach.call(tb.querySelectorAll('.tgl'),function(x){x.onclick=function(){var i=x.dataset.g;grpCol[i]=!grpCol[i];render()}});
@@ -406,6 +407,7 @@ function showNvrPass(row){
   v.onclick=function(){var h=pw.type=='password';pw.type=h?'text':'password';v.textContent=h?'Hide':'Show'};
   el.querySelector('#npc').onclick=function(){pw.select();try{document.execCommand('copy')}catch(e){}this.textContent='Copied';var b=this;setTimeout(function(){b.textContent='Copy'},1500)};
 }
+function ibtn(ico,title,c,f){var b=document.createElement('button');b.className='btn ib sm '+c;b.title=title;b.setAttribute('aria-label',title);b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO[ico]+'</svg>';b.style.marginLeft='4px';b.onclick=f;return b}
 function btn(t,c,f){var b=document.createElement('button');b.className='btn sm '+c;b.textContent=t;b.style.marginLeft='4px';b.onclick=f;return b}
 
 
@@ -571,7 +573,14 @@ var ICO={
  rtsp:'<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8.5 11h5M11 8.5v5"/>',
  fetch:'<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/>',
  cam:'<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h8A1.5 1.5 0 0 1 15 8.5v7a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 4 15.5zM15 11l5-3v8l-5-3"/>',
- nvr:'<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M8 7h.01M8 17h.01"/>'};
+ nvr:'<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M8 7h.01M8 17h.01"/>',
+ edit:'<path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/>',
+ del:'<path d="M5 7h14M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3"/>',
+ key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l3 3M14 9l2 2"/>',
+ add:'<path d="M12 5v14M5 12h14"/>',
+ dl:'<path d="M7 3h7l4 4v14H7zM13 3v5h5M12 11v6M9.5 14.5L12 17l2.5-2.5"/>',
+ up:'<path d="M12 20V9M7.5 13.5L12 9l4.5 4.5M5 5h14"/>',
+ gen:'<path d="M4 6h10M4 12h7M4 18h10M17 9v8M13 13h8"/>'};
 function ib(act,ico,title,cls,attr){return '<button class="btn ib'+(cls?' '+cls:'')+'" data-a="'+act+'"'+(attr||'')+' title="'+title+'" aria-label="'+title+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO[ico]+'</svg></button>'}
 function devCams(nid){return (data.cameras||[]).filter(function(c){return c.nvr_id==nid})}
 function devFind(t,id){return (t=='nvr'?data.nvrs:t=='cam'?data.cameras:data.groups||[]).filter(function(x){return x.id==id})[0]}
