@@ -180,6 +180,14 @@ namespace IproNvrTool
             scrub.Dock = DockStyle.Bottom;
             scrub.Visible = false;
             scrub.Seek += delegate(DateTime local) { if (pbc.Active) pbc.PlayAtUtc(local.ToUniversalTime()); };
+            scrub.ExportRange += delegate(DateTime ra, DateTime rb)
+            {
+                CamRef rc = grid.Selected != null ? qpp.CameraSource() : null;
+                if (rc == null) { MessageBox.Show("Select the picture area that contains the camera first."); return; }
+                if (!fp.Visible) { fp.Visible = true; handle.Collapsed = false; handle.Invalidate(); }
+                fp.Open("dl");
+                dlp.Range(rc, ra, rb);
+            };
             pbTimer.Interval = 500;
             pbTimer.Tick += delegate { PlaybackTick(); };
             pbTimer.Start();
