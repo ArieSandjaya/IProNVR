@@ -19,6 +19,13 @@ namespace IproNvrTool
         DateTime dragTime;
         int holdUntil;                  // abaikan posisi dari engine sebentar setelah loncat (engine butuh beberapa detik)
         readonly ContextMenuStrip menu;
+        // pilihan rentang waktu untuk export (seperti Time Selection Mode di XProtect)
+        DateTime? selA, selB;
+        int dragHandle;                 // 0 tidak ada, 1 = awal, 2 = akhir
+        DateTime? menuTime;
+
+        /// <summary>Dipicu bila pengguna memilih "Download rentang ini" (waktu lokal awal, akhir).</summary>
+        public event Action<DateTime, DateTime> ExportRange;
 
         /// <summary>Dipicu saat tombol mouse dilepas (waktu lokal tujuan).</summary>
         public event Action<DateTime> Seek;
@@ -38,6 +45,56 @@ namespace IproNvrTool
             {
                 int k = i;
                 Asm.Item(menu, "Zoom " + SpanText[i], delegate { SetSpan(k, pos ?? DateTime.Now); });
+            }
+            menu.Items.Add(new ToolStripSeparator());
+            Asm.Item(menu, "Go to date/time...", delegate { GoTo(); });
+            Asm.Item(menu, "Set range start here", delegate { SetSel(true); });
+            Asm.Item(menu, "Set range end here", delegate { SetSel(false); });
+            Asm.Item(menu, "Download selected range...", delegate { DoExport(); });
+            Asm.Item(menu, "Clear range", delegate { selA = selB = null; Invalidate(); });
+        }
+
+        void SetSel(bool start)
+        {
+            DateTime t = menuTime ?? (pos ?? DateTime.Now);
+            if (start) { selA = t; if (!selB.HasValue || selB.Value <= t) selB = t.AddMinutes(5); }
+            else { selB = t; if (!selA.HasValue || selA.Value >= t) selA = t.AddMinutes(-5); }
+            Invalidate();
+        }
+
+        void DoExport()
+        {
+            if (!selA.HasValue || !selB.HasValue) { MessageBox.Show("Select a range first: right-click the timeline, then 'Set range start here' and 'Set range end here' (or drag the green handles)."); return; }
+            Action<DateTime, DateTime> h = ExportRange;
+            if (h == null) return;
+            DateTime a = selA.Value < selB.Value ? selA.Value : selB.Value, b = selA.Value < selB.Value ? selB.Value : selA.Value;
+            h(a, b);
+        }
+
+        /// <summary>Dialog "Go to": pilih tanggal dan jam lalu loncat ke sana.</summary>
+        void GoTo()
+        {
+            using (var f = new Form())
+            {
+                f.Text = "Go to"; f.FormBorderStyle = FormBorderStyle.FixedDialog; f.StartPosition = FormStartPosition.CenterParent;
+                f.MaximizeBox = false; f.MinimizeBox = false; f.ShowInTaskbar = false; f.ClientSize = new Size(Asm.S(300), Asm.S(110));
+                f.BackColor = Asm.Panel; f.ForeColor = Asm.Text;
+                var dt = new DateTimePicker();
+                dt.Format = DateTimePickerFormat.Custom; dt.CustomFormat = "yyyy/MM/dd  HH:mm:ss";
+                dt.Left = Asm.S(14); dt.Top = Asm.S(18); dt.Width = Asm.S(272);
+                try { dt.Value = pos ?? DateTime.Now; } catch { }
+                var ok = new Button(); ok.Text = "Go"; ok.DialogResult = DialogResult.OK; ok.Left = Asm.S(130); ok.Top = Asm.S(64); ok.Width = Asm.S(76);
+                var cancel = new Button(); cancel.Text = "Cancel"; cancel.DialogResult = DialogResult.Cancel; cancel.Left = Asm.S(210); cancel.Top = Asm.S(64); cancel.Width = Asm.S(76);
+                f.Controls.Add(dt); f.Controls.Add(ok); f.Controls.Add(cancel);
+                f.AcceptButton = ok; f.CancelButton = cancel;
+                if (f.ShowDialog(FindForm()) != DialogResult.OK) return;
+                DateTime to = dt.Value;
+                pos = to;
+                holdUntil = unchecked(Environment.TickCount + 4000);
+                if (to < winStart || to >= WinEnd) { if (spanIdx == 0) winStart = to.Date; else winStart = to.AddMinutes(-Spans[spanIdx] * 0.1); }
+                Invalidate();
+                Action<DateTime> h = Seek;
+                if (h != null) h(to);
             }
         }
 
@@ -86,7 +143,25 @@ namespace IproNvrTool
             g.Clear(Color.Black);   // latar menyatu dengan area gambar
             int top = Asm.S(20), h = Asm.S(10);
             var track = new Rectangle(Pad(), top, Math.Max(1, Width - 2 * Pad()), h);
-            using (var b = new SolidBrush(Asm.Bar)) g.FillRectangle(b, track);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (var gp = Asm.RoundRect(track, Math.Max(2, track.Height / 2)))
+            using (var b = new SolidBrush(Asm.Bar)) g.FillPath(b, gp);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.Default;
+            if (selA.HasValue && selB.HasValue)
+            {
+                DateTime sa = selA.Value < selB.Value ? selA.Value : selB.Value, sb = selA.Value < selB.Value ? selB.Value : selA.Value;
+                int xa = Math.Max(track.Left, Math.Min(track.Right, XOf(sa))), xb = Math.Max(track.Left, Math.Min(track.Right, XOf(sb)));
+                if (xb > xa)
+                    using (var b = new SolidBrush(Color.FromArgb(150, 5, 150, 105))) g.FillRectangle(b, xa, track.Top - Asm.S(3), xb - xa, track.Height + Asm.S(6));
+                using (var p = new Pen(Color.FromArgb(52, 211, 153), 2))
+                {
+                    if (sa >= winStart && sa <= WinEnd) g.DrawLine(p, xa, track.Top - Asm.S(6), xa, track.Bottom + Asm.S(6));
+                    if (sb >= winStart && sb <= WinEnd) g.DrawLine(p, xb, track.Top - Asm.S(6), xb, track.Bottom + Asm.S(6));
+                }
+                Font rf = Asm.F(8f, false);
+                string rs = "range " + sa.ToString("HH:mm:ss") + " - " + sb.ToString("HH:mm:ss") + "  (" + (int)(sb - sa).TotalMinutes + " min)";
+                using (var tb = new SolidBrush(Color.FromArgb(110, 231, 183))) g.DrawString(rs, rf, tb, Width - Asm.S(260), Asm.S(1));
+            }
 
             DateTime shown = dragging ? dragTime : (pos ?? winStart);
             bool havePos = dragging || pos.HasValue;
@@ -118,7 +193,7 @@ namespace IproNvrTool
                         lastLabelX = (int)(x + sz.Width / 2);
                     }
                 }
-                g.DrawString("zoom: " + SpanText[spanIdx] + "   (roda mouse = zoom, klik kanan = menu)", tf, tb, Pad(), Asm.S(1));
+                g.DrawString("zoom: " + SpanText[spanIdx] + "   (wheel = zoom, right-click = menu: go to / range / download)", tf, tb, Pad(), Asm.S(1));
             }
 
             // penanda posisi
@@ -148,7 +223,13 @@ namespace IproNvrTool
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
+            menuTime = TimeAt(e.X);
             if (e.Button != MouseButtons.Left) return;
+            if (selA.HasValue && selB.HasValue)
+            {
+                if (Math.Abs(e.X - XOf(selA.Value)) <= Asm.S(6)) { dragHandle = 1; Capture = true; return; }
+                if (Math.Abs(e.X - XOf(selB.Value)) <= Asm.S(6)) { dragHandle = 2; Capture = true; return; }
+            }
             dragging = true;
             dragTime = TimeAt(e.X);
             Capture = true;
@@ -158,6 +239,9 @@ namespace IproNvrTool
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            if (dragHandle != 0) { if (dragHandle == 1) selA = TimeAt(e.X); else selB = TimeAt(e.X); Invalidate(); return; }
+            if (selA.HasValue && selB.HasValue)
+                Cursor = (Math.Abs(e.X - XOf(selA.Value)) <= Asm.S(6) || Math.Abs(e.X - XOf(selB.Value)) <= Asm.S(6)) ? Cursors.SizeWE : Cursors.Hand;
             if (!dragging) return;
             dragTime = TimeAt(e.X);
             Invalidate();
@@ -166,7 +250,8 @@ namespace IproNvrTool
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
-            if (e.Button == MouseButtons.Right) { menu.Show(this, e.Location); return; }
+            if (e.Button == MouseButtons.Right) { menuTime = TimeAt(e.X); menu.Show(this, e.Location); return; }
+            if (dragHandle != 0) { dragHandle = 0; Capture = false; return; }
             if (!dragging) return;
             dragging = false;
             Capture = false;

@@ -136,6 +136,13 @@ namespace IproNvrTool
             center.Controls.Add(Grid);
             scrub.Visible = false;
             scrub.Seek += delegate(DateTime local) { if (Grid.PlaybackMode) PlayAtUtc(local.ToUniversalTime()); };
+            scrub.ExportRange += delegate(DateTime a, DateTime b)
+            {
+                CamRef r = SelectedRef();
+                if (r == null) { MessageBox.Show("Select the picture area that contains the camera first."); return; }
+                fp.Open("dl");
+                dlPanel.Range(r, a, b);
+            };
             center.Controls.Add(scrub);
             center.Controls.Add(hBottom);
             center.Controls.Add(opPanel);

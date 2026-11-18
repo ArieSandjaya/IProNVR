@@ -725,6 +725,17 @@ namespace IproNvrTool
         }
 
         /// <summary>Quick download: mulai (waktu playback - QdPreSec) selama QdMinutes menit dengan format di Setup.</summary>
+        /// <summary>Download rentang yang dipilih di timeline playback.</summary>
+        public void Range(CamRef r, DateTime a, DateTime b)
+        {
+            if (!AsmApp.Can(Perm.Download)) { MessageBox.Show("Tidak ada hak download."); return; }
+            if (b > DateTime.Now) b = DateTime.Now.AddSeconds(-5);
+            if (b <= a) { MessageBox.Show("The selected range is empty or in the future."); return; }
+            dtS.Value = a;
+            dtE.Value = b;
+            Start(r, a, b, AppSettings.Current.QdMp4 ? "MP4" : "N3");
+        }
+
         public void Quick(CamRef r, DateTime atLocal, bool live)
         {
             if (!AsmApp.Can(Perm.Download)) { MessageBox.Show("Tidak ada hak download."); return; }
