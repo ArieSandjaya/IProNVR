@@ -203,6 +203,15 @@ body.rsz{user-select:none;cursor:col-resize}body.rsz iframe{pointer-events:none}
 @media(max-width:1100px){.x3{grid-template-columns:1fr;height:auto}.spl{display:none}.p3{margin-bottom:12px}.p3 .pb{max-height:420px}}
 @media(max-width:900px){.ge{grid-template-columns:1fr}}
 @media(min-width:801px){body.collapsed #side{margin-left:calc(var(--side-w) * -1)}}
+@media(max-width:700px){
+.rt{min-width:0!important;display:block}.rt thead{display:none}.rt tbody{display:block}
+.rt tr{display:block;margin:10px 12px;padding:8px 12px;border:1px solid var(--glass-border);border-radius:14px;background:var(--glass-bg)}
+.rt td{display:flex;gap:12px;justify-content:space-between;align-items:center;border:0!important;padding:6px 0!important;white-space:normal!important;text-align:right;word-break:break-word}
+.rt td[data-l]::before{content:attr(data-l);color:var(--text3);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;text-align:left;flex:none}
+.rt td.act{justify-content:flex-end;flex-wrap:wrap;padding-top:10px!important}
+.rt td.empty{display:block;text-align:center}
+.tools{flex-wrap:wrap}.tools .btn,.tools select,.tools input{flex:1 1 calc(50% - 8px);min-width:0}
+}
 @media(max-width:800px){#side{position:fixed;inset:0 auto 0 0;z-index:10;margin-left:calc(var(--side-w) * -1);background:var(--panel)}body.open #side{margin-left:0}#modal .mb{grid-template-columns:1fr}#content,#top{padding-left:16px;padding-right:16px}}
 </style></head><body>
 <div class="background"></div><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
@@ -363,11 +372,11 @@ function listPage(r){
       var gen=$('<button class="btn w">Create channels</button>');gen.onclick=genChannels;tools.appendChild(gen)}
   }
   if(admin){var add=$('<button class="btn p">＋ Add</button>');add.onclick=function(){edit(r,null)};tools.appendChild(add)}
-  var t='<table><thead><tr>';HEADS[r].forEach(function(h){t+='<th>'+h+'</th>'});t+='<th></th></tr></thead><tbody></tbody></table>';
+  var t='<table class="rt"><thead><tr>';HEADS[r].forEach(function(h){t+='<th>'+h+'</th>'});t+='<th></th></tr></thead><tbody></tbody></table>';
   card.querySelector('.cb').innerHTML=t;var tb=card.querySelector('tbody');
   if(r=='groups')rows=grpTreeRows(rows);
   rows.forEach(function(row){
-    var tr=document.createElement('tr'),cs=cellFor(r,row),h='';cs.forEach(function(x){h+='<td>'+x+'</td>'});h+='<td class="act"></td>';tr.innerHTML=h;
+    var tr=document.createElement('tr'),cs=cellFor(r,row),h='';cs.forEach(function(x,i){h+='<td data-l="'+esc(HEADS[r][i]||'')+'">'+x+'</td>'});h+='<td class="act"></td>';tr.innerHTML=h;
     var ac=tr.querySelector('.act');
     if(admin){
       if(r=='nvrs')ac.appendChild(btn('Password','',function(){showNvrPass(row)}));
