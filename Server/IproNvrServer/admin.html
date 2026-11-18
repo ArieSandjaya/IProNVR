@@ -202,6 +202,7 @@ body.rsz{user-select:none;cursor:col-resize}body.rsz iframe{pointer-events:none}
 .p3 table.mini td{vertical-align:top}
 .themebtn{font-size:16px}
 .btn.ib{width:38px;height:38px;padding:0;justify-content:center;border-radius:12px}.btn.ib svg{width:18px;height:18px}
+#tip{position:fixed;z-index:60;pointer-events:none;background:var(--panel);color:var(--text);border:1px solid var(--glass-border);border-radius:8px;padding:5px 10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.4);backdrop-filter:blur(10px);opacity:0;transition:opacity .12s;white-space:nowrap;max-width:300px}#tip.on{opacity:1}
 .btn.ib.sm{width:30px;height:30px;border-radius:9px}.btn.ib.sm svg{width:15px;height:15px}
 @media(max-width:1100px){.x3{grid-template-columns:1fr;height:auto}.spl{display:none}.p3{margin-bottom:12px}.p3 .pb{max-height:420px}}
 @media(max-width:900px){.ge{grid-template-columns:1fr}}
@@ -844,4 +845,15 @@ function drawJob(){
   var x=document.getElementById('jx');if(x)x.onclick=function(){job=null;el.style.display='none'};
   var pre=el.querySelector('pre');if(pre)pre.scrollTop=pre.scrollHeight}
 if(tok)boot();else render();
+
+(function(){var tip=document.createElement('div');tip.id='tip';document.body.appendChild(tip);var cur=null;
+function hide(){tip.classList.remove('on');cur=null}
+document.addEventListener('mouseover',function(e){var el=e.target.closest&&e.target.closest('button[title],button[data-tip],a[title],.themebtn');if(!el){if(cur)hide();return}
+ if(el.hasAttribute('title')){el.setAttribute('data-tip',el.getAttribute('title'));el.removeAttribute('title')}
+ var s=el.getAttribute('data-tip');if(!s){hide();return}
+ cur=el;tip.textContent=s;var r=el.getBoundingClientRect();tip.style.left='0px';tip.style.top='0px';
+ var w=tip.offsetWidth,h=tip.offsetHeight,x=Math.max(6,Math.min(innerWidth-w-6,r.left+r.width/2-w/2)),y=r.bottom+8;if(y+h>innerHeight-6)y=r.top-h-8;
+ tip.style.left=x+'px';tip.style.top=y+'px';tip.classList.add('on')});
+document.addEventListener('mouseout',function(e){if(cur&&!(e.relatedTarget&&cur.contains(e.relatedTarget)))hide()});
+document.addEventListener('click',hide);window.addEventListener('scroll',hide,true)})();
 </script></body></html>
