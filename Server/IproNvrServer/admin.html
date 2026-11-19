@@ -340,19 +340,18 @@ function rgPage(){
     var rb=R.querySelector('#rgr');
     if(!g){rb.innerHTML='<div class="empty" style="padding:14px;color:var(--text3)">Select or create a report group, then tick the cameras that belong to it.</div>';return}
     if(!rgS.chk){rgS.chk={};(g.cams||'').split(',').forEach(function(t){if(t)rgS.chk[t]=1})}
-    var q=rgS.q.toLowerCase(),byN={};(data.cameras||[]).forEach(function(c){(byN[c.nvr_id]=byN[c.nvr_id]||[]).push(c)});
+    var q=rgS.q.toLowerCase(),nm={};(data.nvrs||[]).forEach(function(n){nm[n.id]=n.name});
+    var list=(data.cameras||[]).filter(function(c){return !q||(c.name+' '+c.ip_address+' '+c.location+' '+(nm[c.nvr_id]||'')).toLowerCase().indexOf(q)>=0});
+    var nsel=Object.keys(rgS.chk).length,allv=list.length&&list.every(function(c){return rgS.chk[rgTok(c)]});
     var h='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><b style="font-size:15px;margin-right:6px">'+esc(g.name)+'</b>'+
-      '<input id="rgq" placeholder="Search camera…" value="'+esc(rgS.q)+'" style="max-width:220px">'+
-      (admin?ibn('save','Save group','p','rgs')+ibn('edit','Rename','','rgn')+ibn('del','Delete group','d','rgd'):'')+'<span style="color:var(--text3);font-size:12px">'+Object.keys(rgS.chk).length+' selected</span></div>';
-    (data.nvrs||[]).forEach(function(n){var cs=(byN[n.id]||[]).filter(function(c){return !q||(c.name+' '+c.ip_address+' '+c.location).toLowerCase().indexOf(q)>=0});if(!cs.length)return;
-      var all=cs.every(function(c){return rgS.chk[rgTok(c)]});
-      h+='<div style="margin:12px 0 6px;display:flex;align-items:center;gap:8px"><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" class="rgall" data-n="'+n.id+'"'+(all?' checked':'')+(admin?'':' disabled')+'> '+esc(n.name)+'</label><small style="color:var(--text3)">'+esc(n.host)+'</small></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px">'+
-        cs.map(function(c){return '<label style="display:flex;gap:8px;align-items:center;padding:6px 10px;border:1px solid var(--glass-border);border-radius:10px;font-size:13px"><input type="checkbox" class="rgc" data-t="'+rgTok(c)+'"'+(rgS.chk[rgTok(c)]?' checked':'')+(admin?'':' disabled')+'><span>'+c.channel+' · '+esc(c.name||'-')+'</span></label>'}).join('')+'</div>'});
-    if(!(data.cameras||[]).length)h+='<div class="empty" style="padding:14px;color:var(--text3)">No cameras registered yet.</div>';
+      '<input id="rgq" placeholder="Search name, IP, location, NVR…" value="'+esc(rgS.q)+'" style="max-width:240px">'+
+      (admin?ibn('save','Save group','p','rgs')+ibn('edit','Rename','','rgn')+ibn('del','Delete group','d','rgd'):'')+'<span style="color:var(--text3);font-size:12px">'+nsel+' selected</span></div>'+
+      '<div style="overflow-x:auto"><table class="rt nostick"><thead><tr><th style="width:36px"><input type="checkbox" id="rgall"'+(allv?' checked':'')+(admin?'':' disabled')+' title="Select all shown"></th><th>Camera</th><th>IP</th><th>Location</th><th>NVR</th></tr></thead><tbody>'+
+      (list.map(function(c){var k=rgTok(c);return '<tr><td><input type="checkbox" class="rgc" data-t="'+k+'"'+(rgS.chk[k]?' checked':'')+(admin?'':' disabled')+'></td><td data-l="Camera">'+esc(c.name||('Channel '+c.channel))+'</td><td data-l="IP"><span class="mono">'+esc(c.ip_address||'-')+'</span></td><td data-l="Location">'+esc(c.location||'')+'</td><td data-l="NVR">'+esc((nm[c.nvr_id]||'?')+' · ch '+c.channel)+'</td></tr>'}).join('')||'<tr><td colspan="5" class="empty">No cameras match.</td></tr>')+'</tbody></table></div>';
     rb.innerHTML=h;
     var qi=rb.querySelector('#rgq');qi.oninput=function(){rgS.q=qi.value;var p=qi.selectionStart;draw();var q2=R.querySelector('#rgq');q2.focus();q2.setSelectionRange(p,p)};
     [].forEach.call(rb.querySelectorAll('.rgc'),function(x){x.onchange=function(){if(x.checked)rgS.chk[x.dataset.t]=1;else delete rgS.chk[x.dataset.t];draw()}});
-    [].forEach.call(rb.querySelectorAll('.rgall'),function(x){x.onchange=function(){(byN[x.dataset.n]||[]).forEach(function(c){if(x.checked)rgS.chk[rgTok(c)]=1;else delete rgS.chk[rgTok(c)]});draw()}});
+    var ga=rb.querySelector('#rgall');ga.onchange=function(){list.forEach(function(c){if(ga.checked)rgS.chk[rgTok(c)]=1;else delete rgS.chk[rgTok(c)]});draw()};
     var s=rb.querySelector('#rgs');if(s)s.onclick=function(){api('POST','/api/reportgroups',{id:g.id,name:g.name,cams:Object.keys(rgS.chk).join(',')}).then(function(){msg={t:'Report group saved.'};return reload()}).catch(function(e){alert(e.message)})};
     var rn=rb.querySelector('#rgn');if(rn)rn.onclick=function(){var n=prompt('New name:',g.name);if(!n||!n.trim())return;api('POST','/api/reportgroups',{id:g.id,name:n.trim(),cams:g.cams}).then(function(){return reload()}).catch(function(e){alert(e.message)})};
     var rd=rb.querySelector('#rgd');if(rd)rd.onclick=function(){if(confirm('Delete report group "'+g.name+'"? The cameras themselves are not deleted.'))api('DELETE','/api/reportgroups/'+g.id).then(function(){rgS.sel=null;rgS.chk=null;msg={t:'Deleted.'};return reload()}).catch(function(e){alert(e.message)})};
