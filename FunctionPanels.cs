@@ -629,6 +629,25 @@ namespace IproNvrTool
         readonly AsmButton btnCancel = new AsmButton();
         DownloadJob job;
         public Func<CamRef> CameraSource;
+        readonly Label lblTime = new Label();
+        readonly System.Windows.Forms.Timer tmrTime = new System.Windows.Forms.Timer();
+        DateTime dlStart;
+
+        static string Dur(TimeSpan s) { return ((int)s.TotalMinutes).ToString("00") + ":" + s.Seconds.ToString("00"); }
+        static string Size(long b) { return b >= 1048576 ? (b / 1048576.0).ToString("0.0") + " MB" : (b / 1024.0).ToString("0") + " KB"; }
+
+        /// <summary>Informasi waktu download: lama berjalan, ukuran, kecepatan rata-rata; saat selesai menjadi ringkasan akhir.</summary>
+        void ShowTime(bool done)
+        {
+            DownloadJob j = job;
+            TimeSpan el = DateTime.Now - dlStart;
+            long bytes = j != null ? j.Bytes : 0;
+            double sec = Math.Max(0.5, el.TotalSeconds);
+            string sp = bytes > 0 ? "  |  " + (bytes / 1048576.0 / sec).ToString("0.0") + " MB/s" : "";
+            lblTime.Text = (done ? "Download time: " : "Elapsed: ") + Dur(el) + "  |  " + Size(bytes) + sp
+                + (j != null && j.Files > 0 ? "  |  " + j.Files + " file" : "")
+                + (done ? "" : "\nStarted " + dlStart.ToString("HH:mm:ss"));
+        }
 
         public DownloadPanel()
         {
@@ -674,7 +693,11 @@ namespace IproNvrTool
             txtFolder.Leave += delegate { SaveFolder(); };
             fp.Controls.Add(txtFolder); fp.Controls.Add(bb);
             var lf = Lab("Save to:");
+            lblTime.Dock = DockStyle.Top; lblTime.Height = Asm.S(40); lblTime.ForeColor = Asm.Accent; lblTime.Tag = "nostyle"; lblTime.Font = Asm.F(8.5f, true);
+            tmrTime.Interval = 500;
+            tmrTime.Tick += delegate { ShowTime(false); };
             Controls.Add(lblStatus);
+            Controls.Add(lblTime);
             Controls.Add(row);
             Controls.Add(fp); Controls.Add(lf);
             Controls.Add(cmbKind); Controls.Add(lk);
@@ -685,6 +708,7 @@ namespace IproNvrTool
 
         protected override void Dispose(bool disposing)
         {
+            if (disposing) { tmrTime.Stop(); tmrTime.Dispose(); }
             if (disposing && job != null) job.Abort();
             base.Dispose(disposing);
         }
@@ -770,6 +794,9 @@ namespace IproNvrTool
             job = j;
             btnGo.Enabled = false;
             btnCancel.Enabled = true;
+            dlStart = DateTime.Now;
+            ShowTime(false);
+            tmrTime.Start();
             int ch = r.Channel;
             Task.Run(delegate
             {
@@ -783,7 +810,7 @@ namespace IproNvrTool
                 }
                 finally
                 {
-                    Ui.Post(this, delegate { btnGo.Enabled = true; btnCancel.Enabled = false; });
+                    Ui.Post(this, delegate { tmrTime.Stop(); ShowTime(true); btnGo.Enabled = true; btnCancel.Enabled = false; });
                 }
             });
         }
