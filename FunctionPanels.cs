@@ -618,6 +618,91 @@ namespace IproNvrTool
     }
 
     /// <summary>Download rekaman kamera terpilih (httpdl.cgi), termasuk Quick download.</summary>
+    /// <summary>Grafik download: grafik kecepatan (MB/s) beberapa menit terakhir + bar aktivitas (jalan) / penuh (selesai).</summary>
+    public class DlGraph : Control
+    {
+        readonly System.Collections.Generic.List<double> hist = new System.Collections.Generic.List<double>();
+        bool running, done;
+        int phase;
+        long lastBytes;
+        DateTime lastAt;
+
+        public DlGraph()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+            Dock = DockStyle.Top; Height = Asm.S(86); Tag = "nostyle"; BackColor = Asm.Panel;
+        }
+
+        public void Begin() { hist.Clear(); running = true; done = false; lastBytes = 0; lastAt = DateTime.Now; Invalidate(); }
+        public void End() { running = false; done = true; Invalidate(); }
+
+        public void Sample(long bytes)
+        {
+            DateTime n = DateTime.Now;
+            double dt = Math.Max(0.1, (n - lastAt).TotalSeconds);
+            hist.Add(Math.Max(0, (bytes - lastBytes) / 1048576.0 / dt));
+            if (hist.Count > 120) hist.RemoveAt(0);
+            lastBytes = bytes; lastAt = n; phase = (phase + 18) % 400;
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(Asm.Panel);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            int bh = Asm.S(8);
+            var chart = new Rectangle(0, 0, Width - 1, Height - bh - Asm.S(8));
+            using (var gp = Asm.RoundRect(chart, Asm.S(6)))
+            {
+                using (var b = new SolidBrush(Asm.Input)) g.FillPath(b, gp);
+                using (var p = new Pen(Asm.Border)) g.DrawPath(p, gp);
+            }
+            double max = 0.5;
+            foreach (double v in hist) if (v > max) max = v;
+            if (hist.Count > 1 && chart.Width > 4 && chart.Height > 4)
+            {
+                var pts = new System.Collections.Generic.List<PointF>();
+                float stepX = (float)(chart.Width - 8) / 119f;
+                float x0 = chart.Right - 4 - stepX * (hist.Count - 1);
+                for (int i = 0; i < hist.Count; i++)
+                    pts.Add(new PointF(x0 + stepX * i, (float)(chart.Bottom - 4 - (hist[i] / max) * (chart.Height - 8))));
+                var area = new System.Collections.Generic.List<PointF>(pts);
+                area.Add(new PointF(pts[pts.Count - 1].X, chart.Bottom - 4)); area.Add(new PointF(pts[0].X, chart.Bottom - 4));
+                using (var lb = new System.Drawing.Drawing2D.LinearGradientBrush(chart, Color.FromArgb(120, 52, 211, 153), Color.FromArgb(10, 5, 150, 105), 90f))
+                    g.FillPolygon(lb, area.ToArray());
+                using (var p = new Pen(Color.FromArgb(52, 211, 153), 2f)) g.DrawLines(p, pts.ToArray());
+            }
+            Font f = Asm.F(8f, false);
+            double cur = hist.Count > 0 ? hist[hist.Count - 1] : 0;
+            using (var tb = new SolidBrush(Asm.Muted))
+            {
+                g.DrawString("speed (MB/s)", f, tb, 6, 3);
+                string s = "now " + cur.ToString("0.0") + "   max " + max.ToString("0.0");
+                SizeF sz = g.MeasureString(s, f);
+                g.DrawString(s, f, tb, chart.Right - sz.Width - 6, 3);
+            }
+            var bar = new Rectangle(0, Height - bh - 1, Width - 1, bh);
+            using (var gp = Asm.RoundRect(bar, bh / 2))
+            {
+                using (var b = new SolidBrush(Asm.Bar)) g.FillPath(b, gp);
+                if (done || running)
+                {
+                    g.SetClip(gp);
+                    if (done)
+                        using (var b = new System.Drawing.Drawing2D.LinearGradientBrush(bar, Color.FromArgb(5, 150, 105), Color.FromArgb(212, 165, 116), 0f)) g.FillRectangle(b, bar);
+                    else
+                    {
+                        int w = Math.Max(Asm.S(40), bar.Width / 4);
+                        int x = bar.Left - w + (int)((bar.Width + w) * (phase / 400.0));
+                        using (var b = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(x, bar.Top, w, bar.Height), Color.FromArgb(5, 150, 105), Color.FromArgb(52, 211, 153), 0f)) g.FillRectangle(b, x, bar.Top, w, bar.Height);
+                    }
+                    g.ResetClip();
+                }
+            }
+        }
+    }
+
     public class DownloadPanel : Panel
     {
         readonly DateTimePicker dtS = new DateTimePicker();
@@ -630,6 +715,7 @@ namespace IproNvrTool
         DownloadJob job;
         public Func<CamRef> CameraSource;
         readonly Label lblTime = new Label();
+        readonly DlGraph graph = new DlGraph();
         readonly System.Windows.Forms.Timer tmrTime = new System.Windows.Forms.Timer();
         DateTime dlStart;
 
@@ -640,6 +726,7 @@ namespace IproNvrTool
         void ShowTime(bool done)
         {
             DownloadJob j = job;
+            if (!done) graph.Sample(job != null ? job.Bytes : 0); else graph.End();
             TimeSpan el = DateTime.Now - dlStart;
             long bytes = j != null ? j.Bytes : 0;
             double sec = Math.Max(0.5, el.TotalSeconds);
@@ -698,6 +785,7 @@ namespace IproNvrTool
             tmrTime.Tick += delegate { ShowTime(false); };
             Controls.Add(lblStatus);
             Controls.Add(lblTime);
+            Controls.Add(graph);
             Controls.Add(row);
             Controls.Add(fp); Controls.Add(lf);
             Controls.Add(cmbKind); Controls.Add(lk);
@@ -795,6 +883,7 @@ namespace IproNvrTool
             btnGo.Enabled = false;
             btnCancel.Enabled = true;
             dlStart = DateTime.Now;
+            graph.Begin();
             ShowTime(false);
             tmrTime.Start();
             int ch = r.Channel;
