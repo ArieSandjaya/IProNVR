@@ -57,9 +57,9 @@ namespace IproNvrTool
             lsk.TextAlign = ContentAlignment.MiddleCenter; lsk.SetBounds(Asm.S(620), Asm.S(162), Asm.S(104), Asm.S(20)); h.Controls.Add(lsk);
 
             var spd1 = new AsmButton(); spd1.Icon = AsmIcon.Plus; spd1.SetBounds(Asm.S(750), Asm.S(11), Asm.S(86), Asm.S(50));
-            spd1.Click += delegate { each(delegate(PlaybackEngine e) { e.SpeedUp(); }); }; tips.SetToolTip(spd1, "Percepat putaran (0.25x - 8x)"); h.Controls.Add(spd1);
+            spd1.Click += delegate { each(delegate(PlaybackEngine e) { e.SpeedUp(); }); }; tips.SetToolTip(spd1, "Percepat putaran (0.25x - 16x)"); h.Controls.Add(spd1);
             var sm = new AsmButton(); sm.Icon = AsmIcon.Minus; sm.SetBounds(Asm.S(750), Asm.S(78), Asm.S(86), Asm.S(50));
-            sm.Click += delegate { each(delegate(PlaybackEngine e) { e.SpeedDown(); }); }; tips.SetToolTip(sm, "Perlambat putaran (0.25x - 8x)"); h.Controls.Add(sm);
+            sm.Click += delegate { each(delegate(PlaybackEngine e) { e.SpeedDown(); }); }; tips.SetToolTip(sm, "Perlambat putaran (0.25x - 16x)"); h.Controls.Add(sm);
             var lsp = new Label(); lsp.Text = "Speed"; lsp.ForeColor = Asm.Label; lsp.Font = Asm.F(11f, false); lsp.Tag = "nostyle";
             lsp.TextAlign = ContentAlignment.MiddleCenter; lsp.SetBounds(Asm.S(750), Asm.S(132), Asm.S(86), Asm.S(20)); h.Controls.Add(lsp);
 

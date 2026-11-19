@@ -30,9 +30,9 @@ namespace IproNvrTool
         }
         bool disposed;
         int ffStep = 1;
-        static readonly double[] Speeds = { 0.25, 0.5, 1, 2, 4, 8 };
+        static readonly double[] Speeds = { 0.25, 0.5, 1, 2, 4, 8, 16 };
         volatile int speedIdx = 2;
-        /// <summary>Kecepatan putar (0.25x - 8x) pada mode PLAY / putar mundur. Diatur di sisi aplikasi: gambar tiap GOP ditebar menurut durasi rekamannya / kecepatan.</summary>
+        /// <summary>Kecepatan putar (0.25x - 16x) pada mode PLAY / putar mundur. Diatur di sisi aplikasi: gambar tiap GOP ditebar menurut durasi rekamannya / kecepatan.</summary>
         public virtual double Speed { get { return Speeds[speedIdx]; } }
         public void SpeedUp() { if (speedIdx < Speeds.Length - 1) speedIdx++; }
         public void SpeedDown() { if (speedIdx > 0) speedIdx--; }
