@@ -808,7 +808,7 @@ namespace IproNvrServer
                 string host = RS(c, "ip_address"); int port = 554;
                 try { if (url.Length > 0) { var u = new Uri(url); if (u.Host.Length > 0) host = u.Host; if (u.Port > 0) port = u.Port; } } catch { }
                 var o = new Dictionary<string, object> {
-                    { "nvr", RS(n, "name") }, { "nvr_host", RS(n, "host") }, { "channel", RL(c, "channel") }, { "name", RS(c, "name") }, { "ip", host },
+                    { "nvr_id", RL(n, "id") }, { "nvr", RS(n, "name") }, { "nvr_host", RS(n, "host") }, { "channel", RL(c, "channel") }, { "name", RS(c, "name") }, { "ip", host },
                     { "location", RS(c, "location") }, { "codec", RS(c, "codec") }, { "res", RL(c, "width") > 0 ? RL(c, "width") + "x" + RL(c, "height") : "" },
                     { "rtsp", url.Length > 0 }, { "nvr_status", reg == 1 ? "normal" : reg == 2 ? "error" : "unknown" },
                     { "relay", relayState }, { "viewers", viewers }, { "reach", probe ? "checking" : "" } };

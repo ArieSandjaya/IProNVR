@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS seq (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE, steps TEXT NOT NULL DEFAULT '', sort INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS rgrp (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE, cams TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', sort INTEGER NOT NULL DEFAULT 0
+);
 ";
 
         // slots grup: ""nvr:ch,nvr:ch,,..."" (kosong = area kosong); steps sequence: ""groupId:detik,groupId:detik""
@@ -91,6 +95,9 @@ CREATE TABLE IF NOT EXISTS seq (
                 new Col("name",'T',""), new Col("layout",'T',"4"), new Col("slots",'T',""), new Col("owner",'T',""), new Col("parent_id",'I',0), new Col("sort",'I',0) } },
             new TableDef { Route = "sequences", Table = "seq", Order = "sort, name", NatKey = new[] { "name" }, Cols = new Col[] {
                 new Col("name",'T',""), new Col("steps",'T',""), new Col("sort",'I',0) } },
+            // grup khusus laporan (terpisah dari grup tampilan): cams = "nvrId:channel,nvrId:channel"
+            new TableDef { Route = "reportgroups", Table = "rgrp", Order = "sort, name", NatKey = new[] { "name" }, Cols = new Col[] {
+                new Col("name",'T',""), new Col("cams",'T',""), new Col("note",'T',""), new Col("sort",'I',0) } },
             new TableDef { Route = "users", Table = "app_user", Order = "is_admin DESC, name", NatKey = new[] { "name" }, AdminOnlyRead = true, Cols = new Col[] {
                 new Col("name",'T',""), new Col("level",'I',5), new Col("is_admin",'I',0), new Col("use_group",'I',1) } },
         };
