@@ -207,6 +207,12 @@ body.rsz{user-select:none;cursor:col-resize}body.rsz iframe{pointer-events:none}
 .btn.ib.sm{width:30px;height:30px;border-radius:9px}.btn.ib.sm svg{width:15px;height:15px}
 @media(max-width:1100px){.x3{grid-template-columns:1fr;height:auto}.spl{display:none}.p3{margin-bottom:12px}.p3 .pb{max-height:420px}}
 @media(max-width:900px){.ge{grid-template-columns:1fr}}
+
+.rt.nostick td.act,.rt.nostick thead th:last-child{position:static;box-shadow:none;background:none}
+.rt td[data-l=Note]{max-width:260px;white-space:normal}
+.sumg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:14px}
+.sumg .sb{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:16px;padding:14px 16px;cursor:pointer}
+.sumg .sb.on{border-color:var(--emerald-light)}.sumg .sb b{display:block;font-size:26px;line-height:1.1}.sumg .sb span{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3)}
 @media(min-width:801px){body.collapsed #side{margin-left:calc(var(--side-w) * -1)}}
 @media(max-width:700px){
 .rt{min-width:0!important;display:block}.rt thead{display:none}.rt tbody{display:block}
@@ -260,7 +266,7 @@ function render(){
   if(!tok){loginView();return}
   if(!me){a.innerHTML='';return}
   var admin=me.is_admin==1,cnt=function(r){return (data[r]||[]).length};
-  var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Configuration</div><a data-p="devices" class="'+(page=='devices'?'on':'')+'"><span class="ic">⊞</span>Devices</a>';
+  var menu='<a data-p="home" class="'+(page=='home'?'on':'')+'"><span class="ic">⌂</span>Dashboard</a><div class="hd">Reports</div><a data-p="report" class="'+(page=='report'?'on':'')+'"><span class="ic">▤</span>Camera status</a><div class="hd">Configuration</div><a data-p="devices" class="'+(page=='devices'?'on':'')+'"><span class="ic">⊞</span>Devices</a>';
   ['nvrs','cameras','groups','users'].forEach(function(r){if(!data[r])return;menu+='<a data-p="'+r+'" class="'+(page==r?'on':'')+'"><span class="ic">'+META[r].ic+'</span>'+META[r].t+'<em>'+cnt(r)+'</em></a>'});
   if(admin)menu+='<div class="hd">System</div><a data-p="audit" class="'+(page=='audit'?'on':'')+'"><span class="ic">≡</span>Audit log</a><a data-p="settings" class="'+(page=='settings'?'on':'')+'"><span class="ic">⚙</span>Settings</a>';
   a.innerHTML='<div id="wrap"><aside id="side"><div class="brand"><div class="logo">A3</div><span><b>AMAN 300</b> Server</span></div><div class="user"><i>'+esc(me.name.charAt(0).toUpperCase())+'</i><div>'+esc(me.name)+'<small>'+(admin?'Administrator':'Operator (read-only)')+'</small></div></div><nav>'+menu+'</nav><div class="ft">Config version: '+ver+'</div></aside><div id="main"><div id="top"><button class="burger">☰</button><span class="sp"></span><button class="iconbtn themebtn" id="thm" title="Light / dark theme"></button><span class="v">'+esc(me.name)+'</span><button class="btn sm" id="lo">Sign out</button></div><div id="content"></div></div></div>';
@@ -270,7 +276,7 @@ function render(){
   a.querySelector('#lo').onclick=function(){api('POST','/api/logout').then(logout,logout)};
   var c=a.querySelector('#content');
   if(hp){clearInterval(hp);hp=null}
-  var body=page=='home'?home():page=='audit'?auditPage():page=='settings'?settingsPage():page=='devices'?devPage():listPage(page);
+  var body=page=='home'?home():page=='audit'?auditPage():page=='settings'?settingsPage():page=='devices'?devPage():page=='report'?reportPage():listPage(page);
   c.appendChild(body);
   body.insertBefore($('<div id="job" class="card" style="display:none"></div>'),body.children[1]);   // di bawah judul halaman
   if(msg){c.insertBefore($('<div class="alert '+(msg.bad?'er':'ok')+(msg.busy?' busy':'')+'">'+(msg.busy?'<span class="spin"></span>':'')+esc(msg.t)+'</div>'),c.firstChild);msg=null}
@@ -310,6 +316,50 @@ function auditPage(){
   return w}
 
 /* ---------- dashboard ---------- */
+
+/* ---------- report: camera status ---------- */
+var rep={rows:[],st:'',nvr:'',q:'',time:'',probed:false,busy:false};
+function repLoad(probe){
+  rep.busy=true;draw();
+  api('GET','/api/report'+(probe?'?probe=1':'')).then(function(r){rep.rows=r.rows||[];rep.time=r.time;rep.probed=!!r.probed;rep.ms=r.probe_ms;rep.busy=false;draw()}).catch(function(e){rep.busy=false;rep.err=e.message;draw()})}
+function repRows(){var q=rep.q.toLowerCase();return rep.rows.filter(function(r){
+  if(rep.st&&r.status!=rep.st)return false;if(rep.nvr&&r.nvr!=rep.nvr)return false;
+  if(q&&(r.name+' '+r.ip+' '+r.location+' '+r.nvr+' '+r.codec).toLowerCase().indexOf(q)<0)return false;return true})}
+function repCsv(){var rows=repRows(),h=['Status','NVR','Channel','Name','IP','Location','Codec','Resolution','RTSP','NVR status','Relay','Viewers','Reachability','RTT ms','Note'];
+  function q(v){v=String(v==null?'':v);return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+  var s=[h.join(',')].concat(rows.map(function(r){return [r.status,r.nvr,r.channel,r.name,r.ip,r.location,r.codec,r.res,r.rtsp?'yes':'no',r.nvr_status,r.relay,r.viewers,r.reach||'not checked',r.rtt||'',r.why].map(q).join(',')})).join('\r\n');
+  var b=new Blob(['\ufeff'+s],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='camera-status-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,'')+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500)}
+var repDraw=null;
+function draw(){if(repDraw)repDraw()}
+function reportPage(){
+  var w=document.createElement('div');w.appendChild(head('Reports','Camera status'));
+  var card=$('<div class="card nt"><div class="ct"><h3>Camera status</h3></div><div class="cb" id="rpb"></div></div>');w.appendChild(card);
+  var B=card.querySelector('#rpb');
+  function ibn(ico,title,cls,id){return '<button class="btn ib '+cls+'" id="'+id+'" title="'+title+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO[ico]+'</svg></button>'}
+  repDraw=function(){
+    if(page!='report'||!document.body.contains(card)){repDraw=null;return}
+    var c={ok:0,warning:0,error:0,unknown:0};rep.rows.forEach(function(r){c[r.status]=(c[r.status]||0)+1});
+    var nv={};rep.rows.forEach(function(r){nv[r.nvr]=1});
+    function sb(k,l,col){return '<div class="sb'+(rep.st==k?' on':'')+'" data-s="'+k+'"><b'+(col?' style="color:'+col+'"':'')+'>'+(k==''?rep.rows.length:c[k]||0)+'</b><span>'+l+'</span></div>'}
+    var rows=repRows();
+    var h='<div class="sumg">'+sb('','All cameras')+sb('ok','Good','var(--emerald-light)')+sb('warning','Warning','var(--gold)')+sb('error','Error','var(--coral)')+sb('unknown','Unknown')+'</div>'+
+     '<div class="f1" style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="rq" placeholder="Search name, IP, location…" value="'+esc(rep.q)+'" style="max-width:260px"> <select id="rn" style="max-width:220px"><option value="">All NVRs</option>'+Object.keys(nv).map(function(n){return '<option'+(rep.nvr==n?' selected':'')+'>'+esc(n)+'</option>'}).join('')+'</select>'+
+     ibn('refresh','Reload','','rr')+ibn('pulse','Check connectivity now (TCP to each camera)','p','rp')+ibn('dl','Export to CSV','','rc')+
+     '<span style="color:var(--text3);font-size:12px;margin-left:6px">'+(rep.busy?'Working…':(rep.time?'Updated '+esc(rep.time)+(rep.probed?' · connectivity checked in '+rep.ms+' ms':' · connectivity not checked'):''))+'</span></div>';
+    if(rep.err)h+='<div class="alert er">'+esc(rep.err)+'</div>';
+    h+='<div style="overflow-x:auto"><table class="rt nostick"><thead><tr><th>Status</th><th>NVR</th><th>Ch</th><th>Name</th><th>IP</th><th>Location</th><th>Codec / Res.</th><th>RTSP</th><th>NVR says</th><th>Relay</th><th>Reach</th><th>Note</th></tr></thead><tbody>'+
+     (rows.map(function(r){var cl=r.status=='ok'?'ok':r.status=='error'?'bad':r.status=='warning'?'warn':'info';
+       var reach=r.reach=='reachable'?'<span class="badge ok">'+(r.rtt||0)+' ms</span>':r.reach=='unreachable'?'<span class="badge bad">no</span>':r.reach?esc(r.reach):'-';
+       return '<tr><td data-l="Status"><span class="badge '+cl+'">'+({ok:'Good',warning:'Warning',error:'Error',unknown:'Unknown'}[r.status])+'</span></td><td data-l="NVR">'+esc(r.nvr)+'</td><td data-l="Ch">'+r.channel+'</td><td data-l="Name">'+esc(r.name)+'</td><td data-l="IP"><span class="mono">'+esc(r.ip)+'</span></td><td data-l="Location">'+esc(r.location)+'</td><td data-l="Codec / Res.">'+esc((r.codec||'-')+(r.res?' · '+r.res:''))+'</td><td data-l="RTSP">'+(r.rtsp?'yes':'<span class="badge warn">no</span>')+'</td><td data-l="NVR says">'+({normal:'<span class="badge ok">normal</span>',error:'<span class="badge bad">error</span>',unknown:'-'}[r.nvr_status])+'</td><td data-l="Relay">'+esc(r.relay)+(r.viewers?' ('+r.viewers+' viewers)':'')+'</td><td data-l="Reach">'+reach+'</td><td data-l="Note">'+esc(r.why||'')+'</td></tr>'}).join('')||'<tr><td colspan="12" class="empty">No cameras match.</td></tr>')+'</tbody></table></div>';
+    B.innerHTML=h;
+    [].forEach.call(B.querySelectorAll('.sb'),function(x){x.onclick=function(){rep.st=x.dataset.s==rep.st?'':x.dataset.s;draw()}});
+    var q=B.querySelector('#rq');q.oninput=function(){rep.q=q.value;var p=q.selectionStart;draw();var q2=B.querySelector('#rq');q2.focus();q2.setSelectionRange(p,p)};
+    B.querySelector('#rn').onchange=function(){rep.nvr=this.value;draw()};
+    B.querySelector('#rr').onclick=function(){repLoad(false)};B.querySelector('#rp').onclick=function(){repLoad(true)};B.querySelector('#rc').onclick=repCsv;
+  };
+  setTimeout(function(){repLoad(false)},0);
+  return w}
+
 function settingsPage(){
   var w=document.createElement('div');w.appendChild(head('Settings'));
   var rc=$('<div class="card nt"><div class="ct"><h3>RTSP relay (MediaMTX)</h3></div><div class="cb" id="rly">Loading...</div></div>');w.appendChild(rc);
@@ -582,7 +632,9 @@ var ICO={
  add:'<path d="M12 5v14M5 12h14"/>',
  dl:'<path d="M7 3h7l4 4v14H7zM13 3v5h5M12 11v6M9.5 14.5L12 17l2.5-2.5"/>',
  up:'<path d="M12 20V9M7.5 13.5L12 9l4.5 4.5M5 5h14"/>',
- gen:'<path d="M4 6h10M4 12h7M4 18h10M17 9v8M13 13h8"/>'};
+ gen:'<path d="M4 6h10M4 12h7M4 18h10M17 9v8M13 13h8"/>',
+ refresh:'<path d="M20 5v5h-5M4 19v-5h5M5.6 9A7.5 7.5 0 0 1 19 10M18.4 15A7.5 7.5 0 0 1 5 14"/>',
+ pulse:'<path d="M3 12h4l3-7 4 14 3-7h4"/>'};
 function ib(act,ico,title,cls,attr){return '<button class="btn ib'+(cls?' '+cls:'')+'" data-a="'+act+'"'+(attr||'')+' title="'+title+'" aria-label="'+title+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICO[ico]+'</svg></button>'}
 function devCams(nid){return (data.cameras||[]).filter(function(c){return c.nvr_id==nid})}
 function devFind(t,id){return (t=='nvr'?data.nvrs:t=='cam'?data.cameras:data.groups||[]).filter(function(x){return x.id==id})[0]}

@@ -529,6 +529,7 @@ namespace IproNvrServer
                     return;
                 }
                 if (head == "status") { Json(rs, 200, SystemStatus()); return; }
+                if (head == "report") { Json(rs, 200, CameraReport(rq.QueryString["probe"] == "1")); return; }
                 if (head == "relay")
                 {
                     if (relay == null) { Json(rs, 200, new Dictionary<string, object> { { "enabled", false }, { "status", "Relay tidak aktif" } }); return; }
@@ -780,6 +781,76 @@ namespace IproNvrServer
             o["codecs"] = codecs;
             o["totals"] = new Dictionary<string, object> { { "nvrs", nvrs.Count }, { "cameras", cams.Count }, { "rtsp", withRtsp }, { "regOk", regOk }, { "regErr", regErr } };
             return o;
+        }
+
+        /// <summary>Laporan semua kamera + statusnya. probe=1: cek TCP langsung ke kamera (port RTSP) secara paralel.</summary>
+        object CameraReport(bool probe)
+        {
+            var nvrs = store.List(Schema.ByRoute("nvrs"));
+            var cams = store.List(Schema.ByRoute("cameras"));
+            var byNvr = new Dictionary<long, Row>();
+            foreach (Row n in nvrs) byNvr[RL(n, "id")] = n;
+            Dictionary<string, long[]> live = relay != null ? relay.LivePaths() : new Dictionary<string, long[]>();
+            var rows = new List<Dictionary<string, object>>();
+            var targets = new List<KeyValuePair<Dictionary<string, object>, string[]>>();
+            foreach (Row c in cams)
+            {
+                Row n; if (!byNvr.TryGetValue(RL(c, "nvr_id"), out n)) continue;
+                string url = RS(c, "rtsp_url");
+                long reg = RL(c, "reg_status");
+                string relayState = "n/a"; long viewers = 0;
+                if (relay != null && live.Count > 0)
+                {
+                    long[] lv;
+                    if (live.TryGetValue(MediaMtxRelay.PathName(RS(n, "host"), (int)RL(n, "port"), (int)RL(c, "channel"), false), out lv)) { relayState = lv[0] == 1 ? "ready" : "not ready"; viewers = lv[1]; }
+                    else relayState = "idle";
+                }
+                string host = RS(c, "ip_address"); int port = 554;
+                try { if (url.Length > 0) { var u = new Uri(url); if (u.Host.Length > 0) host = u.Host; if (u.Port > 0) port = u.Port; } } catch { }
+                var o = new Dictionary<string, object> {
+                    { "nvr", RS(n, "name") }, { "nvr_host", RS(n, "host") }, { "channel", RL(c, "channel") }, { "name", RS(c, "name") }, { "ip", host },
+                    { "location", RS(c, "location") }, { "codec", RS(c, "codec") }, { "res", RL(c, "width") > 0 ? RL(c, "width") + "x" + RL(c, "height") : "" },
+                    { "rtsp", url.Length > 0 }, { "nvr_status", reg == 1 ? "normal" : reg == 2 ? "error" : "unknown" },
+                    { "relay", relayState }, { "viewers", viewers }, { "reach", probe ? "checking" : "" } };
+                rows.Add(o);
+                if (probe && host.Length > 0) targets.Add(new KeyValuePair<Dictionary<string, object>, string[]>(o, new[] { host, port.ToString() }));
+                else if (probe) o["reach"] = "no address";
+            }
+            long ms = 0;
+            if (probe)
+            {
+                var sw = Stopwatch.StartNew();
+                Parallel.ForEach(targets, new ParallelOptions { MaxDegreeOfParallelism = 24 }, kv =>
+                {
+                    bool ok = false; int rtt = 0;
+                    try
+                    {
+                        var s2 = Stopwatch.StartNew();
+                        using (var tc = new System.Net.Sockets.TcpClient())
+                        {
+                            var ar = tc.BeginConnect(kv.Value[0], int.Parse(kv.Value[1]), null, null);
+                            ok = ar.AsyncWaitHandle.WaitOne(900) && tc.Connected;
+                            rtt = (int)s2.ElapsedMilliseconds;
+                        }
+                    }
+                    catch { ok = false; }
+                    kv.Key["reach"] = ok ? "reachable" : "unreachable"; kv.Key["rtt"] = ok ? rtt : 0;
+                });
+                ms = sw.ElapsedMilliseconds;
+            }
+            // status keseluruhan: error > warning > ok > unknown
+            foreach (var o in rows)
+            {
+                string st = "ok", why = "";
+                string reach = Convert.ToString(o["reach"]), ns = Convert.ToString(o["nvr_status"]);
+                if (reach == "unreachable") { st = "error"; why = "Camera not reachable from the server"; }
+                else if (ns == "error") { st = "error"; why = "NVR reports a camera error"; }
+                else if (!(bool)o["rtsp"]) { st = "warning"; why = "No RTSP URL yet"; }
+                else if (Convert.ToString(o["relay"]) == "not ready" && Convert.ToInt64(o["viewers"]) > 0) { st = "warning"; why = "Relay stream not ready"; }
+                else if (ns == "unknown" && reach != "reachable") { st = "unknown"; why = "Not checked yet"; }
+                o["status"] = st; o["why"] = why;
+            }
+            return new Dictionary<string, object> { { "time", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") }, { "probed", probe }, { "probe_ms", ms }, { "rows", rows } };
         }
 
         object SchemaInfo()
