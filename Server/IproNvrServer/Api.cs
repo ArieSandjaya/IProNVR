@@ -529,6 +529,20 @@ namespace IproNvrServer
                     return;
                 }
                 if (head == "status") { Json(rs, 200, SystemStatus()); return; }
+                if (head == "report-xlsx")
+                {
+                    long rid; long.TryParse(rq.QueryString["id"], out rid);
+                    byte[] xb = ReportXlsx(rid, rq.QueryString["probe"] == "1", out string xname);
+                    if (xb == null) { Err(rs, 404, "Report not found."); return; }
+                    rs.StatusCode = 200;
+                    rs.ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    rs.Headers["Content-Disposition"] = "attachment; filename=\"" + xname + "\"";
+                    rs.Headers["Cache-Control"] = "no-store";
+                    rs.ContentLength64 = xb.Length;
+                    rs.OutputStream.Write(xb, 0, xb.Length);
+                    Audit.Add(Convert.ToString(s.User["name"]), ip, "export report", xname);
+                    return;
+                }
                 if (head == "report") { Json(rs, 200, CameraReport(rq.QueryString["probe"] == "1")); return; }
                 if (head == "relay")
                 {
@@ -851,6 +865,85 @@ namespace IproNvrServer
                 o["status"] = st; o["why"] = why;
             }
             return new Dictionary<string, object> { { "time", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") }, { "probed", probe }, { "probe_ms", ms }, { "rows", rows } };
+        }
+
+        /// <summary>Ekspor laporan buatan pengguna ke Excel: sheet Summary + satu sheet per grup kamera.</summary>
+        byte[] ReportXlsx(long id, bool probe, out string fileName)
+        {
+            fileName = "report.xlsx";
+            Row rep = null;
+            foreach (Row r in store.List(Schema.ByRoute("reports"))) if (RL(r, "id") == id) rep = r;
+            if (rep == null) return null;
+            var groups = new List<KeyValuePair<string, string[]>>();
+            try
+            {
+                object parsed = json.DeserializeObject(RS(rep, "def").Length > 0 ? RS(rep, "def") : "[]");
+                var arr = parsed as System.Collections.IEnumerable;
+                if (arr != null)
+                    foreach (object g in arr)
+                    {
+                        var d = g as Dictionary<string, object>; if (d == null) continue;
+                        object nm, cs; d.TryGetValue("name", out nm); d.TryGetValue("cams", out cs);
+                        groups.Add(new KeyValuePair<string, string[]>(Convert.ToString(nm), (Convert.ToString(cs) ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)));
+                    }
+            }
+            catch { }
+            var data = (Dictionary<string, object>)CameraReport(probe);
+            var byTok = new Dictionary<string, Dictionary<string, object>>();
+            foreach (var o in (List<Dictionary<string, object>>)data["rows"]) byTok[Convert.ToString(o["nvr_id"]) + ":" + Convert.ToString(o["channel"])] = o;
+            string rname = RS(rep, "name");
+            string when = Convert.ToString(data["time"]);
+            Func<string, int> sty = s => s == "ok" ? 3 : s == "error" ? 5 : s == "warning" ? 4 : 6;
+            Func<string, string> lbl = s => s == "ok" ? "Good" : s == "error" ? "Error" : s == "warning" ? "Warning" : "Unknown";
+
+            var book = new XlsxBook();
+            var sum = book.Add("Summary");
+            sum.Widths = new double[] { 34, 12, 10, 10, 10, 10 };
+            sum.Row(new XlsxCell(rname, 1));
+            sum.Row(new XlsxCell("Generated: " + when + (probe ? "  (connectivity checked from the server)" : "  (connectivity not checked)"), 0));
+            sum.Blank();
+            sum.Row(new XlsxCell("Group", 2), new XlsxCell("Cameras", 2), new XlsxCell("Good", 2), new XlsxCell("Warning", 2), new XlsxCell("Error", 2), new XlsxCell("Unknown", 2));
+            long tot = 0, tg = 0, tw = 0, te = 0, tu = 0;
+            var sheets = new List<KeyValuePair<string, List<Dictionary<string, object>>>>();
+            foreach (var g in groups)
+            {
+                var rows = new List<Dictionary<string, object>>();
+                foreach (string tk in g.Value) { Dictionary<string, object> o; if (byTok.TryGetValue(tk.Trim(), out o)) rows.Add(o); }
+                int c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+                foreach (var o in rows) { string st = Convert.ToString(o["status"]); if (st == "ok") c1++; else if (st == "warning") c2++; else if (st == "error") c3++; else c4++; }
+                sum.Row(new XlsxCell(g.Key, 0), new XlsxCell(rows.Count, 0), new XlsxCell(c1, c1 > 0 ? 3 : 0), new XlsxCell(c2, c2 > 0 ? 4 : 0), new XlsxCell(c3, c3 > 0 ? 5 : 0), new XlsxCell(c4, c4 > 0 ? 6 : 0));
+                tot += rows.Count; tg += c1; tw += c2; te += c3; tu += c4;
+                sheets.Add(new KeyValuePair<string, List<Dictionary<string, object>>>(g.Key, rows));
+            }
+            sum.Row(new XlsxCell("Total", 7), new XlsxCell(tot, 7), new XlsxCell(tg, 7), new XlsxCell(tw, 7), new XlsxCell(te, 7), new XlsxCell(tu, 7));
+            string[] heads = { "No", "Camera", "NVR", "Ch", "IP", "Location", "Codec", "Resolution", "Status", "NVR says", "RTSP", "Relay", "Reach (ms)", "Note" };
+            foreach (var g in sheets)
+            {
+                var sh = book.Add(g.Key);
+                sh.Widths = new double[] { 5, 26, 24, 6, 16, 20, 9, 12, 11, 11, 7, 12, 11, 38 };
+                sh.Row(new XlsxCell(rname + " - " + g.Key, 1));
+                sh.Row(new XlsxCell("Generated: " + when + "   Cameras: " + g.Value.Count, 0));
+                sh.Blank();
+                var hr = new List<XlsxCell>(); foreach (string h in heads) hr.Add(new XlsxCell(h, 2)); sh.Rows.Add(hr);
+                sh.FreezeRow = 4;
+                int n = 0;
+                foreach (var o in g.Value)
+                {
+                    n++;
+                    string st = Convert.ToString(o["status"]);
+                    string reach = Convert.ToString(o["reach"]);
+                    sh.Row(new XlsxCell(n, 0), new XlsxCell(Convert.ToString(o["name"]), 0), new XlsxCell(Convert.ToString(o["nvr"]), 0), new XlsxCell(Convert.ToInt64(o["channel"]), 0),
+                        new XlsxCell(Convert.ToString(o["ip"]), 0), new XlsxCell(Convert.ToString(o["location"]), 0), new XlsxCell(Convert.ToString(o["codec"]), 0), new XlsxCell(Convert.ToString(o["res"]), 0),
+                        new XlsxCell(lbl(st), sty(st)), new XlsxCell(Convert.ToString(o["nvr_status"]), 0), new XlsxCell((bool)o["rtsp"] ? "yes" : "no", 0),
+                        new XlsxCell(Convert.ToString(o["relay"]), 0),
+                        reach == "reachable" ? new XlsxCell(Convert.ToInt64(o["rtt"]), 0) : new XlsxCell(reach == "unreachable" ? "no" : "-", 0),
+                        new XlsxCell(Convert.ToString(o["why"]), 0));
+                }
+            }
+            var safe = new StringBuilder();
+            foreach (char c in rname) safe.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_');
+            fileName = (safe.Length > 0 ? safe.ToString() : "report") + "_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".xlsx";
+            return book.ToBytes();
         }
 
         object SchemaInfo()
