@@ -190,7 +190,8 @@ namespace IproNvrTool
             {
                 if (worker.Pending > 1) return;
                 int now = Environment.TickCount;
-                if (unchecked(now - lastFetchStart) < IntervalMs) return;
+                // H.264/H.265: lompatan antar-GOP ditentukan NVR, jadi kecepatan terasa hanya bila GOP diambil sesering saat PLAY
+                if (unchecked(now - lastFetchStart) < (gopMode ? Math.Min(IntervalMs, 500) : IntervalMs)) return;
                 lastFetchStart = now;
                 worker.Post(delegate { Fetch(); });
             }
@@ -216,7 +217,7 @@ namespace IproNvrTool
                 }
                 curUtc = null;
                 SetShown(null);
-                lock (outs) foreach (ChanOut o in outs.Values) lock (o.Q) o.Q.Clear();   // sisa buffer posisi lama dibuang
+                Flush();   // sisa buffer posisi lama dibuang
                 Status("PLAY " + Asm.FormatTime(t.ToLocalTime()));
                 Fetch();
             });
@@ -226,12 +227,14 @@ namespace IproNvrTool
         public virtual void Play()
         {
             if (!curUtc.HasValue) return;
+            string prev = mode;
             mode = "PLAY";
             ffStep = 1;
             worker.Post(delegate
             {
                 Prepare();
                 sess.Cmd("hdrctl.cgi", "PC=AS60&PLAYCMD=PLAY&2ND=OFF&TIMEF=AS60_UNKNOWN&NOTIME=ON");
+                if (prev == "BPLAY" || prev == "FF" || prev == "REW") Flush();
                 Fetch();
             });
             StartTimer();
@@ -239,22 +242,45 @@ namespace IproNvrTool
 
         void Simple(string cmd, string newMode, bool smooth)
         {
-            DateTime? c0 = curUtc;
-            if (!c0.HasValue) return;
-            DateTime fb = c0.Value;
+            if (!curUtc.HasValue) return;
+            DateTime fb = curUtc.Value;
+            string prev = mode;
             mode = newMode;
             worker.Post(delegate
             {
-                Prepare();
-                sess.Cmd("hdrctl.cgi", "PC=AS60&PLAYCMD=" + cmd + "&2ND=OFF&TIMEF=" + TimeStr(fb) + (smooth ? "&SMOOTH=OFF" : "") + "&NOTIME=ON");
+                // spec NVR: TIMEF = waktu gambar yang sedang tampil, bukan posisi data yang sudah diambil (bisa mendahului beberapa detik)
+                DateTime at = ShownUtc ?? fb;
+                try
+                {
+                    Prepare();
+                    sess.Cmd("hdrctl.cgi", "PC=AS60&PLAYCMD=" + cmd + "&2ND=OFF&TIMEF=" + Timef.Format(at) + (smooth ? "&SMOOTH=OFF" : "") + "&NOTIME=ON");
+                }
+                catch (Exception ex)
+                {
+                    if (mode == newMode) mode = prev;
+                    Log.Write("Playback " + Nvr.Name + " " + cmd + ": " + ex.Message);
+                    lock (channels) foreach (int c in channels) ChStatus(c, "Gagal perintah " + cmd + " ke NVR: " + ex.Message);
+                    return;
+                }
+                Flush();   // buffer arah/kecepatan lama dibuang agar perintah langsung terlihat
+                curUtc = at;
+                SetShown(at);
                 Fetch();
             });
             StartTimer();
         }
 
         public virtual void Reverse() { ffStep = 1; Simple("BPLAY", "BPLAY", false); }
-        public virtual void FastForward() { ffStep = Math.Min(7, ffStep + 1); Simple("FF", "FF", true); }
-        public virtual void FastReverse() { ffStep = Math.Min(7, ffStep + 1); Simple("REW", "REW", true); }
+        public virtual void FastForward() { Fast("FF"); }
+        public virtual void FastReverse() { Fast("REW"); }
+
+        /// <summary>FF/REW tidak punya parameter kecepatan: tiap pengiriman ulang menaikkan STEP di NVR (STEP1-STEP8).</summary>
+        void Fast(string cmd)
+        {
+            if (!curUtc.HasValue) return;
+            ffStep = mode == cmd ? Math.Min(8, ffStep + 1) : 1;
+            Simple(cmd, cmd, true);
+        }
 
         public virtual void Pause()
         {
@@ -262,6 +288,7 @@ namespace IproNvrTool
             if (!c0.HasValue) return;
             DateTime fb = c0.Value;
             mode = "PAUSE";
+            ffStep = 1;
             worker.Post(delegate
             {
                 sess.Cmd("hdrctl.cgi", "PC=AS60&PLAYCMD=PAUSE&2ND=OFF&TIMEF=" + TimeStr(fb) + "&SMOOTH=OFF&NOTIME=ON");
@@ -345,6 +372,8 @@ namespace IproNvrTool
         {
             {
                 if (disposed || mode == "STOP") return;
+                int gen = playGen;
+                bool backward = mode == "BPLAY" || mode == "REW";
                 byte[] data;
                 data = null;
                 Exception last = null;
@@ -398,7 +427,7 @@ namespace IproNvrTool
                 }
                 else
                 {
-                    Decode(ch, f);
+                    Decode(ch, f, gen, backward);
                 }
             }
         }
@@ -438,6 +467,8 @@ namespace IproNvrTool
             public List<byte[]> Jpgs;
             public DateTime? Start;
             public double Dur;       // detik waktu rekaman
+            public int Gen;          // generasi saat diambil; basi bila buffer sudah dibuang
+            public bool Backward;    // putar mundur / REW: gambar ditampilkan dari akhir GOP
         }
 
         class ChanOut
@@ -449,8 +480,16 @@ namespace IproNvrTool
         }
         readonly Dictionary<int, ChanOut> outs = new Dictionary<int, ChanOut>();
         static readonly SemaphoreSlim decodeSlots = new SemaphoreSlim(Math.Max(2, Environment.ProcessorCount / 2));
+        volatile int playGen;
 
-        void Decode(int ch, ParsedFrame f)
+        /// <summary>Buang antrian putar, termasuk GOP yang sedang diputar / didekode. Hanya dipanggil dari thread pekerja.</summary>
+        void Flush()
+        {
+            playGen++;
+            lock (outs) foreach (ChanOut o in outs.Values) lock (o.Q) o.Q.Clear();
+        }
+
+        void Decode(int ch, ParsedFrame f, int gen, bool backward)
         {
             DateTime? gStart = f.GopStartUtc ?? f.UtcTime;
             double gDur = 0;
@@ -493,7 +532,7 @@ namespace IproNvrTool
                     Action<int, byte[]> h = Frame;
                     if (h == null) return;
                     if (still) { h(ch, jpgs[jpgs.Count - 1]); return; }
-                    Enqueue(ch, jpgs, gStart, gDur);
+                    Enqueue(ch, jpgs, gStart, gDur, gen, backward);
                 }
                 catch (Exception ex) { Log.Write("Decode playback CAM " + ch + ": " + ex.Message); }
                 finally { if (got) decodeSlots.Release(); }
@@ -501,7 +540,7 @@ namespace IproNvrTool
         }
 
         /// <summary>Antrian putar per kamera: GOP berikutnya tidak dibuang saat GOP sebelumnya masih diputar (penyebab loncat/patah-patah).</summary>
-        void Enqueue(int ch, List<byte[]> jpgs, DateTime? start, double dur)
+        void Enqueue(int ch, List<byte[]> jpgs, DateTime? start, double dur, int gen, bool backward)
         {
             ChanOut co;
             bool startThread = false;
@@ -511,9 +550,10 @@ namespace IproNvrTool
             }
             lock (co.Q)
             {
+                if (gen != playGen) return;   // hasil dekode dari sebelum ganti arah / posisi
                 // durasi GOP: dari waktu rekaman; bila NVR tidak menyertakannya pakai durasi GOP sebelumnya
                 if (dur < 0.05 || dur > 30) dur = co.LastDur; else co.LastDur = dur;
-                var g = new Gop(); g.Jpgs = jpgs; g.Start = start; g.Dur = dur;
+                var g = new Gop(); g.Jpgs = jpgs; g.Start = start; g.Dur = dur; g.Gen = gen; g.Backward = backward;
                 co.Q.Enqueue(g);
                 while (co.Q.Count > 4) co.Q.Dequeue(); // tertinggal jauh: lompat ke yang terbaru
                 if (!co.Running) { co.Running = true; startThread = true; }
@@ -551,8 +591,9 @@ namespace IproNvrTool
                     if (gap < 30) { step = (int)Math.Ceiling(30.0 / gap); gap = span / Math.Ceiling((double)g.Count / step); }
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     int shown = 0;
-                    for (int i = 0; i < g.Count && !disposed && mode != "STOP"; i += step)
+                    for (int k = 0; k < g.Count && !disposed && mode != "STOP" && gp.Gen == playGen; k += step)
                     {
+                        int i = gp.Backward ? g.Count - 1 - k : k;   // dekoder menghasilkan urutan rekam (maju)
                         h(ch, g[i]);
                         if (gp.Start.HasValue)
                         {
@@ -560,7 +601,7 @@ namespace IproNvrTool
                             SetShown(t);
                         }
                         shown++;
-                        lock (co.Q) { co.Playing = gp.Dur * Math.Max(0, g.Count - i) / g.Count; }
+                        lock (co.Q) { co.Playing = gp.Dur * Math.Max(0, g.Count - k) / g.Count; }
                         double due = shown * gap;
                         double wait = due - sw.Elapsed.TotalMilliseconds;
                         if (wait > 1) Thread.Sleep((int)wait);
