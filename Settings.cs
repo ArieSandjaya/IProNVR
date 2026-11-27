@@ -77,6 +77,7 @@ namespace IproNvrTool
         public bool SeparateTab = true;         // tab boleh dipisah jadi jendela
         public bool DownloadTimeUtc = true;     // STARTTIME/ENDTIME download dianggap UTC (false = waktu lokal PC)
         public bool HikPlaybackUtc = false;     // waktu playback RTSP Hikvision dikirim sebagai UTC (false = jam lokal perangkat)
+        public bool DahuaPlaybackRtsp = false;  // playback Dahua lewat RTSP (false = lewat HTTP loadfile.cgi)
         public bool PanelHandle = true;         // tombol buka/tutup function panel
         public bool ShowIconNames = true;       // nama ikon kamera di map
         public bool ConfirmBeforeLive = false;  // konfirmasi sebelum membuka Live/Map window

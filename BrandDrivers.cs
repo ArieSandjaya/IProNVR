@@ -372,6 +372,13 @@ namespace IproNvrTool
 
         static string Ts(DateTime local) { return local.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture); }
 
+        /// <summary>Playback lewat HTTP (loadfile.cgi) untuk perangkat yang tidak melayani playback RTSP. Waktu = jam lokal perangkat.</summary>
+        public string HttpPlaybackPath(int channel, DateTime startUtc, DateTime endUtc)
+        {
+            return "/cgi-bin/loadfile.cgi?action=startLoad&channel=" + channel + "&startTime=" + Ts(startUtc.ToLocalTime()).Replace(" ", "%20")
+                + "&endTime=" + Ts(endUtc.ToLocalTime()).Replace(" ", "%20") + "&subtype=0";
+        }
+
         public override RegistrationResult Test(NvrEndpoint ep)
         {
             var res = new RegistrationResult();
@@ -428,7 +435,8 @@ namespace IproNvrTool
             return list;
         }
 
-        static string Describe(Exception ex)
+        /// <summary>Alasan galat HTTP: kode status + awal isi jawaban perangkat.</summary>
+        public static string Describe(Exception ex)
         {
             var we = ex as WebException;
             if (we != null && we.Response != null)

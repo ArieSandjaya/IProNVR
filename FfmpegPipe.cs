@@ -190,6 +190,28 @@ namespace IproNvrTool
         {
         }
 
+        /// <summary>Playback lewat HTTP: data rekaman (DAV Dahua) ditulis ke Input; -re memutarnya sesuai waktu rekaman (1x),
+        /// sehingga pengambilan data dari perangkat ikut tertahan. format null = dikenali ffmpeg sendiri.</summary>
+        public static FfmpegPipe ForPlaybackData(string exe, string format, int width, string name, Action<byte[]> onJpeg, bool hw = false)
+        {
+            var sb = new StringBuilder();
+            sb.Append("-hide_banner -loglevel error -nostats -flags low_delay ");
+            if (hw) sb.Append(HwAccels.Args(AppSettings.Current.HwAccel, null));
+            sb.Append("-probesize 200000 -analyzeduration 1000000 -re ");
+            if (format != null) sb.Append("-f " + format + " ");
+            sb.Append("-i pipe:0 -an ");
+            if (width > 0) sb.Append("-vf scale=" + width + ":-2:flags=fast_bilinear ");
+            sb.Append(VsyncArg());
+            sb.Append("-pix_fmt yuvj420p -q:v 5 -flush_packets 1 -f image2pipe -vcodec mjpeg pipe:1");
+            return new FfmpegPipe(exe, sb.ToString(), true, name, onJpeg);
+        }
+
+        /// <summary>Data masukan habis: tutup stdin supaya ffmpeg menyelesaikan sisa gambar lalu berhenti.</summary>
+        public void EndInput()
+        {
+            try { if (_in != null) { _in.Flush(); _p.StandardInput.Close(); } } catch { }
+        }
+
         /// <summary>Mode RTSP: ffmpeg membuka sendiri URL RTSP kamera (TCP) dan mendekodenya; codec dideteksi otomatis.</summary>
         public static FfmpegPipe ForRtsp(string exe, string url, int width, string name, Action<byte[]> onJpeg, bool hw = false, int maxFps = 0, bool bmp = false, Action<byte[], int, int> onSpan = null)
         {
