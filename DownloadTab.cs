@@ -35,7 +35,8 @@ namespace IproNvrTool
             {
                 "MP4 (dengan audio)", "MP4VO (tanpa audio)", "N3 (N3R + N3A, proprietary)", "N3VO (N3R tanpa audio)", "LIST (info N3N)"
             }, 1, 190);
-            cmbZone = Ui.Combo(new string[] { "UTC", "Waktu lokal PC" }, 0, 110);
+            // jam di pemilih waktu = jam lokal PC; secara default dikonversi ke UTC (sama seperti pengaturan download utama)
+            cmbZone = Ui.Combo(new string[] { "UTC", "Waktu lokal PC" }, AppSettings.Current.DownloadTimeUtc ? 1 : 0, 110);
             txtFolder = Ui.Txt(AppSettings.Current.ResolveDownloadFolder(), 320);
             btnGo = Ui.Btn("Download", delegate { Go(); });
             lblStatus = Ui.Lbl("Siap. Rentang maksimal 1 jam; detik awal selalu 00.");
@@ -69,7 +70,9 @@ namespace IproNvrTool
 
             var status = new Panel();
             status.Dock = DockStyle.Top;
-            status.Height = 30;
+            status.Height = 70;
+            lblStatus.AutoSize = false;   // pesan hasil bisa panjang (alasan + lokasi file): biarkan membungkus
+            lblStatus.Dock = DockStyle.Fill;
             status.Controls.Add(lblStatus);
 
             Controls.Add(status);
@@ -151,9 +154,9 @@ namespace IproNvrTool
             return Path.GetFileName(name); // cegah path traversal dari server
         }
 
-        static void Finish(ref FileStream cur, ref string curPath, string finalName, string folder)
+        static bool Finish(ref FileStream cur, ref string curPath, string finalName, string folder)
         {
-            if (cur == null) return;
+            if (cur == null) return false;
             cur.Dispose();
             cur = null;
             string dest = Path.Combine(folder, finalName);
@@ -161,6 +164,7 @@ namespace IproNvrTool
             File.Move(curPath, dest);
             Log.Write("Download selesai: " + dest);
             curPath = null;
+            return true;
         }
 
         void Run(string st, string en, string kind, int cam, string folder)
@@ -171,41 +175,63 @@ namespace IproNvrTool
                 "STARTTIME=" + st + "&ENDTIME=" + en + "&KIND=" + kind + "&CAM=" + cam + "&PC=AS60", 60000);
             req.ReadWriteTimeout = 120000;
 
+            // Salinan respon apa adanya: untuk LIST selalu disimpan utuh (isinya tidak dirinci di spec);
+            // untuk jenis lain hanya bagian awal, dan hanya disimpan bila tidak ada file yang dihasilkan.
+            bool isList = kind == "LIST";
+            string rawPath = Path.Combine(folder, "respon_" + kind + "_cam" + cam + "_" + st + ".bin");
+
             FileStream cur = null;
             string curPath = null;
-            long total = 0;
+            long total = 0, received = 0;
+            int files = 0;
+            string reason = null, parseError = null, type = "";
             try
             {
-                using (WebResponse resp = req.GetResponse())
-                using (Stream stream = resp.GetResponseStream())
+                using (var resp = (HttpWebResponse)req.GetResponse())
+                using (Stream net = resp.GetResponseStream())
+                using (var raw = new FileStream(rawPath, FileMode.Create, FileAccess.Write))
+                using (var stream = new CaptureStream(net, raw, isList ? long.MaxValue : 64 * 1024))
                 {
-                    var mr = new MultipartReader(stream);
-                    MultipartPart p;
-                    while (!cancel && (p = mr.ReadPart()) != null)
+                    type = "HTTP " + (int)resp.StatusCode + ", Content-Type: " + (string.IsNullOrEmpty(resp.ContentType) ? "(kosong)" : resp.ContentType);
+                    Log.Write("Download " + kind + " CAM " + cam + " " + st + " - " + en + " -> " + type);
+                    try
                     {
-                        string temp = FileNameOf(p.H("X-Temp-Filename"));
-                        string prev = FileNameOf(p.H("X-Prev-Filename"));
-                        string status = p.H("X-RecData-Satus");
-                        if (status.Length == 0) status = p.H("X-RecData-Status");
-
-                        if (status == "1") { SetStatus("Tidak ada rekaman pada rentang waktu itu."); break; }
-                        if (status == "2") { SetStatus("Codec tidak kompatibel (MP4 tidak bisa untuk JPEG). Pilih N3."); break; }
-                        if (status == "3") { SetStatus("NVR sedang sibuk (terlalu banyak proses bersamaan). Coba lagi nanti."); break; }
-
-                        if (prev.Length > 0 && temp.Length > 0) Finish(ref cur, ref curPath, prev, folder);
-                        if (temp.Length > 0 && cur == null)
+                        var mr = new MultipartReader(stream);
+                        MultipartPart p;
+                        while (!cancel && (p = mr.ReadPart()) != null)
                         {
-                            curPath = Path.Combine(folder, temp);
-                            cur = new FileStream(curPath, FileMode.Create, FileAccess.Write);
+                            string temp = FileNameOf(p.H("X-Temp-Filename"));
+                            string prev = FileNameOf(p.H("X-Prev-Filename"));
+                            string status = p.H("X-RecData-Satus");
+                            if (status.Length == 0) status = p.H("X-RecData-Status");
+
+                            if (status == "1") reason = "Tidak ada rekaman pada rentang waktu itu. Coba ganti pilihan \"Waktu input dianggap\" (UTC / lokal) atau pilih jam yang pasti ada rekamannya.";
+                            if (status == "2") reason = "Codec tidak kompatibel (MP4 tidak bisa untuk JPEG). Pilih N3.";
+                            if (status == "3") reason = "NVR sedang sibuk (terlalu banyak proses bersamaan). Coba lagi nanti.";
+                            if (reason != null) break;
+
+                            if (prev.Length > 0 && temp.Length > 0 && Finish(ref cur, ref curPath, prev, folder)) files++;
+                            if (temp.Length > 0 && cur == null)
+                            {
+                                curPath = Path.Combine(folder, temp);
+                                cur = new FileStream(curPath, FileMode.Create, FileAccess.Write);
+                            }
+                            if (cur != null && p.Body.Length > 0)
+                            {
+                                cur.Write(p.Body, 0, p.Body.Length);
+                                total += p.Body.Length;
+                                SetStatus("Mengunduh... " + (total / 1024) + " KB");
+                            }
+                            if (prev.Length > 0 && temp.Length == 0 && Finish(ref cur, ref curPath, prev, folder)) files++;
                         }
-                        if (cur != null && p.Body.Length > 0)
-                        {
-                            cur.Write(p.Body, 0, p.Body.Length);
-                            total += p.Body.Length;
-                            SetStatus("Mengunduh... " + (total / 1024) + " KB");
-                        }
-                        if (prev.Length > 0 && temp.Length == 0) Finish(ref cur, ref curPath, prev, folder);
                     }
+                    catch (Exception ex)
+                    {
+                        parseError = ex.Message;
+                        Log.Write("Download: " + ex.Message);
+                    }
+                    if (isList && !cancel) stream.Drain();   // ambil sisa respon walaupun pembacaan multipart berhenti lebih awal
+                    received = stream.Received;
                 }
             }
             finally
@@ -216,8 +242,20 @@ namespace IproNvrTool
                     Log.Write("Download tidak lengkap, file sementara: " + curPath);
                 }
             }
-            if (!cancel) SetStatus("Selesai. Total " + (total / 1024) + " KB -> " + folder);
-            else SetStatus("Dibatalkan.");
+            if (cancel) { SetStatus("Dibatalkan."); return; }
+
+            bool keepRaw = received > 0 && (isList || (files == 0 && total == 0));
+            if (!keepRaw) { try { File.Delete(rawPath); } catch { } }
+
+            string msg;
+            if (reason != null) msg = reason;
+            else if (files == 0 && curPath == null) msg = "Tidak ada file yang dihasilkan. " + type + ", diterima " + received + " byte.";
+            else msg = files > 0 ? "Selesai: " + files + " file, " + (total / 1024) + " KB -> " + folder : "Download belum selesai.";
+            if (curPath != null) msg += " File sementara (belum lengkap): " + curPath;
+            if (parseError != null) msg += " Kesalahan: " + parseError;
+            if (keepRaw) msg += "\nRespon asli NVR disimpan: " + rawPath;
+            Log.Write("Download: " + msg);
+            SetStatus(msg);
         }
 
         public void Shutdown()
