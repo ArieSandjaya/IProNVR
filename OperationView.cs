@@ -19,7 +19,8 @@ namespace IproNvrTool
         readonly Panel statusBar = new Panel();
         readonly Label lblLoad = new Label();
         readonly Panel opPanel = new Panel();
-        readonly Scrubber scrub = new Scrubber();   // bar playback: saat live hanya tombol PLAYBACK / LIVE
+        readonly Scrubber scrub = new Scrubber();   // bar playback: hanya tampil saat playback
+        ModeButtons modeButtons;
         public readonly ViewGrid Grid = new ViewGrid();
 
         // isi function panel
@@ -138,12 +139,6 @@ namespace IproNvrTool
             scrub.Seek += delegate(DateTime local) { if (Grid.PlaybackMode) PlayAtUtc(local.ToUniversalTime()); };
             scrub.Command += delegate(PbCommand c) { int sec = SkipSeconds(); Each(delegate(PlaybackEngine e) { PbCommands.Apply(e, c, sec); }); UpdateStatus(); };
             scrub.SpeedChosen += delegate(double v) { Each(delegate(PlaybackEngine e) { e.SetSpeed(v); }); UpdateStatus(); };
-            scrub.LiveRequested += delegate { ExitPlayback(); };
-            scrub.PlaybackRequested += delegate
-            {
-                if (!Grid.Cells.Any(c => c.HasCamera)) { MessageBox.Show("Belum ada kamera di area gambar."); return; }
-                PlayAtUtc(DateTime.UtcNow.AddMinutes(-5));
-            };
             scrub.ExportRange += delegate(DateTime a, DateTime b)
             {
                 CamRef r = SelectedRef();
@@ -246,6 +241,24 @@ namespace IproNvrTool
                 new AsmButton(AsmIcon.Print, "Print", delegate { DoPrint(); }),
                 new AsmButton(AsmIcon.Close, "Kosongkan semua area", delegate { StopSequence(); ExitPlayback(); Grid.ClearAll(); }) };
             foreach (AsmButton tbb in tb) { tbb.Size = new Size(Asm.S(62), Asm.S(51)); tbb.Margin = new Padding(0, 0, Asm.S(1), 0); toolFlow.Controls.Add(tbb); }
+            modeButtons = new ModeButtons(Asm.S(51), delegate
+            {
+                if (!Grid.Cells.Any(c => c.HasCamera)) { MessageBox.Show("Belum ada kamera di area gambar."); return; }
+                PlayAtUtc(DateTime.UtcNow.AddMinutes(-5));
+            }, delegate { ExitPlayback(); });
+            toolFlow.Controls.Add(modeButtons.Playback);
+            toolFlow.Controls.Add(modeButtons.Live);
+            toolFlow.SizeChanged += delegate { FitToolbar(); };
+        }
+
+        /// <summary>Jendela sempit: sembunyikan pintasan pola layar (tetap tersedia lewat tombol panah di sebelahnya)
+        /// supaya tombol X, PLAYBACK, dan LIVE tidak terpotong.</summary>
+        void FitToolbar()
+        {
+            if (modeButtons == null) return;
+            int need = toolFlow.Padding.Horizontal;
+            foreach (Control c in toolFlow.Controls) need += (c == shortcutHost ? shortcutHost.PreferredSize.Width : c.Width) + c.Margin.Horizontal;
+            shortcutHost.Visible = need <= toolFlow.ClientSize.Width;
         }
 
         static Control Spacer()
@@ -279,6 +292,7 @@ namespace IproNvrTool
                 shortcutBtns.Add(b);
             }
             UpdateShortcutState();
+            FitToolbar();
         }
 
         void UpdateShortcutState()
@@ -416,6 +430,7 @@ namespace IproNvrTool
             lblTime.Text = Asm.FormatTime(pb ? (t.HasValue ? t.Value : DateTime.Now) : DateTime.Now);
             PlaybackEngine first = pb ? engines.Values.FirstOrDefault() : null;
             ViewCell sel = Grid.Selected;
+            modeButtons.SetState(pb);
             scrub.SetState(pb, first != null ? first.Mode : "STOP", first != null ? first.Speed : 1, first != null ? first.FfStep : 1,
                 pb && sel != null && sel.HasCamera ? Dir.Title(sel.NvrId, sel.Channel) : "");
             if (pb && t.HasValue) scrub.SetPosition(t.Value, false);

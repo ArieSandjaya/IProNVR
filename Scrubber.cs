@@ -9,8 +9,43 @@ namespace IproNvrTool
 {
     public enum PbCommand { SkipBack, Rew, PrevFrame, Reverse, Pause, Play, NextFrame, FastForward, SkipForward }
 
+    /// <summary>Tombol PLAYBACK / LIVE di toolbar atas, di sebelah tombol "Kosongkan semua area". Tombol mode yang aktif disorot.</summary>
+    public class ModeButtons
+    {
+        public readonly AsmButton Playback, Live;
+        bool playback;
+
+        public ModeButtons(int height, Action toPlayback, Action toLive)
+        {
+            Playback = Make("PLAYBACK", 92, height, "Playback (mulai 5 menit lalu)", delegate { if (!playback) toPlayback(); });
+            Live = Make("LIVE", 62, height, "Kembali ke live", delegate { if (playback) toLive(); });
+            Playback.Margin = new Padding(Asm.S(8), 0, 0, 0);
+            Live.Margin = new Padding(Asm.S(1), 0, 0, 0);
+            Live.Highlight = true;
+        }
+
+        static AsmButton Make(string label, int width, int height, string tip, EventHandler click)
+        {
+            var b = new AsmButton(AsmIcon.None, tip, click);
+            b.Label = label;
+            b.Font = Asm.F(9.5f, true);
+            b.Size = new Size(Asm.S(width), height);
+            return b;
+        }
+
+        public void SetState(bool isPlayback)
+        {
+            if (isPlayback == playback) return;
+            playback = isPlayback;
+            Playback.Highlight = isPlayback;
+            Live.Highlight = !isPlayback;
+            Playback.Invalidate();
+            Live.Invalidate();
+        }
+    }
+
     /// <summary>Bar playback ala XProtect Smart Client di bawah area gambar: kontrol putar di atas, garis waktu yang bergerak di bawah
-    /// penanda tetap di tengah, tombol PLAYBACK / LIVE, dan slider zoom. Saat live hanya tombol PLAYBACK / LIVE yang tampil.
+    /// penanda tetap di tengah, dan slider zoom. Hanya tampil saat playback; tombol PLAYBACK / LIVE ada di toolbar atas (ModeButtons).
     /// Seret garis waktu atau klik untuk loncat; roda mouse = zoom; klik kanan = menu.</summary>
     public class Scrubber : Control
     {
@@ -55,15 +90,14 @@ namespace IproNvrTool
         public event Action<DateTime, DateTime> ExportRange;
         public event Action<PbCommand> Command;
         public event Action<double> SpeedChosen;
-        public event Action LiveRequested;
-        public event Action PlaybackRequested;
 
         public bool Dragging { get { return (pressing && panned) || dragHandle != 0; } }
 
         public Scrubber()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            Height = CompactHeight;
+            Height = FullHeight;
+            Visible = false;
             Dock = DockStyle.Bottom;
             BackColor = Asm.Bg;
             Tag = "nostyle";
@@ -90,7 +124,6 @@ namespace IproNvrTool
             Asm.StyleMenu(speedMenu);
         }
 
-        static int CompactHeight { get { return Asm.S(34); } }
         static int FullHeight { get { return Asm.S(128); } }
 
         // ---------- keadaan dari luar ----------
@@ -104,7 +137,7 @@ namespace IproNvrTool
             if (isPlayback != playback)
             {
                 playback = isPlayback;
-                Height = playback ? FullHeight : CompactHeight;
+                Visible = playback;
                 pressing = panned = zoomDrag = false;
                 dragHandle = 0;
                 if (!playback) { pos = null; holdTarget = null; selA = selB = null; }
@@ -137,7 +170,7 @@ namespace IproNvrTool
         Rectangle RulerRect { get { return new Rectangle(0, Asm.S(34), Width, Asm.S(40)); } }
         Rectangle TrackRect { get { return new Rectangle(0, Asm.S(76), Width, Asm.S(18)); } }
         Rectangle TimeBox { get { return new Rectangle(Width / 2 - Asm.S(105), Asm.S(35), Asm.S(210), Asm.S(19)); } }
-        int BottomY { get { return playback ? Asm.S(99) : Asm.S(4); } }
+        int BottomY { get { return Asm.S(99); } }
         Rectangle ZoomTrack { get { return new Rectangle(Width - Asm.S(150), BottomY, Asm.S(110), Asm.S(26)); } }
 
         double SecondsPerPixel { get { return (double)Spans[spanIdx] / Math.Max(1, Width); } }
@@ -161,9 +194,6 @@ namespace IproNvrTool
             {
                 var h = new Hit(); h.Id = id; h.R = r; h.Tip = tip; h.Act = act; l.Add(h);
             };
-            int bw = Asm.S(80);
-            add("pb", new Rectangle(Width / 2 - bw, BottomY, bw, Asm.S(24)), "Playback (mulai 5 menit lalu bila sedang live)", delegate { if (!playback) Raise(PlaybackRequested); });
-            add("live", new Rectangle(Width / 2, BottomY, bw, Asm.S(24)), "Kembali ke live", delegate { if (playback) Raise(LiveRequested); });
             if (!playback) return l;
 
             int y = Asm.S(4), h2 = Asm.S(27), w = Asm.S(30), gap = Asm.S(4);
@@ -204,8 +234,6 @@ namespace IproNvrTool
             foreach (Hit h in Hits()) if (h.R.Contains(p)) return h;
             return null;
         }
-
-        static void Raise(Action a) { if (a != null) a(); }
 
         // ---------- aksi ----------
 
@@ -407,15 +435,14 @@ namespace IproNvrTool
             using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, kx - Asm.S(6), mid - Asm.S(6), Asm.S(12), Asm.S(12));
             g.SmoothingMode = SmoothingMode.Default;
             var spanRect = new Rectangle(z.Left - Asm.S(110), z.Top, Asm.S(82), Asm.S(24));
-            if (spanRect.Left > Width / 2 + Asm.S(80))   // jendela sempit: teks tidak boleh menimpa tombol LIVE
-                TextRenderer.DrawText(g, SpanText[spanIdx], Asm.F(9f, false), spanRect, Asm.Muted,
-                    TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, SpanText[spanIdx], Asm.F(9f, false), spanRect, Asm.Muted,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             if (selA.HasValue && selB.HasValue)
             {
                 DateTime a = selA.Value < selB.Value ? selA.Value : selB.Value, b = selA.Value < selB.Value ? selB.Value : selA.Value;
                 TimeSpan d = b - a;
                 string s = "Rentang " + a.ToString("HH:mm:ss") + " - " + b.ToString("HH:mm:ss") + "  (" + (int)d.TotalHours + ":" + d.Minutes.ToString("00") + ":" + d.Seconds.ToString("00") + ")";
-                TextRenderer.DrawText(g, s, Asm.F(9f, false), new Rectangle(Asm.S(8), z.Top, Math.Max(0, Width / 2 - Asm.S(96)), Asm.S(24)), SelColor,
+                TextRenderer.DrawText(g, s, Asm.F(9f, false), new Rectangle(Asm.S(8), z.Top, Math.Max(0, spanRect.Left - Asm.S(16)), Asm.S(24)), SelColor,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
             }
         }
@@ -424,21 +451,17 @@ namespace IproNvrTool
         {
             if (h.Id == "time") return;   // digambar bersama garis waktu
             Rectangle r = h.R;
-            bool toggle = h.Id == "pb" || h.Id == "live";
-            bool on = (h.Id == "pb" && playback) || (h.Id == "live" && !playback)
-                || (h.Id == "rev" && mode == "BPLAY") || (h.Id == "pause" && mode == "PAUSE") || (h.Id == "play" && mode == "PLAY")
+            bool on = (h.Id == "rev" && mode == "BPLAY") || (h.Id == "pause" && mode == "PAUSE") || (h.Id == "play" && mode == "PLAY")
                 || (h.Id == "rew" && mode == "REW") || (h.Id == "ff" && mode == "FF") || (h.Id == "sel" && selA.HasValue);
             Color bg = on ? Asm.TabLine : (h.Id == downId ? Asm.TabBg : (h.Id == hotId ? Asm.BarHot : Asm.Panel2));
             using (var b = new SolidBrush(bg)) g.FillRectangle(b, r);
-            if (!toggle) using (var p = new Pen(on ? Asm.Accent : Asm.BtnBorder)) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
+            using (var p = new Pen(on ? Asm.Accent : Asm.BtnBorder)) g.DrawRectangle(p, r.X, r.Y, r.Width - 1, r.Height - 1);
             Color fg = on ? Color.White : Asm.Text;
             int pad = Asm.S(6);
             pad = Math.Min(pad, r.Width / 5);
             var icon = new Rectangle(r.X + pad, r.Y + pad, r.Width - 2 * pad, r.Height - 2 * pad);
             switch (h.Id)
             {
-                case "pb": DrawLabel(g, "PLAYBACK", r, fg); break;
-                case "live": DrawLabel(g, "LIVE", r, fg); break;
                 case "skipb": AsmIcons.Draw(g, AsmIcon.PrevChap, icon, fg); break;
                 case "rew": AsmIcons.Draw(g, AsmIcon.FastRew, icon, fg); break;
                 case "prevf": AsmIcons.Draw(g, AsmIcon.StepBack, icon, fg); break;

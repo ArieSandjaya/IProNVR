@@ -71,6 +71,7 @@ namespace IproNvrTool
         CameraControlPanel ctl;
         PlaybackController pbc;
         readonly Scrubber scrub = new Scrubber();
+        ModeButtons modeButtons;
         readonly System.Windows.Forms.Timer pbTimer = new System.Windows.Forms.Timer();
         readonly CollapseHandle hBottom = new CollapseHandle(true);
 
@@ -116,6 +117,11 @@ namespace IproNvrTool
                 if (c != null && c.HasCamera) QuickDownload(c.Ref);
             }));
             flow.Controls.Add(new AsmButton(AsmIcon.Close, "Kosongkan semua area", delegate { StopSeq(); if (pbc != null) pbc.Exit(); grid.ClearAll(); }));
+            modeButtons = new ModeButtons(Asm.S(30), delegate { StopSeq(); PlayAll(DateTime.UtcNow.AddMinutes(-5)); }, delegate { pbc.Exit(); });
+            modeButtons.Playback.Margin = new Padding(Asm.S(8), 3, 0, 3);   // sejajar dengan tombol toolbar lain
+            modeButtons.Live.Margin = new Padding(Asm.S(1), 3, 3, 3);
+            flow.Controls.Add(modeButtons.Playback);
+            flow.Controls.Add(modeButtons.Live);
             lblInfo.AutoSize = false;
             lblInfo.Width = Asm.S(500);
             lblInfo.Height = Asm.S(30);
@@ -181,8 +187,6 @@ namespace IproNvrTool
             scrub.Seek += delegate(DateTime local) { if (pbc.Active) PlayAll(local.ToUniversalTime()); };
             scrub.Command += delegate(PbCommand c) { int sec = ctl.SkipSeconds; pbc.Each(delegate(PlaybackEngine e) { PbCommands.Apply(e, c, sec); }); UpdateScrub(); };
             scrub.SpeedChosen += delegate(double v) { pbc.Each(delegate(PlaybackEngine e) { e.SetSpeed(v); }); UpdateScrub(); };
-            scrub.LiveRequested += delegate { pbc.Exit(); };
-            scrub.PlaybackRequested += delegate { StopSeq(); PlayAll(DateTime.UtcNow.AddMinutes(-5)); };
             scrub.ExportRange += delegate(DateTime ra, DateTime rb)
             {
                 CamRef rc = grid.Selected != null ? qpp.CameraSource() : null;
@@ -240,6 +244,7 @@ namespace IproNvrTool
         {
             PlaybackEngine e = pbc.First;
             ViewCell c = grid.Selected;
+            modeButtons.SetState(pbc.Active);
             scrub.SetState(pbc.Active, e != null ? e.Mode : "STOP", e != null ? e.Speed : 1, e != null ? e.FfStep : 1,
                 pbc.Active && c != null && c.HasCamera ? Dir.Title(c.NvrId, c.Channel) : "");
         }
