@@ -500,6 +500,17 @@ namespace IproNvrTool
             }
         }
 
+        volatile string _lastError;
+        /// <summary>Baris galat terakhir dari ffmpeg (tanpa user/password), "" bila belum ada.</summary>
+        public string LastError { get { return _lastError ?? ""; } }
+
+        /// <summary>Samarkan user dan password pada URL RTSP sebelum ditulis ke log atau ditampilkan.</summary>
+        public static string HidePassword(string text)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(text ?? "", "(rtsps?://)[^/\\s\"']*@", "$1***@",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
         void ReadErrors()
         {
             try
@@ -510,6 +521,8 @@ namespace IproNvrTool
                 {
                     if (_closed) continue;
                     if (IsHwMessage(line)) _hwError = true;
+                    line = HidePassword(line);
+                    if (line.Trim().Length > 0) _lastError = line.Trim();
                     if (count++ < 25) Log.Write("ffmpeg " + _name + ": " + line);
                 }
             }

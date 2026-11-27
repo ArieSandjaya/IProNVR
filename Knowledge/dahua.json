@@ -14,7 +14,7 @@
     "time": "GET /cgi-bin/global.cgi?action=getCurrentTime",
     "channels": "GET /cgi-bin/configManager.cgi?action=getConfig&name=RemoteDevice  ;  nama: name=ChannelTitle",
     "live": "rtsp://USER:PASS@IP:554/cam/realmonitor?channel=1&subtype=0",
-    "playback": "rtsp://USER:PASS@IP:554/cam/playback?channel=1&starttime=2026_01_01_00_00_00&endtime=2026_01_01_00_05_00",
+    "playback": "rtsp://USER:PASS@IP:554/cam/playback?channel=1&subtype=0&starttime=2026_01_01_00_00_00&endtime=2026_01_01_00_05_00",
     "search": "mediaFileFind.cgi (factory.create -> findFile -> findNextFile -> close -> destroy)",
     "download": "GET /cgi-bin/loadfile.cgi?action=startLoad&channel=1&startTime=...&endTime=...  atau  /cgi-bin/RPC_Loadfile/<FilePath>",
     "snapshot": "GET /cgi-bin/snapshot.cgi?channel=1",

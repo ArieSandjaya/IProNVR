@@ -78,6 +78,7 @@ namespace IproNvrTool
                 try
                 {
                     string url = drv.PlaybackSource(Nvr, ch, utc, utc.AddHours(6)).RtspUrl;
+                    Log.Write("Playback " + Nvr.Name + " CAM " + ch + " -> " + FfmpegPipe.HidePassword(url));
                     FfmpegPipe ff = FfmpegPipe.ForRtsp(exe, url, w, "PB CAM " + ch, delegate(byte[] jpg)
                     {
                         bool first;
@@ -106,8 +107,13 @@ namespace IproNvrTool
             {
                 bool got;
                 lock (gate) got = gotFrame.ContainsKey(kv.Key);
+                string why = kv.Value.LastError;
+                if (why.Length > 160) why = why.Substring(why.Length - 160);   // bagian akhir memuat alasannya
+                if (why.Length > 0) why = "\n" + why;
                 if (kv.Value.HasExited)
-                    ChStatus(kv.Key, got ? "Rekaman berakhir / koneksi terputus." : "Tidak ada rekaman pada waktu ini (atau playback RTSP ditolak " + drv.BrandName + ").");
+                    ChStatus(kv.Key, got ? "Rekaman berakhir / koneksi terputus." : "Tidak ada rekaman pada waktu ini (atau playback RTSP ditolak " + drv.BrandName + ")." + why);
+                else if (!got && clock.Elapsed.TotalSeconds > 15)
+                    ChStatus(kv.Key, "Belum ada gambar dari " + drv.BrandName + " setelah 15 detik." + why);
             }
         }
 

@@ -209,10 +209,13 @@ namespace IproNvrTool
 
         protected override string PlaybackPath(int ch, DateTime s, DateTime e)
         {
+            // banyak NVR/DVR Hikvision membaca waktu playback sebagai jam lokal perangkat walaupun berakhiran Z
+            // (diasumsikan zona waktu perangkat = PC); perangkat yang benar-benar memakai UTC: aktifkan di Setup
+            if (!AppSettings.Current.HikPlaybackUtc) { s = s.ToLocalTime(); e = e.ToLocalTime(); }
             return "/Streaming/tracks/" + (ch * 100 + 1) + "?starttime=" + Iso(s) + "&endtime=" + Iso(e);
         }
 
-        static string Iso(DateTime utc) { return utc.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture); }
+        static string Iso(DateTime t) { return t.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture); }
 
         public override RegistrationResult Test(NvrEndpoint ep)
         {
@@ -363,7 +366,7 @@ namespace IproNvrTool
         protected override string PlaybackPath(int ch, DateTime s, DateTime e)
         {
             // waktu playback RTSP Dahua memakai jam lokal perangkat; diasumsikan sama dengan zona waktu PC
-            return "/cam/playback?channel=" + ch + "&starttime=" + s.ToLocalTime().ToString("yyyy_MM_dd_HH_mm_ss", CultureInfo.InvariantCulture)
+            return "/cam/playback?channel=" + ch + "&subtype=0&starttime=" + s.ToLocalTime().ToString("yyyy_MM_dd_HH_mm_ss", CultureInfo.InvariantCulture)
                 + "&endtime=" + e.ToLocalTime().ToString("yyyy_MM_dd_HH_mm_ss", CultureInfo.InvariantCulture);
         }
 

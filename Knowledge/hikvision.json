@@ -3,7 +3,7 @@
   "protocol": "ISAPI (HTTP + XML) + RTSP",
   "auth": "HTTP Digest (sebagian firmware lama: Basic)",
   "port": { "http": 80, "rtsp": 554, "sdk": 8000 },
-  "timeFormat": "ISO 8601 UTC pada pencarian/playback RTSP: 20260101T000000Z",
+  "timeFormat": "ISO 8601 berakhiran Z, mis. 20260101T000000Z. Playback RTSP: default jam lokal perangkat",
   "channelNumbering": "Track/stream id = channel*100 + stream (101 = ch1 main, 102 = ch1 sub). Playback track = channel*100 + 1",
   "capabilities": {
     "deviceInfo": "GET /ISAPI/System/deviceInfo",
@@ -35,7 +35,7 @@
     { "name": "alertStream", "method": "GET", "path": "/ISAPI/Event/notification/alertStream", "returns": "multipart/mixed, tiap part XML EventNotificationAlert", "status": "unverified" }
   ],
   "knownQuirks": [
-    "Format waktu playback RTSP harus UTC dengan akhiran Z; pencarian bisa memakai waktu lokal tergantung timezone perangkat - cek /ISAPI/System/time.",
+    "Waktu playback RTSP berakhiran Z, tetapi banyak perangkat membacanya sebagai jam lokal perangkat (pengaturan HikPlaybackUtc untuk yang benar-benar UTC); pencarian bisa memakai waktu lokal tergantung timezone perangkat - cek /ISAPI/System/time.",
     "Beberapa NVR membatasi jumlah sesi RTSP bersamaan; sub-stream (…02) dianjurkan untuk video wall.",
     "Akun default sering dikunci setelah beberapa kali gagal login (Digest)."
   ]

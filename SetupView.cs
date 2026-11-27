@@ -316,6 +316,8 @@ namespace IproNvrTool
                 System.Threading.Tasks.Task.Run(delegate { string r = ServerLink.TestAndSync(); return r; })
                     .ContinueWith(t => Ui.Post(this, delegate { MessageBox.Show(t.IsFaulted ? t.Exception.GetBaseException().Message : t.Result, "Server konfigurasi"); }));
             });
+            p.Check("Playback Hikvision: waktu dikirim sebagai UTC (matikan = jam lokal NVR)", s.HikPlaybackUtc, delegate(bool v) { s.HikPlaybackUtc = v; },
+                "Aktifkan bila rekaman Hikvision yang tampil bergeser sebesar selisih zona waktu (mis. 7 jam).");
             p.Heading("Download");
             p.Check("Waktu download dianggap UTC (matikan = waktu lokal PC)", s.DownloadTimeUtc, delegate(bool v) { s.DownloadTimeUtc = v; }, "Spec NVR memakai UTC.");
             p.Num("Quick download: mundur (detik)", 0, 3600, s.QdPreSec, delegate(int v) { s.QdPreSec = v; }, null);
