@@ -35,7 +35,8 @@ namespace IproNvrTool
             {
                 "MP4 (dengan audio)", "MP4VO (tanpa audio)", "N3 (N3R + N3A, proprietary)", "N3VO (N3R tanpa audio)", "LIST (info N3N)"
             }, 1, 190);
-            cmbZone = Ui.Combo(new string[] { "UTC", "Waktu lokal PC" }, 0, 110);
+            // jam di pemilih waktu = jam lokal PC; secara default dikonversi ke UTC (sama seperti pengaturan download utama)
+            cmbZone = Ui.Combo(new string[] { "UTC", "Waktu lokal PC" }, AppSettings.Current.DownloadTimeUtc ? 1 : 0, 110);
             txtFolder = Ui.Txt(AppSettings.Current.ResolveDownloadFolder(), 320);
             btnGo = Ui.Btn("Download", delegate { Go(); });
             lblStatus = Ui.Lbl("Siap. Rentang maksimal 1 jam; detik awal selalu 00.");
