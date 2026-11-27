@@ -37,6 +37,7 @@ namespace IproNvrTool
         public void SpeedUp() { if (speedIdx < Speeds.Length - 1) speedIdx++; }
         public void SpeedDown() { if (speedIdx > 0) speedIdx--; }
         public void SpeedReset() { speedIdx = 2; }
+        public void SetSpeed(double v) { int i = Array.IndexOf(Speeds, v); if (i >= 0) speedIdx = i; }
         DateTime? _shownUtc;
         /// <summary>Waktu rekaman pada gambar yang sedang tampil (CurUtc = posisi data yang sudah diambil dari NVR, bisa mendahului beberapa detik).</summary>
         public virtual DateTime? ShownUtc { get { lock (curLock) return _shownUtc ?? _curUtc; } }

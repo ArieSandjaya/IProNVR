@@ -200,10 +200,19 @@ namespace IproNvrTool
             tPb.Controls.Add(h);
         }
 
+        /// <summary>SKIP TIME yang dipilih di tab Playback (detik).</summary>
+        public int SkipSeconds
+        {
+            get
+            {
+                int[] sec = { 10, 30, 60, 300, 600, 1800, 3600 };
+                return sec[Math.Max(0, cmbSkip.SelectedIndex)];
+            }
+        }
+
         void SkipBy(int dir)
         {
-            int[] sec = { 10, 30, 60, 300, 600, 1800, 3600 };
-            int sk = sec[Math.Max(0, cmbSkip.SelectedIndex)] * dir;
+            int sk = SkipSeconds * dir;
             if (Pb != null) Pb.Each(delegate(PlaybackEngine e) { e.Skip(sk); });
         }
 

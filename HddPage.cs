@@ -4,6 +4,26 @@ using System.Windows.Forms;
 
 namespace IproNvrTool
 {
+    /// <summary>Perintah dari bar playback (Scrubber) ke engine.</summary>
+    public static class PbCommands
+    {
+        public static void Apply(PlaybackEngine e, PbCommand c, int skipSeconds)
+        {
+            switch (c)
+            {
+                case PbCommand.SkipBack: e.Skip(-skipSeconds); break;
+                case PbCommand.Rew: e.FastReverse(); break;
+                case PbCommand.PrevFrame: e.Step(false); break;
+                case PbCommand.Reverse: e.Reverse(); break;
+                case PbCommand.Pause: e.Pause(); break;
+                case PbCommand.Play: e.Play(); break;
+                case PbCommand.NextFrame: e.Step(true); break;
+                case PbCommand.FastForward: e.FastForward(); break;
+                case PbCommand.SkipForward: e.Skip(skipSeconds); break;
+            }
+        }
+    }
+
     /// <summary>Halaman "HDD" panel bawah (kendali playback ala ASM300): dipakai bersama oleh Operation window dan Live window
     /// supaya tampilannya identik.</summary>
     public static class HddPage

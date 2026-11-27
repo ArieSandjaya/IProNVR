@@ -25,6 +25,17 @@ namespace IproNvrTool
 
         public bool Active { get { return grid.PlaybackMode; } }
 
+        /// <summary>Engine pertama (acuan tampilan bar playback), null bila tidak playback.</summary>
+        public PlaybackEngine First
+        {
+            get
+            {
+                if (!grid.PlaybackMode) return null;
+                foreach (PlaybackEngine e in engines.Values) return e;
+                return null;
+            }
+        }
+
         /// <summary>Lebar decode playback: mengikuti lebar area di layar (maks. 2560), satu kamera diperbesar = hampir lebar area penuh. Tidak pernah diperbesar melebihi resolusi rekaman.</summary>
         static int PbWidth(ViewGrid g)
         {

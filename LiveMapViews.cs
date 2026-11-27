@@ -178,8 +178,11 @@ namespace IproNvrTool
             pbc.ModeChanged += OnPlaybackModeChanged;
             ctl.Pb = pbc;
             scrub.Dock = DockStyle.Bottom;
-            scrub.Visible = false;
-            scrub.Seek += delegate(DateTime local) { if (pbc.Active) pbc.PlayAtUtc(local.ToUniversalTime()); };
+            scrub.Seek += delegate(DateTime local) { if (pbc.Active) PlayAll(local.ToUniversalTime()); };
+            scrub.Command += delegate(PbCommand c) { int sec = ctl.SkipSeconds; pbc.Each(delegate(PlaybackEngine e) { PbCommands.Apply(e, c, sec); }); UpdateScrub(); };
+            scrub.SpeedChosen += delegate(double v) { pbc.Each(delegate(PlaybackEngine e) { e.SetSpeed(v); }); UpdateScrub(); };
+            scrub.LiveRequested += delegate { pbc.Exit(); };
+            scrub.PlaybackRequested += delegate { StopSeq(); PlayAll(DateTime.UtcNow.AddMinutes(-5)); };
             scrub.ExportRange += delegate(DateTime ra, DateTime rb)
             {
                 CamRef rc = grid.Selected != null ? qpp.CameraSource() : null;
@@ -217,19 +220,34 @@ namespace IproNvrTool
         void PlayCamera(CamRef r, DateTime utc)
         {
             StopSeq();
-            if (pbc.PlayAtUtc(utc))
+            if (PlayAll(utc))
             {
-                scrub.Visible = true;
-                scrub.SetPosition(utc.ToLocalTime(), true);
                 ctl.ShowTab(true);
                 ctl.RefreshState();
             }
         }
 
+        /// <summary>Putar semua kamera di tampilan dari waktu ini dan pindahkan bar playback ke sana.</summary>
+        bool PlayAll(DateTime utc)
+        {
+            if (!pbc.PlayAtUtc(utc)) return false;
+            UpdateScrub();
+            scrub.SetPosition(utc.ToLocalTime(), true);
+            return true;
+        }
+
+        void UpdateScrub()
+        {
+            PlaybackEngine e = pbc.First;
+            ViewCell c = grid.Selected;
+            scrub.SetState(pbc.Active, e != null ? e.Mode : "STOP", e != null ? e.Speed : 1, e != null ? e.FfStep : 1,
+                pbc.Active && c != null && c.HasCamera ? Dir.Title(c.NvrId, c.Channel) : "");
+        }
+
         void OnPlaybackModeChanged()
         {
             bool pb = pbc.Active;
-            scrub.Visible = pb;
+            UpdateScrub();
             ctl.ShowTab(pb);
             ctl.RefreshState();
             if (!pb) lblInfo.Text = "Live";
@@ -237,6 +255,7 @@ namespace IproNvrTool
 
         void PlaybackTick()
         {
+            UpdateScrub();
             if (!pbc.Active) return;
             DateTime? t = pbc.ShownLocal();
             if (t.HasValue)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace IproNvrTool
@@ -18,7 +19,7 @@ namespace IproNvrTool
         readonly Panel statusBar = new Panel();
         readonly Label lblLoad = new Label();
         readonly Panel opPanel = new Panel();
-        readonly Scrubber scrub = new Scrubber();   // garis waktu playback (hanya tampil saat playback)
+        readonly Scrubber scrub = new Scrubber();   // bar playback: saat live hanya tombol PLAYBACK / LIVE
         public readonly ViewGrid Grid = new ViewGrid();
 
         // isi function panel
@@ -134,8 +135,15 @@ namespace IproNvrTool
             Grid.Dock = DockStyle.Fill;
 
             center.Controls.Add(Grid);
-            scrub.Visible = false;
             scrub.Seek += delegate(DateTime local) { if (Grid.PlaybackMode) PlayAtUtc(local.ToUniversalTime()); };
+            scrub.Command += delegate(PbCommand c) { int sec = SkipSeconds(); Each(delegate(PlaybackEngine e) { PbCommands.Apply(e, c, sec); }); UpdateStatus(); };
+            scrub.SpeedChosen += delegate(double v) { Each(delegate(PlaybackEngine e) { e.SetSpeed(v); }); UpdateStatus(); };
+            scrub.LiveRequested += delegate { ExitPlayback(); };
+            scrub.PlaybackRequested += delegate
+            {
+                if (!Grid.Cells.Any(c => c.HasCamera)) { MessageBox.Show("Belum ada kamera di area gambar."); return; }
+                PlayAtUtc(DateTime.UtcNow.AddMinutes(-5));
+            };
             scrub.ExportRange += delegate(DateTime a, DateTime b)
             {
                 CamRef r = SelectedRef();
@@ -406,7 +414,10 @@ namespace IproNvrTool
             lblSeq.BackColor = seq != null ? Asm.Ok : Asm.Panel;
             lblSeq.ForeColor = seq != null ? Color.Black : Asm.Text;
             lblTime.Text = Asm.FormatTime(pb ? (t.HasValue ? t.Value : DateTime.Now) : DateTime.Now);
-            if (scrub.Visible != pb) scrub.Visible = pb;
+            PlaybackEngine first = pb ? engines.Values.FirstOrDefault() : null;
+            ViewCell sel = Grid.Selected;
+            scrub.SetState(pb, first != null ? first.Mode : "STOP", first != null ? first.Speed : 1, first != null ? first.FfStep : 1,
+                pb && sel != null && sel.HasCamera ? Dir.Title(sel.NvrId, sel.Channel) : "");
             if (pb && t.HasValue) scrub.SetPosition(t.Value, false);
             lblLoad.Text = AppLifecycle.LoadText();
         }
@@ -902,9 +913,9 @@ namespace IproNvrTool
                 Grid.SetPlaybackMode(true);
             }
             SyncEngines(false);
-            if (engines.Count == 0) { MessageBox.Show("Belum ada kamera di area gambar."); return; }
+            if (engines.Count == 0) { Grid.SetPlaybackMode(false); UpdateStatus(); MessageBox.Show("Belum ada kamera di area gambar."); return; }
             foreach (PlaybackEngine e in engines.Values) e.GotoUtc(utc);
-            scrub.Visible = true;
+            UpdateStatus();
             scrub.SetPosition(utc.ToLocalTime(), true);
             opTabs.SelectedIndex = 1;
             UpdateOpPanelState();
@@ -918,6 +929,7 @@ namespace IproNvrTool
             Grid.SetPlaybackMode(false);
             opTabs.SelectedIndex = 0;
             UpdateOpPanelState();
+            UpdateStatus();
         }
 
         // =============== umum ===============
