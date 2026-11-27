@@ -17,6 +17,46 @@ namespace IproNvrTool
         }
     }
 
+    /// <summary>Meneruskan pembacaan stream sambil menyalin byte yang terbaca ke "copy" (maksimal "limit" byte).</summary>
+    public class CaptureStream : Stream
+    {
+        readonly Stream _src, _copy;
+        long _left;
+
+        public long Received { get; private set; }
+
+        public CaptureStream(Stream src, Stream copy, long limit) { _src = src; _copy = copy; _left = limit; }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int n = _src.Read(buffer, offset, count);
+            if (n <= 0) return n;
+            Received += n;
+            int w = (int)Math.Min(n, _left);
+            if (w > 0) { _copy.Write(buffer, offset, w); _left -= w; }
+            return n;
+        }
+
+        /// <summary>Baca sisa stream sampai habis; koneksi yang putus dianggap selesai.</summary>
+        public void Drain()
+        {
+            var buf = new byte[64 * 1024];
+            try { while (Read(buf, 0, buf.Length) > 0) { } }
+            catch (IOException) { }
+            catch (System.Net.WebException) { }
+        }
+
+        public override bool CanRead { get { return true; } }
+        public override bool CanSeek { get { return false; } }
+        public override bool CanWrite { get { return false; } }
+        public override long Length { get { throw new NotSupportedException(); } }
+        public override long Position { get { return Received; } set { throw new NotSupportedException(); } }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
+        public override void SetLength(long value) { throw new NotSupportedException(); }
+        public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
+    }
+
     /// <summary>Pembaca HTTP multipart ("--myboundary" + header + Content-Length + isi).</summary>
     public class MultipartReader
     {
